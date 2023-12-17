@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <title>CSS Tests</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <style>
+        body {
+            height: 100vh;
+        }
+
+        .flex-column {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-items: center;
+        }
+
+        #root {
+            flex: 1 1 auto;
+            overflow-y: auto;
+        }
+    </style>
+    <script type="importmap">{
+        "imports": {
+            "@nimble/toolkit": "../../node_modules/@nimble/toolkit/index.js",
+            "htm": "../../node_modules/htm/dist/htm.mjs",
+            "htm/mini": "../../node_modules/htm/mini/index.mjs"
+        }
+    }
+    </script>
+</head>
+<body>
+<div class="flex-column" style="height: 100%">
+    <div id="root"></div>
+</div>
+<script src="../../node_modules/chai/chai.js"></script>
+<script src="../../node_modules/mocha/mocha.js"></script>
+<script type="module">
+    import {toHyperScript} from './util.js'
+    import {css, html, atom, suite, test} from '@nimble/toolkit'
+
+    const {expect} = chai
+
+    const nextFrame = async () => await new Promise(resolve => requestAnimationFrame(resolve))
+
+    // test('top level', ({render}) => {
+    //     expect(render(html`Hello World`).innerText).to.eq('Hello World')
+    // })
+
+    suite('css', () => {
+        test('text content', ({render}) => {
+            expect(render(html`Hello World`).innerText).to.eq('Hello World')
+        })
+    })
+
+    mocha.run()
+</script>
+</body>
+</html>

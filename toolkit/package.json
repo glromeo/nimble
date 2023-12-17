@@ -1,0 +1,22 @@
+{
+  "name": "@nimble/toolkit",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "license": "MIT",
+  "scripts": {
+    "test": "mocha -u tdd '**/*.spec.ts'"
+  },
+  "mocha": {
+    "require": [
+      "ts-node/register"
+    ]
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.2.6",
+    "htm": "^3.1.1"
+  },
+  "devDependencies": {
+    "jotai": "^2.6.0",
+    "mocha-toolkit": "^1.0.7"
+  }
+}

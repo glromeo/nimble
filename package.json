@@ -1,0 +1,12 @@
+{
+  "name": "nimble",
+  "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "toolkit"
+  ],
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,5 @@
+# Project exclude paths
+/node_modules/
+/toolkit/**/*.js
+/toolkit/**/*.map
+!/toolkit/**/*.benchmark.js

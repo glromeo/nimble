@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <title>Mocha Tests</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <link rel="stylesheet" href="../../node_modules/mocha/mocha.css"/>
+    <style>
+        body {
+            height: 100vh;
+        }
+
+        .flex-column {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-items: center;
+        }
+
+        #root {
+            flex: 1 1 auto;
+            overflow-y: auto;
+        }
+
+        #mocha {
+            height: 33%;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        #mocha #mocha-stats {
+            top: unset;
+            bottom: 15px;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "htm": "../../node_modules/htm/dist/htm.mjs",
+                "htm/mini": "../../node_modules/htm/mini/index.mjs",
+                "@ant-design/": "../../node_modules/@ant-design/"
+            }
+        }
+    </script>
+</head>
+<body>
+<div class="flex-column" style="height: 100%">
+    <div id="root"></div>
+    <div id="mocha"></div>
+</div>
+<script src="../../node_modules/chai/chai.js"></script>
+<script src="../../node_modules/mocha/mocha.js"></script>
+<script type="module">
+    import {html} from './html.js'
+    import {toHyperScript, AntIcon} from './util.js'
+    import {atom, defaultStore, createStore} from '../atoms/atoms.js'
+
+    mocha.setup('tdd')
+    mocha.checkLeaks()
+
+    const {expect} = chai
+
+    const nextFrame = async () => await new Promise(resolve => requestAnimationFrame(resolve))
+
+    suite('html', () => {
+
+        let fixtureNumber = 0, testNumber = 0
+
+        let store = createStore()
+        let {get, set, sub} = store
+
+        setup(() => {
+            store = createStore()
+            get = store.get
+            set = store.set
+            sub = store.sub
+            ++testNumber
+            fixtureNumber = 0
+        })
+
+        const render = function (template) {
+            const fixture = document.getElementById('root').appendChild(document.createElement('div'))
+            fixture.setAttribute('class', 'fixture')
+            fixture.setAttribute('data-test', String(testNumber))
+            fixture.setAttribute('data-fixture', String(fixtureNumber++))
+            fixture.disconnect = template(store, fixture)
+            return fixture
+        }
+
+        test('text content', () => {
+            expect(render(html`Hello World`).innerText).to.eq('Hello World')
+            expect(render(html`Hello World`).innerHTML).to.eq('Hello World')
+            expect(render(html`${BigInt(1234567890)}`).innerHTML).to.eq('1234567890')
+            expect(render(html`${0}`).innerHTML).to.eq('0')
+            expect(render(html`${1}`).innerHTML).to.eq('1')
+            expect(render(html`${1_000_000_000.000_000_9}`).innerHTML).to.eq('1000000000.000001')
+            expect(render(html`${true}`).innerHTML).to.eq('')
+            expect(render(html`${false}`).innerHTML).to.eq('')
+            expect(render(html`${Symbol()}`).innerHTML).to.eq('')
+        })
+        test('text content (atoms)', () => {
+            expect(render(html`${atom('Hello World')}`).innerHTML).to.eq('Hello World')
+            expect(render(html`${atom(BigInt(1234567890))}`).innerHTML).to.eq('1234567890')
+            expect(render(html`${atom(0)}`).innerHTML).to.eq('0')
+            expect(render(html`${atom(1)}`).innerHTML).to.eq('1')
+            expect(render(html`${atom(1_000_000_000.000_000_9)}`).innerHTML).to.eq('1000000000.000001')
+            expect(render(html`${atom(true)}`).innerHTML).to.eq('')
+            expect(render(html`${atom(false)}`).innerHTML).to.eq('')
+            expect(render(html`${atom(Symbol())}`).innerHTML).to.eq('')
+            expect(render(html`${atom(() => 'Hello World')}`).innerHTML).to.eq('Hello World')
+            expect(render(html`${atom(() => html`Hello World`)}`).innerHTML).to.eq('<slot>Hello World</slot>')
+        })
+        test('text content (atoms changing)', async () => {
+            let a = atom('Hello World')
+            expect(render(html`${a}`).innerHTML).to.eq('Hello World')
+            set(a, BigInt(1234567890))
+            await nextFrame()
+            expect(render(html`${a}`).innerHTML).to.eq('1234567890')
+            set(a, 0)
+            await nextFrame()
+            expect(render(html`${a}`).innerHTML).to.eq('0')
+            set(a, 1)
+            await nextFrame()
+            expect(render(html`${a}`).innerHTML).to.eq('1')
+            set(a, 1_000_000_000.000_000_9)
+            await nextFrame()
+            expect(render(html`${a}`).innerHTML).to.eq('1000000000.000001')
+            set(a, true)
+            await nextFrame()
+            expect(render(html`${a}`).innerHTML).to.eq('')
+            set(a, false)
+            await nextFrame()
+            expect(render(html`${a}`).innerHTML).to.eq('')
+            set(a, Symbol())
+            await nextFrame()
+            expect(render(html`${a}`).innerHTML).to.eq('')
+            set(a, () => 'Hello World')
+            await nextFrame()
+            expect(render(html`${a}`).innerHTML).to.eq('<slot></slot>')
+            set(a, html`Hello World`)
+            await nextFrame()
+            expect(render(html`${a}`).innerHTML).to.eq('<slot>Hello World</slot>')
+        })
+        test('text fragments', () => {
+            expect(render(html`Hello ${'World'}`).innerHTML).to.eq('Hello World')
+            expect(render(html`${'Hello'} ${'World'}`).innerHTML).to.eq('Hello World')
+            expect(render(html`Hello ${html`World`}!`).innerHTML).to.eq('Hello World!')
+            expect(render(html`Hello ${html`World`}!`).innerText).to.eq('Hello World!')
+        })
+        test('html content', () => {
+            expect(render(html`<!--Hello World-->`).innerHTML).to.eq('')
+            expect(render(html`
+                <div>Hello World</div>`).innerText).to.eq('Hello World')
+            expect(render(html`<p>Hello World</p>`).innerHTML).to.eq('<p>Hello World</p>')
+            expect(render(html`Hello <p class=${'what'}>World</p>`).innerHTML).to.eq('Hello <p class="what">World</p>')
+            expect(render(html`
+                <div>Hello</div>
+                <div>World</div>`).innerHTML).to.eq('<div>Hello</div><div>World</div>')
+            expect(render(html`Hello ${document.createComment('World')}`).innerHTML).to.eq('Hello <!--World-->')
+        })
+        test('nodes are cloned', () => {
+            const node = document.createElement('div')
+            node.innerHTML = '<p>World</p>!'
+            const fixture = render(html`Hello ${node}`)
+            expect(fixture.innerHTML).to.eq('Hello <div><p>World</p>!</div>')
+            const cloned = fixture.firstElementChild
+            expect(cloned).not.to.equal(node)
+            expect(toHyperScript(cloned)).to.deep.equal(toHyperScript(node))
+        })
+        test('functions are invoked with store and root', () => {
+            expect(render(html`Hello ${(s, r, h) => {
+                expect(s).to.equal(store)
+                expect(r.getAttribute('class')).to.equal('fixture')
+                expect(Array.isArray(h)).to.be.true
+                return 'World'
+            }}`).innerHTML).to.eq('Hello World')
+        })
+        test('text content & class', () => {
+            const fixture = render(html`
+                <div class=${'greetings'} style="font-weight: ${'bold'}">${'Hello World'}</div>`)
+            expect(fixture.innerText).to.eq('Hello World')
+            const el = fixture.firstElementChild
+            expect(el.className).to.eq('greetings')
+            expect(el.style.fontWeight).to.eq('bold')
+        })
+        test('text content using a read only and a primitive atom', async () => {
+            const hello = atom(get => 'Hello')
+            const world = atom('')
+            const fixture = render(html`
+                <div>${hello} ${world}</div>`)
+            expect(fixture.innerText).to.eq('Hello')
+            set(world, 'World')
+            await nextFrame()
+            expect(fixture.innerText).to.eq('Hello World')
+            fixture.disconnect()
+        })
+        test('nested content using a read only and a primitive atom', async () => {
+            const hello = atom('')
+            const world = atom(get => get(hello) ? 'World' : '')
+            const fixture = render(html`
+                <div hidden=${true}>:) <em>${hello}</em>
+                    <p>${world}</p>!
+                </div>`)
+            const el = fixture.firstElementChild
+            expect(el.innerText).to.eq(':) !')
+            set(hello, 'Hello')
+            set(world, 'World')
+            await nextFrame()
+            expect(el.innerHTML).to.eq(':) <em>Hello</em><p>World</p>!')
+            expect(el.hasAttribute('hidden')).to.be.true
+            fixture.disconnect()
+        })
+        test('attrs', async () => {
+            expect(render(html`
+                <div class=${'hello'}></div>`).innerHTML).to.eq('<div class="hello"></div>')
+            expect(render(html`
+                <div class="${'hello'} world"></div>`).innerHTML).to.eq('<div class="hello world"></div>')
+            expect(render(html`
+                <div class=${atom('hello')}></div>`).innerHTML).to.eq('<div class="hello"></div>')
+            expect(render(html`
+                <div class="${'hello'} world"></div>`).innerHTML).to.eq('<div class="hello world"></div>')
+            expect(render(html`
+                <svg viewBox="320 240 640 480"/>`
+            ).innerHTML).to.eq('<svg viewBox="320 240 640 480"></svg>')
+        })
+        test('spread', async () => {
+            expect(render(html`<p ...${() => {
+            }}/>`).innerHTML).to.eq('<p></p>')
+            expect(render(html`<p ...${function foo() {
+            }}/>`).innerHTML).to.eq('<p></p>')
+            expect(render(html`<p ...${1}/>`).innerHTML).to.eq('<p></p>')
+            expect(render(html`<p ...${''}/>`).innerHTML).to.eq('<p></p>')
+            expect(render(html`<p ...${['']}/>`).innerHTML).to.eq('<p></p>')
+            expect(render(html`<p ...${{class: 'para'}}/>`).innerHTML).to.eq('<p class="para"></p>')
+            expect(render(html`<p ...${atom({class: 'para'})}/>`).innerHTML).to.eq('<p class="para"></p>')
+            expect(
+                render(
+                    html`
+                        <div ...${{class: 'hello', style: 'color: red; background: yellow'}}>Hello World</div>`
+                ).innerHTML
+            ).to.eq('<div class="hello" style="color: red; background: yellow">Hello World</div>')
+        })
+        test('multi attrs (atom)', async () => {
+            const color = atom('red')
+            const attrs = atom(get => ({class: 'greetings', style: `color: ${get(color)}; background: yellow`}))
+            const fixture = render(html`
+                <div ...${attrs}>Hello World</div>`)
+            expect(fixture.innerText).to.eq('Hello World')
+            const el = fixture.firstElementChild
+            expect(el.className).to.eq('greetings')
+            expect(el.style.color).to.eq('red')
+            set(color, 'green')
+            await nextFrame()
+            expect(el.style.color).to.eq('green')
+        })
+        test('[feat] cant use atoms in attribute values', () => {
+            expect(render(html`
+                <div class="${atom('between')}"/>`).innerHTML).to.eq('<div class="between"></div>')
+            expect(render(html`
+                <div class="before ${atom('between')} after"/>`).innerHTML).to.eq('<div class="before [object Object] after"></div>')
+        })
+        test('ant-design icons', async () => {
+            const ApiOutlined = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiOutlined.js'))
+            expect(
+                render(html`<${ApiOutlined} width="1rem" height="1rem"/>`).innerHTML
+            ).to.include(
+                '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon outlined" width="1rem" height="1rem">'
+            )
+            const ApiFilled = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiFilled.js'))
+            expect(
+                render(html`<${ApiFilled} class="2nd" width="1rem" height="1rem"/>`).innerHTML
+            ).to.include(
+                '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon filled 2nd" width="1rem" height="1rem">'
+            )
+            const ApiTwoTone = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiTwoTone.js'))
+            expect(
+                render(html`<${ApiTwoTone(atom('darkred'), atom('red'))} width="1rem" height="1rem"/>`).innerHTML
+            ).to.include(
+                '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon twotone" width="1rem" height="1rem">'
+            )
+        })
+    })
+
+    mocha.run()
+</script>
+</body>
+</html>
