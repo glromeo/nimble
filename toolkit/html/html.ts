@@ -1,8 +1,6 @@
 import {Atom, Store} from '../atoms/atoms'
 import {htm} from './parse.js'
 
-type HTM = <HResult>(this: (type: any, props: Record<string, any>, ...children: any[]) => HResult, args: IArguments) => HResult | HResult[];
-
 const replaceWithSlot = (node: HTMLSlotElement | Text) => {
     const slot = document.createElement('slot')
     node.parentElement!.replaceChild(slot, node)
@@ -228,8 +226,10 @@ function setProperties(store: Store, node: HTMLElement, props: any, hooks?: Func
 
 const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
 
+export type RenderFunction = (store: Store, root: HTMLElement, defaultHooks?: Function[]) => Function | void
+
 export function html(statics:TemplateStringsArray, ...fields:any[]) {
-    const template: string | any | any[] = htm(statics, fields)
+    const template: string | any | any[] = htm(statics, arguments)
     // debugger;
     return (store: Store, root: HTMLElement, defaultHooks?: Function[]) => {
         const hooks = defaultHooks ?? []

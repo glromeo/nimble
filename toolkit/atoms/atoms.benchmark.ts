@@ -1,9 +1,9 @@
-const {atom, createStore} = require('./atoms.js')
+import {Atom, atom, createStore} from './atoms'
 
 const store = createStore()
-const atoms = []
+const atoms = [] as Atom<number>[]
 
-function prepare(l) {
+function prepare(l):Atom<number> {
     if (l < 16) {
         const lh = prepare(l + 1)
         const rh = prepare(l + 1)
@@ -22,7 +22,7 @@ function prepare(l) {
 
     let total = store.get(top)
 
-    await new Promise((resolve) => {
+    await new Promise<void>((resolve) => {
 
         let i = 0
         store.sub(top, () => {
@@ -41,4 +41,5 @@ function prepare(l) {
     console.log(total, performance.now() - timeStart)
 })()
 
-// 1000000 3176.077374994755
+// 1000000 3176.077374994755 (M1)
+// 1000000 5465.098600000143 (I7)

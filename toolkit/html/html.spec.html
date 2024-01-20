@@ -87,7 +87,11 @@
             return fixture
         }
 
-        return html`before <div> Hello ${'x'} <p>World</p> xxx <${'x'}></> then </div> after`
+        test('htm bugs', () => {
+            expect(render(html`Hello \n${''}World`).innerHTML).to.eq('Hello World')
+            expect(render(html` \n <div>Hello \t World</div> \t `).innerHTML).to.eq('<div>Hello World</div>')
+            expect(render(html`< div></div>`).innerHTML).to.eq('<div></div>')
+        })
 
         test('text content', () => {
             expect(render(html`Hello World`).innerText).to.eq('Hello World')
@@ -154,7 +158,7 @@
             expect(render(html`
                 <div>Hello World</div>`).innerText).to.eq('Hello World')
             expect(render(html`<p>Hello World</p>`).innerHTML).to.eq('<p>Hello World</p>')
-            expect(render(html`Hello <p class=${'what'}>World</p>`).innerHTML).to.eq('Hello <p class="what">World</p>')
+            expect(render(html`Hello <p class=${'what'}>World</p>`).innerHTML).to.eq('Hello<p class="what">World</p>')
             expect(render(html`
                 <div>Hello</div>
                 <div>World</div>`).innerHTML).to.eq('<div>Hello</div><div>World</div>')
@@ -204,11 +208,11 @@
                     <p>${world}</p>!
                 </div>`)
             const el = fixture.firstElementChild
-            expect(el.innerText).to.eq(':) !')
+            expect(el.innerText).to.eq(':)!')
             set(hello, 'Hello')
             set(world, 'World')
             await nextFrame()
-            expect(el.innerHTML).to.eq(':) <em>Hello</em><p>World</p>!')
+            expect(el.innerHTML).to.eq(':)<em>Hello</em><p>World</p>!')
             expect(el.hasAttribute('hidden')).to.be.true
             fixture.disconnect()
         })
