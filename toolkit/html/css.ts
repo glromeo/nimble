@@ -1,6 +1,6 @@
-import {Atom, Store} from '../atoms/atoms'
+import {Atom} from '../atoms/atoms'
 
-function setProperty(store: Store, style: CSSStyleDeclaration, property: string, value: any, hooks?: Function[]): void {
+function setProperty(style: CSSStyleDeclaration, property: string, value: any, hooks?: Function[]): void {
     switch (typeof value) {
         case 'bigint':
         case 'number':
@@ -11,7 +11,7 @@ function setProperty(store: Store, style: CSSStyleDeclaration, property: string,
             style.removeProperty(property)
             return
         case 'function':
-            return setProperty(store, style, property, value(store, style, property), hooks)
+            return setProperty(style, property, value(style, property), hooks)
         default:
             if (value) {
                 let update: FrameRequestCallback | undefined
@@ -23,7 +23,7 @@ function setProperty(store: Store, style: CSSStyleDeclaration, property: string,
                                 case 'string':
                                     return String(part)
                                 case 'function':
-                                    return format(part(store, style, property), index)
+                                    return format(part(style, property), index)
                                 default:
                                     if (part && part.atomId) {
                                         const atom = part as Atom<any>
@@ -32,15 +32,15 @@ function setProperty(store: Store, style: CSSStyleDeclaration, property: string,
                                                 style.setProperty(property, parts.join(' '))
                                                 update = defaultUpdate
                                             }
-                                            hooks.push(store.sub(atom, () => {
-                                                parts[index] = store.get(atom)
+                                            hooks.push(atom.sub(() => {
+                                                parts[index] = atom.get()
                                                 if (update) {
                                                     requestAnimationFrame(update)
                                                     update = undefined
                                                 }
                                             }))
                                         }
-                                        return format(store.get(atom), index)
+                                        return format(atom.get(), index)
                                     } else {
                                         return ''
                                     }
@@ -51,21 +51,21 @@ function setProperty(store: Store, style: CSSStyleDeclaration, property: string,
                 } else if (value.atomId) {
                     const atom = value as Atom<any>
                     if (hooks) {
-                        let value = store.get(atom)
+                        let value = atom.get()
                         update = function defaultUpdate() {
-                            setProperty(store, style, property, value)
+                            setProperty(style, property, value)
                             update = defaultUpdate
                         }
-                        hooks.push(store.sub(atom, () => {
-                            value = store.get(atom)
+                        hooks.push(atom.sub(() => {
+                            value = atom.get()
                             if (update) {
                                 requestAnimationFrame(update)
                                 update = undefined
                             }
                         }))
-                        return setProperty(store, style, property, value)
+                        return setProperty(style, property, value)
                     } else {
-                        return setProperty(store, style, property, store.get(atom))
+                        return setProperty(style, property, atom.get())
                     }
                 } else {
                     return style.setProperty(property, 'auto')
@@ -76,7 +76,7 @@ function setProperty(store: Store, style: CSSStyleDeclaration, property: string,
     }
 }
 
-function setStyle(store: Store, style: CSSStyleDeclaration, value: any, hooks?: Function[]): void {
+function setStyle(style: CSSStyleDeclaration, value: any, hooks?: Function[]): void {
     switch (typeof value) {
         case 'boolean':
         case 'bigint':
@@ -92,33 +92,33 @@ function setStyle(store: Store, style: CSSStyleDeclaration, value: any, hooks?: 
                 style.setProperty(property.trim(), value.trim())
             })
         case 'function':
-            return setStyle(store, style, value(store, style), hooks)
+            return setStyle(style, value(style), hooks)
         default:
             if (value) {
                 let update: FrameRequestCallback | undefined
                 if (value.atomId) {
                     const atom = value as Atom<any>
                     if (hooks) {
-                        let value = store.get(atom)
+                        let value = atom.get()
                         update = function defaultUpdate() {
-                            setStyle(store, style, value)
+                            setStyle(style, value)
                             update = defaultUpdate
                         }
-                        hooks.push(store.sub(atom, () => {
-                            value = store.get(atom)
+                        hooks.push(atom.sub(() => {
+                            value = atom.get()
                             if (update) {
                                 requestAnimationFrame(update)
                                 update = undefined
                             }
                         }))
-                        return setStyle(store, style, value)
+                        return setStyle(style, value)
                     } else {
-                        return setStyle(store, style, store.get(atom))
+                        return setStyle(style, atom.get())
                     }
                 } else {
                     const entries = Object.entries(value)
                     for (const [property, value] of entries) {
-                        setProperty(store, style, property, value, hooks)
+                        setProperty(style, property, value, hooks)
                     }
                 }
             }
@@ -189,7 +189,7 @@ export function css(statics: TemplateStringsArray, ...values: any[]) {
         }
     })
 
-    return (store: Store, root: HTMLElement = document.head, defaultHooks?: Function[]) => {
+    return (root: HTMLElement = document.head, defaultHooks?: Function[]) => {
         root.appendChild(style)
         const hooks = defaultHooks ?? []
         const styleSheet = document.styleSheets[document.styleSheets.length - 1]
@@ -200,9 +200,9 @@ export function css(statics: TemplateStringsArray, ...values: any[]) {
             }
             const style = rule.style as CSSStyleDeclaration
             if (property) {
-                setProperty(store, style, property, value, hooks)
+                setProperty(style, property, value, hooks)
             } else {
-                setStyle(store, style, value, hooks)
+                setStyle(style, value, hooks)
             }
         }
         if (hooks !== defaultHooks) {

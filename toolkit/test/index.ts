@@ -1,4 +1,4 @@
-import {css, html, defaultStore, createStore, atom, Store} from '@nimble/toolkit'
+import {css, html, atom} from '@nimble/toolkit'
 
 const {
     EVENT_RUN_BEGIN,
@@ -40,17 +40,15 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
 
         const unmount: Function[] = []
 
-        let store = createStore();
-
         const running = atom(false)
 
         runner.once(EVENT_RUN_BEGIN, () => {
-            style(store, document.head, unmount)
+            style(document.head, unmount)
             html`
                 <div id="test-results">
                     Running...
                 </div>
-            `(store, document.getElementById('root')!)
+            `(document.getElementById('root')!)
         })
 
         runner.on(EVENT_SUITE_BEGIN, suite => {
@@ -60,9 +58,8 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
                 <div class="suite" title=${title}>
                     ${title && html`<div class="heading">${title}</div>`}
                 </div>
-            `(store, testResults)
+            `(testResults)
             Object.assign(suite.ctx, {
-                store: createStore(),
                 fixture: 0,
                 root: testResults.lastElementChild as HTMLElement,
                 unmount: [] as Function[],
@@ -71,7 +68,7 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
                         <div class="fixture" data-suite=${title} data-fixture=${this.fixture++}/>
                             ${template}
                         </div>
-                    `(this.store, this.root)
+                    `(this.root)
                     return this.root.lastElementChild as HTMLElement
                 }
             })
@@ -82,14 +79,13 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
         })
 
         runner.on(EVENT_TEST_BEGIN, (test) => {
-            const {store, root} = test.parent!.ctx
+            const {root} = test.parent!.ctx
             html`
                 <div class="test" title=${test.title}>
                     <div class="heading">${test.title}</div>
                 </div>
-            `(store, root)
+            `(root)
             Object.assign(test.ctx!, {
-                store: createStore(),
                 fixture: 0,
                 root: root.lastElementChild as HTMLElement,
                 unmount: [] as Function[],
@@ -98,7 +94,7 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
                         <div class="fixture" data-test=${test.title} data-fixture=${this.fixture++}/>
                             ${template}
                         </div>
-                    `(this.store, this.root)
+                    `(this.root)
                     return this.root.lastElementChild as HTMLElement
                 }
             })

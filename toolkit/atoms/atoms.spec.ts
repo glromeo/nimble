@@ -1,13 +1,7 @@
-import {Atom, atom, createStore, defaultStore} from './atoms'
+import {Atom, atom} from './atoms'
 import {expect} from 'mocha-toolkit'
 
 suite("basics", ()=>{
-
-    let $ = defaultStore
-
-    setup(()=>{
-        $ = createStore()
-    })
 
     test("typeof", () => {
         expect(atom(0).atomId).to.eq('atom<0>')
@@ -18,57 +12,57 @@ suite("basics", ()=>{
 
     test("primitive", () => {
         let digit = atom(0)
-        expect($.get(digit)).to.eq(0)
-        $.set(digit, 1)
-        expect($.get(digit)).to.eq(1)
+        expect(digit.get()).to.eq(0)
+        digit.set(1)
+        expect(digit.get()).to.eq(1)
     });
 
     test("readable", () => {
         let digit = atom(1)
         let scaled = atom(get=> get(digit) * 2)
-        expect($.get(scaled)).to.eq(2)
-        $.set(digit, $.get(digit) + 1)
-        expect($.get(scaled)).to.eq(4)
+        expect(scaled.get()).to.eq(2)
+        digit.set(digit.get() + 1)
+        expect(scaled.get()).to.eq(4)
     })
 
     test("writeable", () => {
         let digit = atom(0)
         let scaled = atom(null, (get, set, value:number) => set(digit, value * 2))
-        expect($.get(digit)).to.eq(0)
-        $.set(scaled, 1)
-        expect($.get(digit)).to.eq(2)
-        $.set(scaled, 2)
-        expect($.get(digit)).to.eq(4)
+        expect(digit.get()).to.eq(0)
+        scaled.set(1)
+        expect(digit.get()).to.eq(2)
+        scaled.set(2)
+        expect(digit.get()).to.eq(4)
     })
 
     test("store read/write two atoms", () => {
         let l = atom(0)
         let r = atom(0)
         let s = atom(get => get(l) + get(r))
-        expect($.get(s)).to.eq(0)
-        $.set(l, 1)
-        $.set(r, 2)
-        expect($.get(l)).to.eq(1)
-        expect($.get(r)).to.eq(2)
-        expect($.get(s)).to.eq(3)
+        expect(s.get()).to.eq(0)
+        l.set(1)
+        r.set(2)
+        expect(l.get()).to.eq(1)
+        expect(r.get()).to.eq(2)
+        expect(s.get()).to.eq(3)
     })
 
     test("store sub/write", () => {
         let z = atom(0)
         let notified = 0
-        let unsub = $.sub(z, () => {
+        let unsub = z.sub(() => {
             notified++
-            expect($.get(z)).to.eq(1)
+            expect(z.get()).to.eq(1)
         })
         expect(notified).to.eq(0)
-        expect($.get(z)).to.eq(0)
-        $.set(z, 1)
+        expect(z.get()).to.eq(0)
+        z.set(1)
         expect(notified).to.eq(1)
-        expect($.get(z)).to.eq(1)
+        expect(z.get()).to.eq(1)
         unsub();
-        $.set(z, 2)
+        z.set(2)
         expect(notified).to.eq(1)
-        expect($.get(z)).to.eq(2)
+        expect(z.get()).to.eq(2)
     })
 
     test("store sub/write multi (1)", () => {
@@ -78,10 +72,10 @@ suite("basics", ()=>{
         let e = atom('e', 0)
         let a = atom('a', get => get(b) + get(e))
         let notifications:any = []
-        let unsub = [c,d,b,e,a].map(k => $.sub(k, ()=>{
-            notifications.push([k.atomId, $.get(k)])
+        let unsub = [c,d,b,e,a].map(k => k.sub(()=>{
+            notifications.push([k.atomId, k.get()])
         }))
-        $.set(d, 1)
+        d.set(1)
         expect(notifications.length).to.eq(3)
         expect(notifications[0].join()).to.eq('d,1')
         expect(notifications[1].join()).to.eq('b,1')
@@ -96,11 +90,11 @@ suite("basics", ()=>{
         let e = atom('e', 0)
         let a = atom('a', get => get(b) + get(e))
         let notifications:any = []
-        let unsub = [c,d,b,e,a].map(k => $.sub(k, ()=>{
-            notifications.push([k.atomId, $.get(k)])
+        let unsub = [c,d,b,e,a].map(k => k.sub(()=>{
+            notifications.push([k.atomId, k.get()])
         }))
-        $.set(c, 1)
-        $.set(d, 1)
+        c.set(1)
+        d.set(1)
         expect(notifications.length).to.eq(6)
         expect(notifications[0].join()).to.eq('c,1')
         expect(notifications[1].join()).to.eq('b,1')
@@ -129,15 +123,15 @@ suite("basics", ()=>{
             return l + r
         })
         let notifications:any = []
-        const unsub = $.sub(a, ()=>{
-            notifications.push([a.atomId, $.get(a)])
+        const unsub = a.sub(()=>{
+            notifications.push([a.atomId, a.get()])
         })
 
         expect(trace.length).to.eq(2)
         expect(trace[0]).to.eq('b: 0 + 0')
         expect(trace[1]).to.eq('a: 0 + 0')
 
-        $.set(c, 1)
+        c.set(1)
 
         expect(trace.length).to.eq(4)
         expect(trace[2]).to.eq('b: 1 + 0')
@@ -146,7 +140,7 @@ suite("basics", ()=>{
         expect(notifications.length).to.eq(1)
         expect(notifications[0].join()).to.eq('a,1')
 
-        $.set(d, 1)
+        d.set(1)
 
         expect(trace.length).to.eq(6)
         expect(trace[4]).to.eq('b: 1 + 1')
@@ -162,18 +156,18 @@ suite("basics", ()=>{
         let l = atom(false)
         let r = atom(false)
         let s = atom(get => get(l) || get(r))
-        expect($.get(s)).to.eq(false)
-        expect($.debug(r)!.listeners!.size).to.eq(1)
-        expect($.debug(l)!.listeners!.size).to.eq(1)
-        $.set(r, true)
-        expect($.get(s)).to.eq(true)
-        expect($.debug(r)!.listeners!.size).to.eq(1)
-        expect($.debug(l)!.listeners!.size).to.eq(1)
-        $.set(l, true)
-        expect($.get(s)).to.eq(true)
-        expect($.debug(r)!.listeners!.size).to.eq(0)
-        expect($.debug(l)!.listeners!.size).to.eq(1)
-        expect($.get(s)).to.eq(true)
+        expect(s.get()).to.eq(false)
+        expect(r.state()!.listeners!.size).to.eq(1)
+        expect(l.state()!.listeners!.size).to.eq(1)
+        r.set(true)
+        expect(s.get()).to.eq(true)
+        expect(r.state()!.listeners!.size).to.eq(1)
+        expect(l.state()!.listeners!.size).to.eq(1)
+        l.set(true)
+        expect(s.get()).to.eq(true)
+        expect(r.state()!.listeners!.size).to.eq(0)
+        expect(l.state()!.listeners!.size).to.eq(1)
+        expect(s.get()).to.eq(true)
     })
 
 })

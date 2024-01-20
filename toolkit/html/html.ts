@@ -1,5 +1,5 @@
-import {Atom, Store} from '../atoms/atoms'
-import {htm} from './parse.js'
+import {Atom} from '../atoms/atoms'
+import htm from 'htm/mini'
 
 type HTM = <HResult>(this: (type: any, props: Record<string, any>, ...children: any[]) => HResult, args: IArguments) => HResult | HResult[];
 
@@ -14,8 +14,8 @@ const replaceWithText = (node: HTMLSlotElement | Text, value: string) => {
     return text
 }
 
-function syncElement(store: Store, atom: Atom<any>, el: HTMLElement): Function {
-    let value = store.get(atom) ?? ''
+function syncElement(atom: Atom<any>, el: HTMLElement): Function {
+    let value = atom.get() ?? ''
     let type = typeof value
     let slot: HTMLSlotElement | Text
     let update: FrameRequestCallback | null
@@ -35,16 +35,16 @@ function syncElement(store: Store, atom: Atom<any>, el: HTMLElement): Function {
         }
         case 'function': {
             slot = el.appendChild(document.createElement('slot'))
-            value(store, slot)
-            update = () => value(store, slot)
+            value(slot)
+            update = () => value(slot)
             break
         }
         default:
             slot = el.appendChild(document.createElement('slot'))
 
     }
-    return store.sub(atom, () => {
-        value = store.get(atom) ?? ''
+    return atom.sub(() => {
+        value = atom.get() ?? ''
         if (typeof value !== type) switch (type = typeof value) {
             case 'bigint':
             case 'number':
@@ -64,8 +64,8 @@ function syncElement(store: Store, atom: Atom<any>, el: HTMLElement): Function {
             case 'function':
                 update = () => {
                     if (slot.nodeType !== 1) slot = replaceWithSlot(slot)
-                    value(store, slot)
-                    update = () => value(store, slot)
+                    value(slot)
+                    update = () => value(slot)
                 }
                 break
             default:
@@ -79,7 +79,7 @@ function syncElement(store: Store, atom: Atom<any>, el: HTMLElement): Function {
     })
 }
 
-function setAttribute(store: Store, node: HTMLElement, name: string, value: any, hooks?: Function[]): void {
+function setAttribute(node: HTMLElement, name: string, value: any, hooks?: Function[]): void {
     switch (typeof value) {
         case 'bigint':
         case 'number':
@@ -94,7 +94,7 @@ function setAttribute(store: Store, node: HTMLElement, name: string, value: any,
         case 'undefined':
             return
         case 'function':
-            return setAttribute(store, node, name, value(store, node))
+            return setAttribute(node, name, value(node))
         default:
             if (value) {
                 let update: FrameRequestCallback | undefined
@@ -106,7 +106,7 @@ function setAttribute(store: Store, node: HTMLElement, name: string, value: any,
                                 case 'string':
                                     return String(part)
                                 case 'function':
-                                    return format(part(store, node), index)
+                                    return format(part(node), index)
                                 default:
                                     if (part && part.atomId) {
                                         const atom = part as Atom<any>
@@ -115,15 +115,15 @@ function setAttribute(store: Store, node: HTMLElement, name: string, value: any,
                                                 node.setAttribute(name, parts.join(' '))
                                                 update = defaultUpdate
                                             }
-                                            hooks.push(store.sub(atom, () => {
-                                                parts[index] = store.get(atom)
+                                            hooks.push(atom.sub(() => {
+                                                parts[index] = atom.get()
                                                 if (update) {
                                                     requestAnimationFrame(update)
                                                     update = undefined
                                                 }
                                             }))
                                         }
-                                        return format(store.get(atom), index)
+                                        return format(atom.get(), index)
                                     } else {
                                         return ''
                                     }
@@ -134,21 +134,21 @@ function setAttribute(store: Store, node: HTMLElement, name: string, value: any,
                 } else if (value.atomId) {
                     const atom = value as Atom<any>
                     if (hooks) {
-                        let value = store.get(atom)
+                        let value = atom.get()
                         update = function defaultUpdate() {
-                            setAttribute(store, node, name, value)
+                            setAttribute(node, name, value)
                             update = defaultUpdate
                         }
-                        hooks.push(store.sub(atom, () => {
-                            value = store.get(atom)
+                        hooks.push(atom.sub(() => {
+                            value = atom.get()
                             if (update) {
                                 requestAnimationFrame(update)
                                 update = undefined
                             }
                         }))
-                        return setAttribute(store, node, name, value)
+                        return setAttribute(node, name, value)
                     } else {
-                        return setAttribute(store, node, name, store.get(atom))
+                        return setAttribute(node, name, atom.get())
                     }
                 } else {
                     const parts = Object.entries(value).map(function format([key, part]: [string, any], index: number): string {
@@ -158,7 +158,7 @@ function setAttribute(store: Store, node: HTMLElement, name: string, value: any,
                                 case 'string':
                                     return `${key}:${part}`
                                 case 'function':
-                                    return format(part(store, node), index)
+                                    return format(part(node), index)
                                 default:
                                     if (part && part.atomId) {
                                         const atom = part as Atom<any>
@@ -167,15 +167,15 @@ function setAttribute(store: Store, node: HTMLElement, name: string, value: any,
                                                 node.setAttribute(name, parts.join(' '))
                                                 update = defaultUpdate
                                             }
-                                            hooks.push(store.sub(atom, () => {
-                                                parts[index] = store.get(atom)
+                                            hooks.push(atom.sub(() => {
+                                                parts[index] = atom.get()
                                                 if (update) {
                                                     requestAnimationFrame(update)
                                                     update = undefined
                                                 }
                                             }))
                                         }
-                                        return format(store.get(atom), index)
+                                        return format(atom.get(), index)
                                     } else {
                                         return ''
                                     }
@@ -190,24 +190,24 @@ function setAttribute(store: Store, node: HTMLElement, name: string, value: any,
     }
 }
 
-function setProperties(store: Store, node: HTMLElement, props: any, hooks?: Function[]):void {
-    if (props.atomId) {
-        const atom = props as Atom<any>
+function setAttrs(node: HTMLElement, attrs: any, hooks?: Function[]):void {
+    if (attrs.atomId) {
+        const atom = attrs as Atom<any>
         if (hooks) {
-            let value = store.get(atom)
+            let value = atom.get()
             const update = () => {
-                setProperties(store, node, value)
+                setAttrs(node, value)
             }
-            hooks.push(store.sub(atom, () => {
-                value = store.get(atom)
+            hooks.push(atom.sub(() => {
+                value = atom.get()
                 requestAnimationFrame(update)
             }))
-            return setProperties(store, node, value)
+            return setAttrs(node, value)
         } else {
-            return setProperties(store, node, store.get(atom))
+            return setAttrs(node, atom.get())
         }
     } else {
-        for (const [name, value] of Object.entries(props)) {
+        for (const [name, value] of Object.entries(attrs)) {
             switch (name[0]) {
                 case '0':
                     return
@@ -220,7 +220,7 @@ function setProperties(store: Store, node: HTMLElement, props: any, hooks?: Func
                     node.addEventListener(event, value as any)
                     continue
                 default:
-                    setAttribute(store, node, name, value, hooks)
+                    setAttribute(node, name, value, hooks)
             }
         }
     }
@@ -228,10 +228,30 @@ function setProperties(store: Store, node: HTMLElement, props: any, hooks?: Func
 
 const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
 
+function h(this: any, tag:string|any, attrs:any, ...children:any[]) {
+    // console.log({type, props, children})
+    if (typeof tag === 'object') {
+        if (attrs.class && tag.attrs.class) {
+            attrs.class = `${tag.attrs.class} ${attrs.class}`
+        }
+        if (attrs.style && tag.attrs.style) {
+            attrs.style = `${tag.attrs.style}; ${attrs.style}`
+        }
+        return {
+            ...tag,
+            attrs: {
+                ...tag.attrs,
+                ...attrs
+            }
+        }
+    }
+    return {tag, attrs, children}
+}
+
 export function html(statics:TemplateStringsArray, ...fields:any[]) {
-    const template: string | any | any[] = htm(statics, fields)
+    const template: string | any | any[] = (htm as HTM).apply(h, arguments as any)
     // debugger;
-    return (store: Store, root: HTMLElement, defaultHooks?: Function[]) => {
+    return (root: HTMLElement, defaultHooks?: Function[]) => {
         const hooks = defaultHooks ?? []
         let target: HTMLElement = root
         const stack = [template]
@@ -251,7 +271,7 @@ export function html(statics:TemplateStringsArray, ...fields:any[]) {
                 case 'symbol':
                     continue
                 case 'function':
-                    stack.push(tos(store, target, hooks))
+                    stack.push(tos(target, hooks))
                     continue
                 default:
                     if (tos) {
@@ -259,7 +279,7 @@ export function html(statics:TemplateStringsArray, ...fields:any[]) {
                             let t = tos.length
                             while (--t >= 0) stack.push(tos[t])
                         } else if (tos.atomId) {
-                            hooks.push(syncElement(store, tos as Atom<any>, target))
+                            hooks.push(syncElement(tos as Atom<any>, target))
                         } else if (tos instanceof Node) {
                             if ((tos as HTMLElement).shadowRoot?.contains(target)) {
                                 continue
@@ -274,7 +294,7 @@ export function html(statics:TemplateStringsArray, ...fields:any[]) {
                                     : document.createElement(tag)
                             ) as HTMLElement
                             if (attrs) {
-                                setProperties(store, el, attrs, hooks)
+                                setAttrs(el, attrs, hooks)
                             }
                             if (children) {
                                 stack.push(el)

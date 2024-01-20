@@ -53,7 +53,7 @@
 <script type="module">
     import {html} from './html.js'
     import {toHyperScript, AntIcon} from './util.js'
-    import {atom, defaultStore, createStore} from '../atoms/atoms.js'
+    import {atom} from '../atoms/atoms.js'
 
     mocha.setup('tdd')
     mocha.checkLeaks()
@@ -66,14 +66,7 @@
 
         let fixtureNumber = 0, testNumber = 0
 
-        let store = createStore()
-        let {get, set, sub} = store
-
         setup(() => {
-            store = createStore()
-            get = store.get
-            set = store.set
-            sub = store.sub
             ++testNumber
             fixtureNumber = 0
         })
@@ -83,11 +76,9 @@
             fixture.setAttribute('class', 'fixture')
             fixture.setAttribute('data-test', String(testNumber))
             fixture.setAttribute('data-fixture', String(fixtureNumber++))
-            fixture.disconnect = template(store, fixture)
+            fixture.disconnect = template(fixture)
             return fixture
         }
-
-        return html`before <div> Hello ${'x'} <p>World</p> xxx <${'x'}></> then </div> after`
 
         test('text content', () => {
             expect(render(html`Hello World`).innerText).to.eq('Hello World')
@@ -115,31 +106,31 @@
         test('text content (atoms changing)', async () => {
             let a = atom('Hello World')
             expect(render(html`${a}`).innerHTML).to.eq('Hello World')
-            set(a, BigInt(1234567890))
+            a.set(BigInt(1234567890))
             await nextFrame()
             expect(render(html`${a}`).innerHTML).to.eq('1234567890')
-            set(a, 0)
+            a.set(0)
             await nextFrame()
             expect(render(html`${a}`).innerHTML).to.eq('0')
-            set(a, 1)
+            a.set(1)
             await nextFrame()
             expect(render(html`${a}`).innerHTML).to.eq('1')
-            set(a, 1_000_000_000.000_000_9)
+            a.set(1_000_000_000.000_000_9)
             await nextFrame()
             expect(render(html`${a}`).innerHTML).to.eq('1000000000.000001')
-            set(a, true)
+            a.set(true)
             await nextFrame()
             expect(render(html`${a}`).innerHTML).to.eq('')
-            set(a, false)
+            a.set(false)
             await nextFrame()
             expect(render(html`${a}`).innerHTML).to.eq('')
-            set(a, Symbol())
+            a.set(Symbol())
             await nextFrame()
             expect(render(html`${a}`).innerHTML).to.eq('')
-            set(a, () => 'Hello World')
+            a.set(() => 'Hello World')
             await nextFrame()
             expect(render(html`${a}`).innerHTML).to.eq('<slot></slot>')
-            set(a, html`Hello World`)
+            a.set(html`Hello World`)
             await nextFrame()
             expect(render(html`${a}`).innerHTML).to.eq('<slot>Hello World</slot>')
         })
@@ -169,9 +160,8 @@
             expect(cloned).not.to.equal(node)
             expect(toHyperScript(cloned)).to.deep.equal(toHyperScript(node))
         })
-        test('functions are invoked with store and root', () => {
-            expect(render(html`Hello ${(s, r, h) => {
-                expect(s).to.equal(store)
+        test('functions are invoked with root', () => {
+            expect(render(html`Hello ${(r, h) => {
                 expect(r.getAttribute('class')).to.equal('fixture')
                 expect(Array.isArray(h)).to.be.true
                 return 'World'
@@ -191,7 +181,7 @@
             const fixture = render(html`
                 <div>${hello} ${world}</div>`)
             expect(fixture.innerText).to.eq('Hello')
-            set(world, 'World')
+            world.set('World')
             await nextFrame()
             expect(fixture.innerText).to.eq('Hello World')
             fixture.disconnect()
@@ -205,8 +195,8 @@
                 </div>`)
             const el = fixture.firstElementChild
             expect(el.innerText).to.eq(':) !')
-            set(hello, 'Hello')
-            set(world, 'World')
+            hello.set('Hello')
+            world.set('World')
             await nextFrame()
             expect(el.innerHTML).to.eq(':) <em>Hello</em><p>World</p>!')
             expect(el.hasAttribute('hidden')).to.be.true
@@ -251,7 +241,7 @@
             const el = fixture.firstElementChild
             expect(el.className).to.eq('greetings')
             expect(el.style.color).to.eq('red')
-            set(color, 'green')
+            color.set('green')
             await nextFrame()
             expect(el.style.color).to.eq('green')
         })
@@ -264,19 +254,22 @@
         test('ant-design icons', async () => {
             const ApiOutlined = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiOutlined.js'))
             expect(
-                render(html`<${ApiOutlined} width="1rem" height="1rem"/>`).innerHTML
+                render(html`
+                    <${ApiOutlined} width="1rem" height="1rem"/>`).innerHTML
             ).to.include(
                 '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon outlined" width="1rem" height="1rem">'
             )
             const ApiFilled = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiFilled.js'))
             expect(
-                render(html`<${ApiFilled} class="2nd" width="1rem" height="1rem"/>`).innerHTML
+                render(html`
+                    <${ApiFilled} class="2nd" width="1rem" height="1rem"/>`).innerHTML
             ).to.include(
                 '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon filled 2nd" width="1rem" height="1rem">'
             )
             const ApiTwoTone = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiTwoTone.js'))
             expect(
-                render(html`<${ApiTwoTone(atom('darkred'), atom('red'))} width="1rem" height="1rem"/>`).innerHTML
+                render(html`
+                    <${ApiTwoTone(atom('darkred'), atom('red'))} width="1rem" height="1rem"/>`).innerHTML
             ).to.include(
                 '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon twotone" width="1rem" height="1rem">'
             )
