@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<script type="importmap">
+        {
+            "imports": {
+                "htm": "../../node_modules/htm/dist/htm.mjs",
+                "htm/mini": "../../node_modules/htm/mini/index.mjs",
+                "@ant-design/": "../../node_modules/@ant-design/"
+            }
+        }
+    </script>
+<script>
+    console.time("html")
+
+    function getInnerHTML(i) {
+        return `
+        <h1 class="a">Heading</h1>
+        <p class="b${i}">Paragraph 1</p>
+        <p class="c">Paragraph 2</p>
+        <button class="d${i}" style="color: red">Button</button>
+    `
+    }
+
+    for (let i = 0; i < 10000; i++) {
+        const el = document.createElement('div')
+        try {
+            el.innerHTML = getInnerHTML(i)
+        } catch (e) {
+            console.log(e)
+        } finally {
+            document.body.appendChild(el)
+        }
+    }
+    console.timeEnd("html")
+    document.body.innerHTML = ''
+</script>
+<script>
+    console.time("clone")
+
+    const el = document.createElement('div')
+    function getInnerHTML(i) {
+        return `
+        <h1 class="a">Heading</h1>
+        <p class="b${i}">Paragraph 1</p>
+        <p class="c">Paragraph 2</p>
+        <button class="d${i}" style="color: red">Button</button>
+    `
+    }
+    el.innerHTML = getInnerHTML('\x01')
+
+    for (let i = 0; i < 10000; i++) {
+        let c
+        try {
+            c = el.cloneNode(true)
+            let w = document.createTreeWalker(c, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT)
+            while (w.nextNode()) {
+                Math.sqrt( Math.random()*100 )
+            }
+        } catch (e) {
+            console.log(e)
+        } finally {
+            document.body.appendChild(c)
+        }
+    }
+    console.timeEnd("clone")
+    document.body.innerHTML = ''
+</script>
+<script type="module">
+    import {html} from './html.js'
+    import {defaultStore} from '../atoms/atoms.js'
+
+    console.time("htm")
+
+    function getInnerHTML(i) {
+        return html`
+        <h1 class="a">Heading</h1>
+        <p class="b${i}">Paragraph 1</p>
+        <p class="c">Paragraph 2</p>
+        <button class="d${i}" style="color: red">Button</button>
+    `
+    }
+
+    for (let i = 0; i < 10000; i++) {
+        const el = document.createElement('div')
+        try {
+            getInnerHTML(i)(defaultStore, el)
+        } catch (e) {
+            console.log(e)
+        } finally {
+            document.body.appendChild(el)
+        }
+    }
+    console.timeEnd("htm")
+    document.body.innerHTML = ''
+</script>
+<script>
+    console.time("dom")
+    for (let i = 0; i < 10000; i++) {
+        const fragment = document.createDocumentFragment();
+        try {
+
+            const el = document.createElement('div');
+            const heading = document.createElement('h1');
+            heading.className = "a"
+            const para1 = document.createElement('p');
+            para1.className = "b"+i
+            const para2 = document.createElement('p');
+            para2.className = "c"
+            const button = document.createElement('button');
+            button.className = "d"+i
+
+            button.setAttribute("style", "color:red")
+
+            heading.innerText = 'Heading';
+            para1.innerText = 'Paragraph 1';
+            para2.innerText = 'Paragraph 2';
+            button.innerText = 'Button';
+
+            el.appendChild(heading);
+            el.appendChild(para1);
+            el.appendChild(para2);
+            el.appendChild(button);
+
+            fragment.appendChild(el);
+        } catch (e) {
+            console.log(e)
+        } finally {
+            document.body.appendChild(fragment);
+        }
+    }
+    console.timeEnd("dom")
+    document.body.innerHTML = ''
+</script>
+</body>
+</html>

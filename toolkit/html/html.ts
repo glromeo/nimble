@@ -1,5 +1,5 @@
 import {Atom, Store} from '../atoms/atoms'
-import htm from 'htm/mini'
+import {htm} from './parse.js'
 
 type HTM = <HResult>(this: (type: any, props: Record<string, any>, ...children: any[]) => HResult, args: IArguments) => HResult | HResult[];
 
@@ -228,28 +228,8 @@ function setProperties(store: Store, node: HTMLElement, props: any, hooks?: Func
 
 const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
 
-function h(this: any, tag:string|any, attrs:any, ...children:any[]) {
-    // console.log({type, props, children})
-    if (typeof tag === 'object') {
-        if (attrs.class && tag.attrs.class) {
-            attrs.class = `${tag.attrs.class} ${attrs.class}`
-        }
-        if (attrs.style && tag.attrs.style) {
-            attrs.style = `${tag.attrs.style}; ${attrs.style}`
-        }
-        return {
-            ...tag,
-            attrs: {
-                ...tag.attrs,
-                ...attrs
-            }
-        }
-    }
-    return {tag, attrs, children}
-}
-
 export function html(statics:TemplateStringsArray, ...fields:any[]) {
-    const template: string | any | any[] = (htm as HTM).apply(h, arguments as any)
+    const template: string | any | any[] = htm(statics, fields)
     // debugger;
     return (store: Store, root: HTMLElement, defaultHooks?: Function[]) => {
         const hooks = defaultHooks ?? []

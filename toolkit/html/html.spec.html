@@ -87,6 +87,8 @@
             return fixture
         }
 
+        return html`before <div> Hello ${'x'} <p>World</p> xxx <${'x'}></> then </div> after`
+
         test('text content', () => {
             expect(render(html`Hello World`).innerText).to.eq('Hello World')
             expect(render(html`Hello World`).innerHTML).to.eq('Hello World')
