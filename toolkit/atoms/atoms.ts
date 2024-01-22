@@ -14,7 +14,7 @@ export class Atom<V, A extends unknown[] = [V], R = void> {
 
     constructor(r?: any, w?: any, x?: any) {
         let id
-        if (typeof r === 'string' && arguments.length > 1) {
+        if (typeof r === 'string' && w !== undefined) {
             id = r
             r = w
             w = x

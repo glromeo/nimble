@@ -17,7 +17,7 @@ function format(value) {
     }
 }
 
-const updateNode = (node, value) => requestAnimationFrame(() => {
+const updateNode = (node, value) => {
     switch (value.constructor) {
         case BigInt:
         case Number:
@@ -33,7 +33,7 @@ const updateNode = (node, value) => requestAnimationFrame(() => {
             value(node)
             return
     }
-})
+}
 
 function nodeHook(node, field, holes) {
     switch (field.constructor) {

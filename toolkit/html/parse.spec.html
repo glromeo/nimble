@@ -9,6 +9,7 @@
 <script src="../../node_modules/mocha/mocha.js"></script>
 <script type="module">
     import {WebConsole} from '../test/web-console.mjs'
+    import {atom, defaultStore} from '../atoms/atoms.js'
 
     mocha.setup('tdd')
     mocha.checkLeaks()
@@ -19,6 +20,46 @@
     suite('text nodes', () => {
 
         setup(() => {
+        })
+
+        function molecule({get, set, sub} = defaultStore) {
+            const subs = new WeakSet()
+            const pending = new Map()
+            const update = () => {
+                pending.forEach(e => e[0](e[1]))
+                pending.clear()
+            }
+            return {
+                signal: (read, write) => {
+                    const a = atom(read, write)
+                    return (vs) => {
+                        if (vs) {
+                            if (typeof vs === 'function') {
+                                vs(get(a))
+                                if (!subs.has(vs)) subs.add(sub(a, () => {
+                                    if (!pending.has(vs)) {
+                                        pending.set(vs, get(a))
+                                        requestAnimationFrame(update)
+                                    }
+                                }))
+                            } else {
+                                set(a, vs)
+                            }
+                        } else {
+                            return get(a)
+                        }
+                    }
+                },
+                dispose: () => subs.forEach(u => u())
+            }
+        }
+
+        const {signal: s} = molecule()
+
+        test(`#17`, async () => {
+            const node = html`hello ${s('world')}`
+            const nextFrame = async () => await new Promise(resolve => requestAnimationFrame(resolve))
+            return expect(node.innerHTML).to.eq('hello <slot>world</slot>')
         })
 
         test(`#01`, () => expect(html`hello`.innerHTML).to.eq('hello'))
@@ -36,7 +77,8 @@
         test(`#12`, () => expect(html`<p a='b > d'></p>`.innerHTML).to.eq('<p a="b > d"></p>'))
         test(`#13`, () => expect(html`<p a=${'b'}><a b=${'c'}></a></p>`.innerHTML).to.eq('<p a="b"><a b="c"></a></p>'))
         test(`#14`, () => expect(html`<p a${{b: 'c'}}></p>`.innerHTML).to.eq('<p a="" b="c"></p>'))
-        test(`#15`, () => expect(html`<p a="abc${'def'}ghi${'   '}jkl"></p>`.innerHTML).to.eq('<p a="abcdefghi   jkl"></p>'))
+        test(`#15`, () => expect(html`<p
+                a="abc${'def'}ghi${'   '}jkl"></p>`.innerHTML).to.eq('<p a="abcdefghi   jkl"></p>'))
         test(`#16`, () => expect(html`<!-- ${'one'} ${2} -->`.innerHTML).to.eq('<!-- one 2 -->'))
     })
 
@@ -59,8 +101,8 @@
         }
     }
 
-    const updateNode = (node, value) => requestAnimationFrame(() => {
-        switch (value.constructor) {
+    const updateNode = (node, value) => {
+        switch (value?.constructor) {
             case BigInt:
             case Number:
             case String:
@@ -74,8 +116,10 @@
             case Function:
                 value(node)
                 return
+            default:
+                node.innerHTML = ''
         }
-    })
+    }
 
     function nodeHook(node, field, holes) {
         switch (field.constructor) {
@@ -98,9 +142,8 @@
                 return
             case Function: {
                 const slot = document.createElement('slot')
-                field(slot, value => updateNode(slot, value))
                 node.replaceWith(slot)
-                return
+                return field(value => updateNode(slot, value))
             }
         }
     }
@@ -244,7 +287,7 @@
                     case END:
                         //
                         break
-                        //
+                    //
                 }
             }
 
