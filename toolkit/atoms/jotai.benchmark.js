@@ -1,4 +1,5 @@
 const {atom, createStore} = require('jotai/vanilla')
+const {memoryUsage} = require('node:process')
 
 const store = createStore()
 const atoms = []
@@ -27,17 +28,18 @@ function prepare(l) {
         let i = 0
         store.sub(top, () => {
             total = store.get(top)
-            if (i >= 1_000_000) {
+            if (i >= 100_000) {
                 resolve()
             }
         })
-        while (i++ < 1_000_000) {
-            const a = atoms[(3 * i ) % atoms.length]
+        while (i++ < 100_000) {
+            const a = atoms[(3 * i) % atoms.length]
             store.set(a, store.get(a) + 1)
         }
 
     })
 
+    console.log(memoryUsage())
     console.log(total, performance.now() - timeStart)
 })()
 

@@ -1,9 +1,10 @@
-import {Atom, atom, createStore} from './atoms'
+import {atom, molecule} from './atoms.mjs'
+import { memoryUsage } from 'node:process';
 
-const store = createStore()
-const atoms = [] as Atom<number>[]
+const scope = molecule()
+const atoms = []
 
-function prepare(l):Atom<number> {
+function prepare(l) {
     if (l < 16) {
         const lh = prepare(l + 1)
         const rh = prepare(l + 1)
@@ -20,24 +21,25 @@ function prepare(l):Atom<number> {
 
     const top = prepare(0)
 
-    let total = store.get(top)
+    let total = scope.get(top)
 
-    await new Promise<void>((resolve) => {
+    await new Promise((resolve) => {
 
         let i = 0
-        store.sub(top, () => {
-            total = store.get(top)
+        scope.bind(top, () => {
+            total = scope.get(top)
             if (i >= 1_000_000) {
                 resolve()
             }
         })
         while (i++ < 1_000_000) {
             const a = atoms[(3 * i ) % atoms.length]
-            store.set(a, store.get(a) + 1)
+            scope.set(a, scope.get(a) + 1)
         }
 
     })
 
+    console.log(memoryUsage());
     console.log(total, performance.now() - timeStart)
 })()
 

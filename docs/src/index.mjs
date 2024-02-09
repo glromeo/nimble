@@ -1,13 +1,13 @@
-import {atom, defaultStore, css, html, render} from '@nimble/toolkit'
+import {html, molecule} from '@nimble/toolkit'
 import dog from './dog.svg.js'
 import './nav-bar.js'
 
-const {get, set, sub} = defaultStore;
+const {atom, get, set, sub} = molecule();
 
 const timeStringAtom = atom(new Date().toLocaleTimeString())
 
 // setInterval(()=>{
-//     set(timeStringAtom, new Date().toLocaleTimeString())
+//     timeStringAtom.value = new Date().toLocaleTimeString()
 // }, 1000)
 
 const rgbAtom = atom("rgb(0,0,0)")
@@ -16,12 +16,12 @@ setInterval(()=>{
     const R = Math.floor(256*Math.random())
     const G = Math.floor(256*Math.random())
     const B = Math.floor(256*Math.random())
-    set(rgbAtom, `rgb(${R},${G},${B})`)
+    rgbAtom.value = `rgb(${R},${G},${B})`
 }, 1000)
 
 // sub(rgbAtom, () =>{
 //     requestAnimationFrame(()=>{
-//         document.styleSheets[0].cssRules[4].style.color = get(rgbAtom)
+//         document.styleSheets[0].cssRules[4].style.color = rgbAtom.value
 //     })
 // })
 
