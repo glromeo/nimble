@@ -248,31 +248,50 @@ suite('basics', () => {
         expect(scope.dismiss()).to.be.undefined // there are no bound atoms
     })
 
-    // test('promises', async () => {
-    //     let p = atom(0)
-    //     let a = atom(get => new Promise(resolve => setTimeout(() => resolve(get(p) + 1, 50))))
-    //     let q = atom(null, (get, set, value) => {
-    //         setTimeout(() => set(p, value), 50)
-    //     })
-    //     expect(scope.get(p)).to.eq(0)
-    //     expect(await scope.get(a)).to.eq(1)
-    //     scope.set(p, 2)
-    //     expect(await scope.get(a)).to.eq(3)
-    //     expect(await new Promise(resolve => {
-    //         scope.bind(a, resolve)
-    //         scope.set(p, 3)
-    //     })).to.eq(4)
-    //     scope.dismiss()
-    //     expect(await new Promise(resolve => {
-    //         scope.bind(a, resolve)
-    //         scope.set(p, Promise.resolve(4))
-    //     })).to.eq(5)
-    //     scope.dismiss()
-    //     expect(scope.peek(a).listeners).to.not.exist
-    //     expect(await new Promise(resolve => {
-    //         scope.bind(a, resolve)
-    //         scope.set(q, 5)
-    //     })).to.eq(6)
-    //     scope.dismiss()
-    // })
+    test('promises', async () => {
+        let p = atom(0)
+        let d = atom(get => get(p)+100)
+        let e = atom(get => get(d)+100)
+        let f = atom(async get => get(d)+100)
+        expect(await scope.set(p, Promise.resolve(1))).to.eq(1)
+        expect(scope.get(p)).to.eq(1)
+        expect(scope.get(d)).to.eq(101)
+        expect(scope.get(e)).to.eq(201)
+        let q = atom(null, (get, set, value) => {
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    set(p, value);
+                    resolve('OK')
+                },50)
+            })
+        })
+        expect(await scope.set(q, 2)).to.eq('OK')
+        expect(scope.get(p)).to.eq(2)
+        expect(scope.get(d)).to.eq(102)
+        expect(scope.get(e)).to.eq(202)
+
+        expect(await new Promise(resolve => {
+            scope.bind(e, resolve)
+            scope.set(p, Promise.resolve(3))
+        })).to.eq(203)
+        scope.dismiss()
+
+        expect(await new Promise(async resolve => {
+            await scope.bind(f, resolve)
+            scope.set(p, Promise.resolve(4))
+        })).to.eq(204)
+        scope.dismiss()
+    })
+
+    test('bound further away', () => {
+        let p = atom(0)
+        let q = atom(get => get(p) + 10)
+        let r = atom(get => get(q) + 100)
+        expect(scope.get(p)).to.eq(0)
+        expect(scope.get(q)).to.eq(10)
+        expect(scope.get(r)).to.eq(110)
+        scope.bind(r, v => expect(v).to.eq(111))
+        scope.set(p,1)
+        scope.dismiss()
+    })
 })
