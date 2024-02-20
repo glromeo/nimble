@@ -210,8 +210,7 @@ const on = function(event, action) {
 
 export function atom() {
     return {
-        constructor: atom,
-        id: this ?? `atom<${counter++}>`,
+        __atomId__: this ?? `atom<${counter++}>`,
         [typeof arguments[0] === 'function' ? 'read' : 'init']: arguments[0],
         write: arguments[1],
         on

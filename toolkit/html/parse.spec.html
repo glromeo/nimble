@@ -37,9 +37,9 @@
             fixture.setAttribute('class', 'fixture')
             fixture.setAttribute('data-test', String(testNumber))
             fixture.setAttribute('data-fixture', String(fixtureNumber++))
-            template.connect(molecule())
+            template.bind?.(molecule())
             fixture.appendChild(template)
-            return fixture.firstChild
+            return fixture
         }
         const expectHTML = template => expect(render(template).innerHTML)
         const expectText = template => expect(render(template).innerText)

@@ -46,21 +46,21 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
 
         runner.once(EVENT_RUN_BEGIN, () => {
             style(store, document.head, unmount)
-            html`
+            html(store, '#root')`
                 <div id="test-results">
                     Running...
                 </div>
-            `(store, document.getElementById('root')!)
+            `
         })
 
         runner.on(EVENT_SUITE_BEGIN, suite => {
             const testResults = document.getElementById('test-results')!
             const title = suite.title
-            html`
+            html(store, testResults)`
                 <div class="suite" title=${title}>
                     ${title && html`<div class="heading">${title}</div>`}
                 </div>
-            `(store, testResults)
+            `
             Object.assign(suite.ctx, {
                 store: createStore(),
                 fixture: 0,
