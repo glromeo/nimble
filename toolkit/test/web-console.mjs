@@ -22,6 +22,7 @@ export function WebConsole(runner) {
 
     runner.on('start', function () {
         stats.start = new Date()
+        console.time("duration")
     })
 
     runner.on('test', function (test) {
@@ -88,7 +89,8 @@ export function WebConsole(runner) {
         const skipped = stats.tests - stats.failures - stats.passes
         if (skipped) console.warn(skipped, ' skipped')
         console.log(`${stats.passes} tests %cpassed`, 'color:green;font-weight:bold;')
-        console.log(`${(stats.duration / 1000).toFixed(3)} seconds`)
+        // console.log(`${(stats.duration / 1000).toFixed(3)} seconds`)
+        console.timeEnd("duration")
     })
 
     function logCalls() {

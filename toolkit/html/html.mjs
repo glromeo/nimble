@@ -59,12 +59,6 @@ function isWhitespace(ch) {
     return ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r'
 }
 
-customElements.define('html-root', class extends HTMLElement {
-    connectedCallback() {
-        this.replaceWith(this.content)
-    }
-})
-
 export function html(strings) {
     if (!strings) {
         return null
@@ -336,18 +330,19 @@ export function html(strings) {
             flush()
         }
     }
-    const root = document.createElement('html-root')
-    root.content = fragment.cloneNode(true)
-    if (fragment.hooks) {
-        if (this) {
-            bind(this, root.content, fragment.hooks, args)
-        } else {
-            root.bind = scope => {
-                bind(scope, root.content, fragment.hooks, args)
-            }
+    const clone = fragment.cloneNode(true)
+    const hooks = fragment.hooks
+    if (this) {
+        if (hooks) {
+            bind(this, clone, hooks, args)
+        }
+        return clone
+    } else {
+        return function (node) {
+            bind(this, clone, hooks, args)
+            node.replaceWith(clone)
         }
     }
-    return root
 }
 
 function bind(scope, node, hooks, args) {
@@ -463,27 +458,33 @@ function setNode(scope, node, value, bind) {
         case 'string':
             if (node.nodeType === 3) {
                 node.data = value
-                return node
+                return
             } else {
                 value = document.createTextNode(value)
-                value.binding = node.binding
                 node.replaceWith(value)
-                return value
+                return
             }
         case 'function':
-            return setNode(scope, node, value.call(scope, node), bind)
+            value = value.call(scope, node)
+            if (value !== undefined && node.isConnected) {
+                setNode(scope, node, value)
+            }
+            return
         case 'object':
             if (value instanceof Node) {
-                value.bind?.(scope)
-                node.parentNode.replaceChild(value, node)
-                return value
+                node.replaceWith(value)
+                return
             }
             if (value[atomTag]) {
                 if (bind) {
                     let pending = 0
                     const update = () => {
-                        node = setNode(scope, node, scope.get(value))
-                        pending = 0
+                        if (node.isConnected) {
+                            setNode(scope, node, scope.get(value))
+                            pending = 0
+                        } else {
+                            // I rather stop the listeners when they return false
+                        }
                     }
                     scope.bind(value, () => pending ||= requestAnimationFrame(update))
                 }
