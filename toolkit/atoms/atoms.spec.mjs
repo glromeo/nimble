@@ -1,4 +1,4 @@
-import {atom, globals, molecule} from './atoms.mjs'
+import {atom, atomTag, globals, molecule} from './atoms.mjs'
 import {expect} from 'mocha-toolkit'
 
 suite('basics', () => {
@@ -14,8 +14,8 @@ suite('basics', () => {
     })
 
     test('typeof', () => {
-        expect(atom(0).id).to.eq('atom<0>')
-        expect(atom.call('name').id).to.eq('name')
+        expect(atom(0)[atomTag]).to.eq('atom<0>')
+        expect(atom.call('custom tag')[atomTag]).to.eq('custom tag')
         expect(typeof atom).to.eq('function')
         expect(typeof atom(0)).to.eq('object')
     })
@@ -83,7 +83,7 @@ suite('basics', () => {
         let a = atom.call('a', get => get(b) + get(e))
         let notifications = []
         let bindings = [c, d, b, e, a].map(k => scope.bind(k, () => {
-            notifications.push([k.id, scope.get(k)])
+            notifications.push([k[atomTag], scope.get(k)])
         }))
         scope.set(d, 1)
         expect(notifications.length).to.eq(3)
@@ -101,7 +101,7 @@ suite('basics', () => {
         let a = atom.call('a', get => get(b) + get(e))
         let notifications = [];
         [c, d, b, e, a].map(k => scope.bind(k, () => {
-            notifications.push([k.id, scope.get(k)])
+            notifications.push([k[atomTag], scope.get(k)])
         }))
         scope.set(c, 1)
         scope.set(d, 1)
@@ -135,7 +135,7 @@ suite('basics', () => {
         let notifications = []
         let effect
         scope.bind(a, effect = () => {
-            notifications.push([a.id, scope.get(a)])
+            notifications.push([a[atomTag], scope.get(a)])
         })
 
         expect(trace.length).to.eq(2)
@@ -213,12 +213,13 @@ suite('basics', () => {
 
     test('onbind/onunbind', () => {
         let m = 0, u = 0
-        let a = atom(false).on('bind', () => {
+        let a = atom(false)
+        a.onbind = () => {
             m++ // this is invoked when the atom is bound
             return () => {
                 u++ // this is invoked when the atom is unbound
             }
-        })
+        }
         expect(m).to.eq(0)
         expect(u).to.eq(0)
         const unbind1 = scope.bind(a, () => {

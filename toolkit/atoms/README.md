@@ -18,15 +18,15 @@ folloing the example of Preact signals ...big thank you there!).
 With the experience I got in using them I decided to take a stab at rolling out my own version of Jotai like atoms
 and now that my implementation is complete here is how it performs.
 
-|              | Jotai   | mine   |
-|--------------|---------|--------|
-| **duration** | 9.30sec | 0.7sec |
-| rss          | 654M    | 175M   |
-| heapTotal    | 622M    | 146M   |
-| heapUsed     | 489M    | 116M   |
-| external     | 1.5M    | 1.6M   |
+|              | Jotai   | mine    |
+|--------------|---------|---------|
+| **duration** | 9.30sec | 0.91sec |
+| rss          | 654M    | 175M    |
+| heapTotal    | 622M    | 146M    |
+| heapUsed     | 489M    | 116M    |
+| external     | 1.5M    | 1.6M    |
 
-**mine** is roughly **13** times faster, using **1/4** of the memory
+**mine** is roughly **10** times faster, using **1/4** of the memory
 
 > The benchmark creates a binary tree 16 level deep (64k nodes) where the leaves are primitive and for 100k times
 > changes the other 3rd of these to trigger an update of the subscriber that looking at the root node

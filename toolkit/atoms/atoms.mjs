@@ -56,7 +56,7 @@ export function molecule() {
     }
 
     function remove(state, observer) {
-        if (state.observers?.delete(observer) && state.observers.size === 0 && !state.listeners?.length) {
+        if (state.observers?.delete(observer) && state.observers.size === 0 && !state.listeners?.size) {
             state.observers = null
             if (state.dependencies) {
                 for (const dependency of state.dependencies) remove(dependency, state)
@@ -133,14 +133,11 @@ export function molecule() {
     }
 
     function mount(state, listener) {
-        if (state.listeners) {
-            state.listeners.push(listener)
-        } else {
-            state.listeners = [listener]
-            if (!bound.has(state)) {
-                bound.set(state, atom.onbind?.(get, set))
-            }
+        if (state.listeners === null) {
+            state.listeners = new Set()
+            bound.set(state, state.atom.onbind?.(get, set))
         }
+        state.listeners.add(listener)
         if (state.dependencies) {
             for (const dependency of state.dependencies) mount(dependency, state.refresh)
         }
@@ -148,25 +145,16 @@ export function molecule() {
     }
 
     function unbind(state, listener) {
-        if (state.listeners) {
-            if (state.listeners.length === 1) {
-                if (state.listeners[0] === listener) {
-                    if (state.dependencies) {
-                        for (const dependency of state.dependencies) {
-                            remove(dependency, state)
-                            unbind(dependency, state.listeners)
-                        }
-                    }
-                    state.listeners = null
-                    bound.get(state)?.()
-                    return bound.delete(state)
-                }
-            } else {
-                const index = state.listeners.indexOf(listener)
-                if (index >= 0) {
-                    state.listeners.splice(index, 1)
+        if (state.listeners?.delete(listener) && !state.listeners.size) {
+            if (state.dependencies) {
+                for (const dependency of state.dependencies) {
+                    remove(dependency, state)
+                    unbind(dependency, state.refresh)
                 }
             }
+            state.listeners = null
+            bound.get(state)?.()
+            return bound.delete(state)
         }
     }
 
@@ -203,17 +191,13 @@ export function molecule() {
 
 let counter = 0
 
-const on = function(event, action) {
-    this[`on${event}`] = action
-    return this
-}
+export const atomTag = Symbol('atomTag')
 
-export function atom() {
+export function atom(read, write) {
     return {
-        __atomId__: this ?? `atom<${counter++}>`,
-        [typeof arguments[0] === 'function' ? 'read' : 'init']: arguments[0],
-        write: arguments[1],
-        on
+        [atomTag]: this ?? `atom<${counter++}>`,
+        [typeof read === 'function' ? 'read' : 'init']: read,
+        write: write
     }
 }
 

@@ -28,11 +28,11 @@ function prepare(l) {
         let i = 0
         scope.bind(top, () => {
             total = scope.get(top)
-            if (i >= 1_000_000) {
+            if (i >= 100_000) {
                 resolve()
             }
         })
-        while (i++ < 1_000_000) {
+        while (i++ < 100_000) {
             const a = atoms[(3 * i ) % atoms.length]
             scope.set(a, scope.get(a) + 1)
         }
@@ -43,5 +43,5 @@ function prepare(l) {
     console.log(total, performance.now() - timeStart)
 })()
 
-// 1000000 3176.077374994755 (M1)
-// 1000000 5465.098600000143 (I7)
+// 1000000 3176.077374994755 (M1) ?
+// 1000000 6230.769300013781 (I7)

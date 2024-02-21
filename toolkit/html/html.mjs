@@ -1,4 +1,4 @@
-import {atom} from '../atoms/atoms.mjs'
+import {atom, atomTag} from '../atoms/atoms.mjs'
 
 export const HOLE = '\x01'
 export const TEXT_NODE = document.createTextNode('')
@@ -58,6 +58,12 @@ const VOID_TAGS = Object.assign(Object.create(null), {
 function isWhitespace(ch) {
     return ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r'
 }
+
+customElements.define('html-root', class extends HTMLElement {
+    connectedCallback() {
+        this.replaceWith(this.content)
+    }
+})
 
 export function html(strings) {
     if (!strings) {
@@ -330,26 +336,29 @@ export function html(strings) {
             flush()
         }
     }
-    const clone = fragment.cloneNode(true)
+    const root = document.createElement('html-root')
+    root.content = fragment.cloneNode(true)
     if (fragment.hooks) {
         if (this) {
-            bind(this, clone, fragment.hooks, args)
+            bind(this, root.content, fragment.hooks, args)
         } else {
-            clone.bind = scope => clone.bind = bind.bind(scope, clone, fragment.hooks, args)
+            root.bind = scope => {
+                bind(scope, root.content, fragment.hooks, args)
+            }
         }
     }
-    return clone
+    return root
 }
 
 function bind(scope, node, hooks, args) {
     let a = args.length
     let h = hooks.length
-    while (--h >= 0) {
+    while (--h) {
         if (h === 1) {
             node = node.parentNode
             h = hooks[0]
             if (!(hooks = hooks[1])) {
-                h = 1
+                return
             }
         } else {
             const [key, hook, holes] = hooks[h]
@@ -369,7 +378,7 @@ function bind(scope, node, hooks, args) {
                             setNode(scope, node.childNodes[key], value, true)
                             continue
                         case HOOK_TEXT:
-                            hookHoley(scope, node.childNodes[key], 'data', value, true)
+                            setText(scope, node.childNodes[key], 'data', value, true)
                             continue
                         case HOOK_ATTR:
                             if (key) switch (key[0]) {
@@ -388,7 +397,7 @@ function bind(scope, node, hooks, args) {
                                 continue
                             }
                         case HOOK_QUOTE:
-                            hookHoley(scope, node.getAttributeNode(name), 'value', value, true)
+                            setText(scope, node.getAttributeNode(key), 'value', value, true)
                             continue
                         default:
                             console.error('unexpected hook', hook, node, key, value, true)
@@ -409,7 +418,7 @@ function bind(scope, node, hooks, args) {
     }
 }
 
-function hookHoley(scope, node, field, values, bind) {
+function setText(scope, node, field, values, bind) {
     let pending = 0
     const strings = node[field].split(HOLE)
     const update = () => {
@@ -422,7 +431,7 @@ function hookHoley(scope, node, field, values, bind) {
         pending = 0
     }
     for (let i = 0; i < values.length; ++i) {
-        if (values[i]?.__atomId__) {
+        if (values[i]?.[atomTag]) {
             if (bind) {
                 scope.bind(values[i], value => {
                     values[i] = value
@@ -437,7 +446,15 @@ function hookHoley(scope, node, field, values, bind) {
     update()
 }
 
-
+/**
+ * setNode tries to set the data of a text node whenever possible, otherwise replaces it with an appropriate element
+ *
+ * @param scope
+ * @param node
+ * @param value
+ * @param bind
+ * @returns {*|Text|Node}
+ */
 function setNode(scope, node, value, bind) {
     value = value ?? ''
     switch (typeof value) {
@@ -461,7 +478,7 @@ function setNode(scope, node, value, bind) {
                 node.parentNode.replaceChild(value, node)
                 return value
             }
-            if (value.__atomId__) {
+            if (value[atomTag]) {
                 if (bind) {
                     let pending = 0
                     const update = () => {
@@ -524,22 +541,32 @@ function setNode(scope, node, value, bind) {
     }
 }
 
+/**
+ * TODO: UNDO
+ *
+ * @param scope
+ * @param node
+ * @param value
+ * @param bind
+ */
 function spreadAttr(scope, node, value, bind) {
-    if (value?.__atomId__) {
-        if (bind) {
-            scope.bind(atom, v => spreadAttr(scope, node, v))
-        }
-        spreadAttr(scope, node, scope.get(value))
-    } else if (typeof value === 'object' && value.constructor !== Array) {
-        for (const entry of Object.entries(value)) {
-            const [name, value] = entry
-            setAttr(scope, node, name, value, bind)
+    if (value) {
+        if (value[atomTag]) {
+            if (bind) {
+                scope.bind(atom, v => spreadAttr(scope, node, v))
+            }
+            spreadAttr(scope, node, scope.get(value))
+        } else if (typeof value === 'object' && value.constructor !== Array) {
+            for (const entry of Object.entries(value)) {
+                const [name, value] = entry
+                setAttr(scope, node, name, value, bind)
+            }
         }
     }
 }
 
 function setProperty(scope, node, name, value, bind) {
-    if (value?.__atomId__) {
+    if (value?.[atomTag]) {
         if (bind) {
             scope.bind(atom, v => node[name] = v)
         }
@@ -550,7 +577,7 @@ function setProperty(scope, node, name, value, bind) {
 }
 
 function setHandler(scope, node, event, value, bind) {
-    if (value?.__atomId__) {
+    if (value?.[atomTag]) {
         const atom = value
         if (bind) {
             scope.bind(atom, v => {
@@ -592,7 +619,7 @@ function setAttr(scope, node, name, value, bind) {
         case 'function':
             return setAttr(node, name, value(node))
         case 'object':
-            if (value.__atomId__) {
+            if (value[atomTag]) {
                 const atom = value
                 if (bind) {
                     let pending = false
@@ -616,7 +643,7 @@ function setAttr(scope, node, name, value, bind) {
                         pending = false
                     }
                     for (const part of value) {
-                        if (part?.__atomId__) {
+                        if (part?.[atomTag]) {
                             const p = parts.length
                             scope.bind(part, v => {
                                 parts[p] = format(v)
@@ -629,7 +656,7 @@ function setAttr(scope, node, name, value, bind) {
                     }
                 } else {
                     for (const part of value) {
-                        parts.push(format(part?.__atomId__ ? scope.get(part) : part))
+                        parts.push(format(part?.[atomTag] ? scope.get(part) : part))
                     }
                 }
                 return node.setAttribute(name, parts.join(' '))
@@ -642,7 +669,7 @@ function setAttr(scope, node, name, value, bind) {
                         pending = false
                     }
                     for (const [key, part] of Object.entries(value)) {
-                        if (part?.__atomId__) {
+                        if (part?.[atomTag]) {
                             const p = parts.length
                             scope.bind(part, v => {
                                 parts[p] = format(v)
@@ -655,7 +682,7 @@ function setAttr(scope, node, name, value, bind) {
                     }
                 } else {
                     for (const [key, part] of Object.entries(value)) {
-                        parts.push(`${key}:${format(part?.__atomId__ ? scope.get(part) : part)}`)
+                        parts.push(`${key}:${format(part?.[atomTag] ? scope.get(part) : part)}`)
                     }
                 }
                 return node.setAttribute(name, parts.join(';'))

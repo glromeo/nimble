@@ -43,4 +43,4 @@ function prepare(l) {
     console.log(total, performance.now() - timeStart)
 })()
 
-// 1000000 38433.54137500003
+// 1000000 38433.54137500003 ?
