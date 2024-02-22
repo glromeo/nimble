@@ -16,9 +16,10 @@ export function createElement(tag, namespaceURI) {
 }
 
 export const HOOK_NODE = 101
-export const HOOK_ATTR = 102
-export const HOOK_TEXT = 103
-export const HOOK_QUOTE = 104
+export const HOOK_TAG = 102
+export const HOOK_ATTR = 103
+export const HOOK_TEXT = 104
+export const HOOK_QUOTE = 105
 
 const CACHE = new WeakMap()
 
@@ -154,7 +155,7 @@ export function html(strings) {
                 case TAG:
                     if (!buffer) {
                         tagName = 'jsx'
-                        queue.push(HOOK_NODE, null, tagName)
+                        queue.push(HOOK_TAG, null, tagName)
                         queue.push(queue = [queue, queue.length + 1])
                         state = WHITESPACE
                         return
@@ -336,44 +337,66 @@ export function html(strings) {
 
         CACHE.set(strings, render = (scope, args) => {
             const fragment = document.createDocumentFragment()
-            let node = fragment
+            let parent = fragment
             let a = 1
-            for (let queue = cmd, i = 1; node; i = queue[1], queue = queue[0]) {
+            for (let queue = cmd, i = 1; parent; i = queue[1], queue = queue[0]) {
                 for (let q = i; q < queue.length; ++q) {
                     switch (queue[q]) {
                         case TEXT_NODE:
-                            node.appendChild(document.createTextNode(queue[++q]))
+                            parent.appendChild(document.createTextNode(queue[++q]))
                             continue
                         case ELEMENT:
-                            node = node.appendChild(document.createElement(queue[++q]))
+                            parent = parent.appendChild(document.createElement(queue[++q]))
                             queue = queue[q + 1]
                             q = 1
                             continue
                         case ELEMENT_NS:
-                            node = node.appendChild(document.createElementNS(queue[++q], queue[++q]))
+                            parent = parent.appendChild(document.createElementNS(queue[++q], queue[++q]))
                             queue = queue[q + 1]
                             q = 1
                             continue
                         case SET_ATTR:
-                            node.setAttribute(queue[++q], queue[++q])
+                            parent.setAttribute(queue[++q], queue[++q])
                             continue
                         case COMMENT:
-                            node.appendChild(document.createComment(queue[++q]))
+                            parent.appendChild(document.createComment(queue[++q]))
                             continue
                         case HOOK_NODE:
-                            hookNode(scope, node, args[a++])
+                            hookNode(scope, parent, args[a++])
                             continue
                         case HOOK_ATTR:
-                            hookAttr(scope, node, queue[++q], args[a++])
+                            hookAttr(scope, parent, queue[++q], args[a++])
                             continue
                         case HOOK_QUOTE:
-                            hookText(scope, node.attributes, 'value', slice.call(args, a, a += queue[++q]))
+                            hookText(scope, parent.attributes, 'value', slice.call(args, a, a += queue[++q]))
                             continue
                         case HOOK_TEXT:
-                            hookText(scope, node.childNodes, 'data', slice.call(args, a, a += queue[++q]))
+                            hookText(scope, parent.childNodes, 'data', slice.call(args, a, a += queue[++q]))
+                            continue
+                        case HOOK_TAG:
+                            const fn = args[a++];
+                            const attrs = {}
+                            const children = []
+                            for (let j = q + 3; j < queue.length; j++) {
+                                switch (queue[q]) {
+                                    case SET_ATTR:
+                                        attrs[queue[++q]] = queue[++q]
+                                        continue
+                                    case HOOK_ATTR:
+                                        attrs[queue[++q]] = queue[++q]
+                                        continue
+                                }
+                                break
+                            }
+                            parent = {
+                                attrs: {},
+                                setAttribute(name, value) {
+                                    this[name] = value
+                                }
+                            }
                     }
                 }
-                node = node.parentNode
+                parent = parent.parentNode
             }
             return fragment
         })
@@ -397,6 +420,33 @@ export function html(strings) {
         const args = arguments
         return scope => render(scope, args)
     }
+}
+
+function hookTag(scope, parent, attrs, children) {
+    const {tag, attrs, children} = value
+    const el = createElement(tag, parent.namespaceURI)
+    if (attrs) {
+        hookAttr(scope, el, attrs)
+    }
+    for (const name of node.getAttributeNames()) {
+        let attribute = node.getAttribute(name)
+        el.setAttribute(name, attribute)
+    }
+    const className = node.getAttribute('class')
+    if (className) {
+        el.setAttribute('class', `${attrs.class} ${className}`)
+    }
+    const style = node.getAttribute('style')
+    if (style) {
+        el.setAttribute('style', `${attrs.style};${style}`)
+    }
+    if (children) {
+        for (const c of children) {
+            setNode(scope, el.appendChild(document.createTextNode('')), c, bind)
+        }
+    }
+    node.replaceWith(el)
+    return node
 }
 
 function hookNode(scope, parent, value) {
@@ -433,32 +483,6 @@ function hookNode(scope, parent, value) {
                     hookNode(scope, parent, item)
                 }
                 return
-            }
-            if (value.tag) {
-                const {tag, attrs, children} = value
-                const el = createElement(tag, parent.namespaceURI)
-                if (attrs) {
-                    hookAttr(scope, el, attrs)
-                }
-                for (const name of node.getAttributeNames()) {
-                    let attribute = node.getAttribute(name)
-                    el.setAttribute(name, attribute)
-                }
-                const className = node.getAttribute('class')
-                if (className) {
-                    el.setAttribute('class', `${attrs.class} ${className}`)
-                }
-                const style = node.getAttribute('style')
-                if (style) {
-                    el.setAttribute('style', `${attrs.style};${style}`)
-                }
-                if (children) {
-                    for (const c of children) {
-                        setNode(scope, el.appendChild(document.createTextNode('')), c, bind)
-                    }
-                }
-                node.replaceWith(el)
-                return node
             }
     }
 }
@@ -604,74 +628,6 @@ function hookText(scope, nodes, field, values) {
         }
     }
     update()
-}
-
-function bind(scope, node, hooks, args) {
-    let a = args.length
-    let h = hooks.length
-    while (--h) {
-        if (h === 1) {
-            node = node.parentNode
-            h = hooks[0]
-            if (!(hooks = hooks[1])) {
-                return
-            }
-        } else {
-            const [key, hook, holes] = hooks[h]
-            if (typeof hook === 'number') {
-                let value
-                if (holes) {
-                    value = []
-                    for (let max = a, i = a -= holes; i < max; i++) {
-                        value.push(args[i])
-                    }
-                } else {
-                    value = args[--a]
-                }
-                try {
-                    switch (hook) {
-                        case HOOK_NODE:
-                            setNode(scope, node.childNodes[key], value, true)
-                            continue
-                        case HOOK_TEXT:
-                            setText(scope, node.childNodes[key], 'data', value, true)
-                            continue
-                        case HOOK_ATTR:
-                            if (key) switch (key[0]) {
-                                case ':':
-                                case '.':
-                                    setProperty(scope, node, key.slice(1), value, true)
-                                    continue
-                                case '@':
-                                    setHandler(scope, node, key.slice(1), value, true)
-                                    continue
-                                default:
-                                    setAttr(scope, node, key, value, true)
-                                    continue
-                            } else {
-                                spreadAttr(scope, node, value, true)
-                                continue
-                            }
-                        case HOOK_QUOTE:
-                            setText(scope, node.getAttributeNode(key), 'value', value, true)
-                            continue
-                        default:
-                            console.error('unexpected hook', hook, node, key, value, true)
-                    }
-                } catch (e) {
-                    if (hook === HOOK_NODE || hook === HOOK_TEXT) {
-                        console.error('unable to hook node', node.childNodes[key], 'with', value, e)
-                    } else {
-                        console.error('unable to hook attr', node.getAttributeNode(key), 'with', value, e)
-                    }
-                }
-            } else {
-                node = node.childNodes[key]
-                hooks = hook
-                h = hooks.length
-            }
-        }
-    }
 }
 
 /**
