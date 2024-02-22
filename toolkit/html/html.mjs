@@ -1,8 +1,6 @@
 import {atom, atomTag} from '../atoms/atoms.mjs'
 
 export const HOLE = '\x01'
-export const TEXT_NODE = document.createTextNode('')
-export const I_NODE = document.createElement('i-node')
 
 const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
 const XHTML_NAMESPACE_URI = 'http://www.w3.org/1999/xhtml'
@@ -17,10 +15,10 @@ export function createElement(tag, namespaceURI) {
     }
 }
 
-export const HOOK_NODE = 1
-export const HOOK_ATTR = 2
-export const HOOK_TEXT = 3
-export const HOOK_QUOTE = 4
+export const HOOK_NODE = 101
+export const HOOK_ATTR = 102
+export const HOOK_TEXT = 103
+export const HOOK_QUOTE = 104
 
 const CACHE = new WeakMap()
 
@@ -39,33 +37,36 @@ const invoke = () => {
 }
 
 const VOID_TAGS = Object.assign(Object.create(null), {
-    'JSX': 1,
-    'AREA': 1,
-    'BASE': 1,
-    'BR': 1,
-    'COL': 1,
-    'EMBED': 1,
-    'HR': 1,
-    'IMG': 1,
-    'INPUT': 1,
-    'LINK': 1,
-    'META': 1,
-    'SOURCE': 1,
-    'TRACK': 1,
-    'WBR': 1
+    'jsx': 1,
+    'area': 1,
+    'base': 1,
+    'br': 1,
+    'col': 1,
+    'embed': 1,
+    'hr': 1,
+    'img': 1,
+    'input': 1,
+    'link': 1,
+    'meta': 1,
+    'source': 1,
+    'track': 1,
+    'wbr': 1
 })
 
-function isWhitespace(ch) {
-    return ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r'
-}
+const isWhitespace = ch => ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r'
+const slice = Array.prototype.slice
+
+const TEXT_NODE = 1
+const ELEMENT = 2
+const ELEMENT_NS = 3
+const SET_ATTR = 4
 
 export function html(strings) {
     if (!strings) {
         return null
     }
-    const args = arguments
     if (!strings.raw) {
-        let [scope, target] = args
+        let [scope, target] = arguments
         switch (typeof target) {
             case 'string':
                 target = document.querySelector(target)
@@ -81,30 +82,33 @@ export function html(strings) {
                 }
         }
     }
-    let fragment = CACHE.get(strings)
-    if (fragment === undefined) {
-        CACHE.set(strings, fragment = document.createDocumentFragment())
-        let node = fragment
+    let render = CACHE.get(strings)
+    if (render === undefined) {
+        let queue = [null]
         let state = TEXT
         let buffer = ''
         let name = null
         let quote = null
-        let hooks = fragment.hooks = args.length > 1 ? [0, null] : null
         let holes = 0
+        let tagName = null
+        let nsURI = null
 
         function flush() {
             switch (state) {
                 case TEXT:
-                    node.appendChild(document.createTextNode(buffer))
-                    if (hooks) {
-                        hooks[0]++
-                    }
+                    queue.push(TEXT_NODE, buffer)
                     break
                 case TAG:
-                    node = node.appendChild(createElement(buffer, node.namespaceURI))
-                    if (hooks) {
-                        hooks.push([hooks[0]++, hooks = [0, hooks]])
+                    tagName = buffer.toLowerCase()
+                    if (tagName === 'svg') {
+                        nsURI = SVG_NAMESPACE_URI
                     }
+                    if (nsURI) {
+                        queue.push(ELEMENT_NS, nsURI, tagName)
+                    } else {
+                        queue.push(ELEMENT, tagName)
+                    }
+                    queue.push(queue = [queue, queue.length + 1])
                     break
                 case ATTR_NAME:
                     name = buffer
@@ -113,9 +117,9 @@ export function html(strings) {
                 case ATTR_VALUE:
                 case QUOTE:
                     if (name && name !== '...') {
-                        node.setAttribute(name, buffer)
+                        queue.push(SET_ATTR, name, buffer)
                         if (holes) {
-                            hooks.push([name, HOOK_QUOTE, holes])
+                            queue.push(HOOK_QUOTE, holes)
                             holes = 0
                         }
                     }
@@ -123,22 +127,19 @@ export function html(strings) {
                     quote = null
                     break
                 case CLOSE:
-                    if (node.parentNode) {
-                        node = node.parentNode
-                        if (hooks) {
-                            if (hooks.length > 2) {
-                                hooks[0] = hooks[1].length - 1
-                                hooks = hooks[1]
-                            } else {
-                                (hooks = hooks[1]).pop()
-                            }
+                    if (queue[0]) {
+                        queue = queue[0]
+                        tagName = queue[queue.length - 1]
+                        nsURI = queue[queue.length - 2]
+                        if (nsURI === ELEMENT) {
+                            nsURI = null
                         }
                     }
                     break
                 case COMMENT:
-                    node.appendChild(document.createComment(buffer))
+                    queue.push(COMMENT, buffer)
                     if (holes) {
-                        hooks.push([hooks[0]++, HOOK_TEXT, holes])
+                        queue.push(HOOK_TEXT, holes)
                         holes = 0
                     }
             }
@@ -148,26 +149,27 @@ export function html(strings) {
         function hook() {
             switch (state) {
                 case TEXT:
-                    node.appendChild(document.createTextNode(''))
-                    hooks.push([hooks[0]++, HOOK_NODE])
+                    queue.push(HOOK_NODE)
                     return
                 case TAG:
                     if (!buffer) {
-                        hooks.push([hooks[0], HOOK_NODE])
-                        buffer = 'jsx'
+                        tagName = 'jsx'
+                        queue.push(HOOK_NODE, null, tagName)
+                        queue.push(queue = [queue, queue.length + 1])
+                        state = WHITESPACE
                         return
                     }
                 case ATTR_NAME:
                     if (name && name !== '...') {
-                        node.setAttribute(name, buffer)
+                        // node.setAttribute(name, buffer)
+                        queue.push(SET_ATTR, name, buffer)
                         state = WHITESPACE
-                        name = null
                     }
-                    hooks.push([null, HOOK_ATTR])
-                    return
+                    name = null
                 case WHITESPACE:
                 case ATTR_VALUE:
-                    hooks.push([name, HOOK_ATTR])
+                    // hooks.push([name, HOOK_ATTR])
+                    queue.push(HOOK_ATTR, name)
                     state = WHITESPACE
                     name = null
                     quote = null
@@ -220,7 +222,7 @@ export function html(strings) {
                             }
                         } else if (ch === '>') {
                             flush()
-                            if (node.tagName in VOID_TAGS) {
+                            if (/*node.*/tagName in VOID_TAGS) {
                                 state = CLOSE
                                 flush()
                             }
@@ -243,7 +245,7 @@ export function html(strings) {
                         if (isWhitespace(ch)) {
                             continue
                         } else if (ch === '>') {
-                            if (node.tagName in VOID_TAGS) {
+                            if (/*node.*/tagName in VOID_TAGS) {
                                 state = CLOSE
                                 flush()
                             }
@@ -271,7 +273,7 @@ export function html(strings) {
                             flush()
                             state = ATTR_VALUE
                             flush()
-                            if (node.tagName in VOID_TAGS) {
+                            if (/*node.*/tagName in VOID_TAGS) {
                                 state = CLOSE
                                 flush()
                             }
@@ -290,7 +292,7 @@ export function html(strings) {
                             state = WHITESPACE
                         } else if (ch === '>') {
                             flush()
-                            if (node.tagName in VOID_TAGS) {
+                            if (/*node.*/tagName in VOID_TAGS) {
                                 state = CLOSE
                                 flush()
                             }
@@ -329,20 +331,279 @@ export function html(strings) {
         if (buffer) {
             flush()
         }
+
+        const cmd = queue
+
+        CACHE.set(strings, render = (scope, args) => {
+            const fragment = document.createDocumentFragment()
+            let node = fragment
+            let a = 1
+            for (let queue = cmd, i = 1; node; i = queue[1], queue = queue[0]) {
+                for (let q = i; q < queue.length; ++q) {
+                    switch (queue[q]) {
+                        case TEXT_NODE:
+                            node.appendChild(document.createTextNode(queue[++q]))
+                            continue
+                        case ELEMENT:
+                            node = node.appendChild(document.createElement(queue[++q]))
+                            queue = queue[q + 1]
+                            q = 1
+                            continue
+                        case ELEMENT_NS:
+                            node = node.appendChild(document.createElementNS(queue[++q], queue[++q]))
+                            queue = queue[q + 1]
+                            q = 1
+                            continue
+                        case SET_ATTR:
+                            node.setAttribute(queue[++q], queue[++q])
+                            continue
+                        case COMMENT:
+                            node.appendChild(document.createComment(queue[++q]))
+                            continue
+                        case HOOK_NODE:
+                            hookNode(scope, node, args[a++])
+                            continue
+                        case HOOK_ATTR:
+                            hookAttr(scope, node, queue[++q], args[a++])
+                            continue
+                        case HOOK_QUOTE:
+                            hookText(scope, node.attributes, 'value', slice.call(args, a, a += queue[++q]))
+                            continue
+                        case HOOK_TEXT:
+                            hookText(scope, node.childNodes, 'data', slice.call(args, a, a += queue[++q]))
+                    }
+                }
+                node = node.parentNode
+            }
+            return fragment
+        })
     }
-    const clone = fragment.cloneNode(true)
-    const hooks = fragment.hooks
+    // const clone = fragment.cloneNode(true)
+    // const hooks = fragment.hooks
+    // if (this) {
+    //     if (hooks) {
+    //         bind(this, clone, hooks, args)
+    //     }
+    //     return clone
+    // } else {
+    //     return function (node) {
+    //         bind(this, clone, hooks, args)
+    //         node.replaceWith(clone)
+    //     }
+    // }
     if (this) {
-        if (hooks) {
-            bind(this, clone, hooks, args)
-        }
-        return clone
+        return render(this, arguments)
     } else {
-        return function (node) {
-            bind(this, clone, hooks, args)
-            node.replaceWith(clone)
+        const args = arguments
+        return scope => render(scope, args)
+    }
+}
+
+function hookNode(scope, parent, value) {
+    value = value ?? ''
+    switch (typeof value) {
+        case 'bigint':
+        case 'number':
+        case 'string':
+            return parent.appendChild(document.createTextNode(value))
+        case 'function':
+            return hookNode(scope, parent, value = value.call(scope, parent))
+        case 'object':
+            if (value instanceof Node) {
+                node.replaceWith(value)
+                return
+            }
+            if (value[atomTag]) {
+                if (bind) {
+                    let pending = 0
+                    const update = () => {
+                        if (node.isConnected) {
+                            setNode(scope, node, scope.get(value))
+                            pending = 0
+                        } else {
+                            // I rather stop the listeners when they return false
+                        }
+                    }
+                    scope.bind(value, () => pending ||= requestAnimationFrame(update))
+                }
+                return node = setNode(scope, node, scope.get(value))
+            }
+            if (value[Symbol.iterator]) {
+                for (const item of value) {
+                    hookNode(scope, parent, item)
+                }
+                return
+            }
+            if (value.tag) {
+                const {tag, attrs, children} = value
+                const el = createElement(tag, parent.namespaceURI)
+                if (attrs) {
+                    hookAttr(scope, el, attrs)
+                }
+                for (const name of node.getAttributeNames()) {
+                    let attribute = node.getAttribute(name)
+                    el.setAttribute(name, attribute)
+                }
+                const className = node.getAttribute('class')
+                if (className) {
+                    el.setAttribute('class', `${attrs.class} ${className}`)
+                }
+                const style = node.getAttribute('style')
+                if (style) {
+                    el.setAttribute('style', `${attrs.style};${style}`)
+                }
+                if (children) {
+                    for (const c of children) {
+                        setNode(scope, el.appendChild(document.createTextNode('')), c, bind)
+                    }
+                }
+                node.replaceWith(el)
+                return node
+            }
+    }
+}
+
+function hookAttr(scope, node, name, value) {
+    if (name === null) {
+        if (value) {
+            if (value[atomTag]) {
+                const atom = value
+                let names = Object.keys(value = store.get(atom))
+                for (const name of names) {
+                    setAttr(scope, node, name, value[name])
+                }
+                scope.bind(atom, value => {
+                    for (const name of names) {
+                        if (!(name in value)) {
+                            node.removeAttribute(name)
+                        }
+                    }
+                    for (const name of names = Object.keys(value)) {
+                        setAttr(scope, node, name, value[name])
+                    }
+                })
+            } else if (typeof value === 'object' && value.constructor !== Array) {
+                for (const entry of Object.entries(value)) {
+                    const [name, value] = entry
+                    hookAttr(scope, node, name, value)
+                }
+            }
+        }
+        return
+    }
+    value = value ?? false
+    switch (typeof value) {
+        case 'bigint':
+        case 'number':
+        case 'string':
+            return node.setAttribute(name, value)
+        case 'boolean':
+            if (value) {
+                return node.setAttribute(name, '')
+            } else {
+                return node.removeAttribute(name)
+            }
+        case 'function':
+            return node.setAttribute(name, value.call(scope, node))
+        case 'object':
+            if (value[atomTag]) {
+                const atom = value
+                if (bind) {
+                    let pending = false
+                    const update = () => pending = !(node = setAttr(node, name, value))
+                    scope.bind(atom, v => {
+                        value = v
+                        pending ||= requestAnimationFrame(update)
+                    })
+                    update()
+                    return node
+                } else {
+                    return node = setAttr(node, name, scope.get(atom))
+                }
+            }
+            if (value[Symbol.iterator]) {
+                const parts = []
+                if (bind) {
+                    let pending = false
+                    const update = () => {
+                        node.setAttribute(name, parts.join(' '))
+                        pending = false
+                    }
+                    for (const part of value) {
+                        if (part?.[atomTag]) {
+                            const p = parts.length
+                            scope.bind(part, v => {
+                                parts[p] = format(v)
+                                update()
+                            })
+                            parts.push(format(scope.get(part)))
+                        } else {
+                            parts.push(format(part))
+                        }
+                    }
+                } else {
+                    for (const part of value) {
+                        parts.push(format(part?.[atomTag] ? scope.get(part) : part))
+                    }
+                }
+                return node.setAttribute(name, parts.join(' '))
+            } else {
+                const parts = []
+                if (bind) {
+                    let pending = false
+                    const update = () => {
+                        node.setAttribute(name, parts.join(';'))
+                        pending = false
+                    }
+                    for (const [key, part] of Object.entries(value)) {
+                        if (part?.[atomTag]) {
+                            const p = parts.length
+                            scope.bind(part, v => {
+                                parts[p] = format(v)
+                                update()
+                            })
+                            parts.push(`${key}:${format(scope.get(part))}`)
+                        } else {
+                            parts.push(`${key}:${format(part)}`)
+                        }
+                    }
+                } else {
+                    for (const [key, part] of Object.entries(value)) {
+                        parts.push(`${key}:${format(part?.[atomTag] ? scope.get(part) : part)}`)
+                    }
+                }
+                return node.setAttribute(name, parts.join(';'))
+            }
+        default:
+            return node.removeAttribute(name)
+    }
+}
+
+function hookText(scope, nodes, field, values) {
+    const node = nodes[nodes.length - 1]
+    let pending = 0
+    const strings = node[field].split(HOLE)
+    const update = () => {
+        let text = strings[0]
+        for (let i = 0; i < values.length;) {
+            text += values[i]
+            text += strings[++i]
+        }
+        node[field] = text
+        pending = 0
+    }
+    for (let i = 0; i < values.length; ++i) {
+        if (values[i]?.[atomTag]) {
+            scope.bind(values[i], value => {
+                values[i] = value
+                pending ||= requestAnimationFrame(update)
+            })
+            values[i] = format(scope.get(values[i]))
+        } else {
+            values[i] = format(values[i])
         }
     }
+    update()
 }
 
 function bind(scope, node, hooks, args) {
@@ -413,34 +674,6 @@ function bind(scope, node, hooks, args) {
     }
 }
 
-function setText(scope, node, field, values, bind) {
-    let pending = 0
-    const strings = node[field].split(HOLE)
-    const update = () => {
-        let text = strings[0]
-        for (let i = 0; i < values.length;) {
-            text += values[i]
-            text += strings[++i]
-        }
-        node[field] = text
-        pending = 0
-    }
-    for (let i = 0; i < values.length; ++i) {
-        if (values[i]?.[atomTag]) {
-            if (bind) {
-                scope.bind(values[i], value => {
-                    values[i] = value
-                    pending ||= requestAnimationFrame(update)
-                })
-            }
-            values[i] = format(scope.get(values[i]))
-        } else {
-            values[i] = format(values[i])
-        }
-    }
-    update()
-}
-
 /**
  * setNode tries to set the data of a text node whenever possible, otherwise replaces it with an appropriate element
  *
@@ -501,7 +734,7 @@ function setNode(scope, node, value, bind) {
                 } else {
                     node.replaceWith(node = I_NODE.cloneNode(true))
                     for (const v of value) {
-                        setNode(scope, node.appendChild(TEXT_NODE.cloneNode(true)), v, bind)
+                        setNode(scope, node.appendChild(document.createTextNode('')), v, bind)
                     }
                 }
                 return node
@@ -526,7 +759,7 @@ function setNode(scope, node, value, bind) {
                 }
                 if (children) {
                     for (const c of children) {
-                        setNode(scope, el.appendChild(TEXT_NODE.cloneNode(true)), c, bind)
+                        setNode(scope, el.appendChild(document.createTextNode('')), c, bind)
                     }
                 }
                 node.replaceWith(el)
@@ -536,33 +769,9 @@ function setNode(scope, node, value, bind) {
             if (node.nodeType === 3) {
                 node.data = ''
             } else {
-                node.replaceWith(node = TEXT_NODE.cloneNode(true))
+                node.replaceWith(node = document.createTextNode(''))
             }
             return node
-    }
-}
-
-/**
- * TODO: UNDO
- *
- * @param scope
- * @param node
- * @param value
- * @param bind
- */
-function spreadAttr(scope, node, value, bind) {
-    if (value) {
-        if (value[atomTag]) {
-            if (bind) {
-                scope.bind(atom, v => spreadAttr(scope, node, v))
-            }
-            spreadAttr(scope, node, scope.get(value))
-        } else if (typeof value === 'object' && value.constructor !== Array) {
-            for (const entry of Object.entries(value)) {
-                const [name, value] = entry
-                setAttr(scope, node, name, value, bind)
-            }
-        }
     }
 }
 
