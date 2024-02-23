@@ -38,7 +38,6 @@ const invoke = () => {
 }
 
 const VOID_TAGS = Object.assign(Object.create(null), {
-    'jsx': 1,
     'area': 1,
     'base': 1,
     'br': 1,
@@ -374,26 +373,12 @@ export function html(strings) {
                             hookText(scope, parent.childNodes, 'data', slice.call(args, a, a += queue[++q]))
                             continue
                         case HOOK_TAG:
-                            const fn = args[a++];
-                            const attrs = {}
-                            const children = []
-                            for (let j = q + 3; j < queue.length; j++) {
-                                switch (queue[q]) {
-                                    case SET_ATTR:
-                                        attrs[queue[++q]] = queue[++q]
-                                        continue
-                                    case HOOK_ATTR:
-                                        attrs[queue[++q]] = queue[++q]
-                                        continue
-                                }
-                                break
-                            }
-                            parent = {
-                                attrs: {},
-                                setAttribute(name, value) {
-                                    this[name] = value
-                                }
-                            }
+                            const el = hookTag(scope, parent, args[a++])
+                            parent = parent.appendChild(el)
+                            queue = queue[q + 3]
+                            q = 1
+                            continue
+
                     }
                 }
                 parent = parent.parentNode
@@ -401,19 +386,6 @@ export function html(strings) {
             return fragment
         })
     }
-    // const clone = fragment.cloneNode(true)
-    // const hooks = fragment.hooks
-    // if (this) {
-    //     if (hooks) {
-    //         bind(this, clone, hooks, args)
-    //     }
-    //     return clone
-    // } else {
-    //     return function (node) {
-    //         bind(this, clone, hooks, args)
-    //         node.replaceWith(clone)
-    //     }
-    // }
     if (this) {
         return render(this, arguments)
     } else {
@@ -423,6 +395,30 @@ export function html(strings) {
 }
 
 function hookTag(scope, parent, attrs, children) {
+    document.createElement('div')
+    {
+        tag: args[a++],
+            attrs: {},
+        children: [],
+            setAttribute(name, value) {
+        if (name === 'class' && this.attrs.class) {
+            this.attrs.class = `${this.attrs.class} ${value}`
+            return
+        }
+        if (name === 'style' && this.attrs.style) {
+            this.attrs.style = `${this.attrs.style} ${value}`
+            return
+        }
+        this[name] = value
+    },
+        appendChild(node) {
+        this.children.push(node)
+    },
+        parent,
+            get parentNode() {
+        return parent
+    }
+    }
     const {tag, attrs, children} = value
     const el = createElement(tag, parent.namespaceURI)
     if (attrs) {

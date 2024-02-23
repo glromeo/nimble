@@ -44,22 +44,6 @@
         const expectHTML = template => expect(render(template).innerHTML)
         const expectText = template => expect(render(template).innerText)
 
-
-        test(`#22`, () => expectHTML(html` <${function (node) {
-            expect(this).to.eq(scope)
-            expect(node.nodeName).to.eq('#document-fragment')
-            return {tag:'img', attrs: {src:'about:blank'}}
-        }} /> `).to.eq(' <img src="about:blank"> '))
-        return;
-        test(`#19`, () => expectHTML(html`hello ${atom('world')}`).to.eq('hello world'))
-        test(`#20`, () => expectHTML(html`${['I',[2.1,2.2,2.3],'X',[4.1,4.2,4.3],'V']}`).to.eq('I2.12.22.3X4.14.24.3V'))
-        test(`#21`, () => expectHTML(html`hello ${html`world`}`).to.eq('hello world'))
-        test(`#22`, () => expectHTML(html`hello ${html`${atom('world')}`}`).to.eq('hello world'))
-        test(`#23`, () => expectHTML(html`<${{tag:'svg'}} width="100" height=${"50"}></>`).to.eq('<svg width="100" height="50"></svg>'))
-
-        test(`#25`, () => expectHTML(html` <${atom({tag:'svg'})}> `).to.eq(' <svg></svg> '))
-        test(`#26`, () => expectHTML(html`<!-- ${atom('hello')} ${'world'} -->`).to.eq('<!-- hello world -->'))
-
         test(`#00`, () => expectHTML(html`hello`).to.eq('hello'))
         test(`#01`, () => expectHTML(html`<p>hello</p>`).to.eq('<p>hello</p>'))
         test(`#02`, () => expectHTML(html` <my-tag></my-tag> `).to.eq(' <my-tag></my-tag> '))
@@ -94,6 +78,26 @@
             return "hello"
         }}</p> `).to.eq(' <p>hello</p> '))
         test(`#21`, () => expectHTML(html` <img> `).to.eq(' <img> '))
+
+return
+        test(`#22`, () => expectHTML(html` <${function (context) {
+            expect(this).to.eq(scope)
+            const {a, b, c} = context
+            expect(a).to.eq('1')
+            expect(b).to.eq(2)
+            expect(c).to.eq(3)
+            expect(context.nodeName).to.eq('#document-fragment')
+            return {tag:'img', attrs: {src:'about:blank'}}
+        }} a="1" b=${2} c="${3}">hello <p>world</p>${'!'}</>`).to.eq(' <img src="about:blank"> '))
+        return;
+        test(`#19`, () => expectHTML(html`hello ${atom('world')}`).to.eq('hello world'))
+        test(`#20`, () => expectHTML(html`${['I',[2.1,2.2,2.3],'X',[4.1,4.2,4.3],'V']}`).to.eq('I2.12.22.3X4.14.24.3V'))
+        test(`#21`, () => expectHTML(html`hello ${html`world`}`).to.eq('hello world'))
+        test(`#22`, () => expectHTML(html`hello ${html`${atom('world')}`}`).to.eq('hello world'))
+        test(`#23`, () => expectHTML(html`<${{tag:'svg'}} width="100" height=${"50"}></>`).to.eq('<svg width="100" height="50"></svg>'))
+
+        test(`#25`, () => expectHTML(html` <${atom({tag:'svg'})}> `).to.eq(' <svg></svg> '))
+        test(`#26`, () => expectHTML(html`<!-- ${atom('hello')} ${'world'} -->`).to.eq('<!-- hello world -->'))
     })
 
     mocha.run()
