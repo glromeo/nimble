@@ -16,7 +16,7 @@
 <script type="module">
     import {WebConsole} from '../test/web-console.mjs'
     import {atom, molecule} from '../atoms/atoms.mjs'
-    import {html} from '../html/html.mjs'
+    import {html} from '../html/phoenix.mjs'
 
     mocha.setup('tdd')
     mocha.checkLeaks()
@@ -48,7 +48,7 @@
         test(`#01`, () => expectHTML(html`<p>hello</p>`).to.eq('<p>hello</p>'))
         test(`#02`, () => expectHTML(html` <my-tag></my-tag> `).to.eq(' <my-tag></my-tag> '))
         test(`#03`, () => expectHTML(html`ciao<p>hello</p>salut`).to.eq('ciao<p>hello</p>salut'))
-        test(`#04`, () => expectHTML(html`   <p> t t </p>   `).to.eq(' <p> t t </p> '))
+        test(`#04`, () => expectHTML(html` \n <p> t t </p> \t `).to.eq(' \n <p> t t </p> \t '))
         test(`#05`, () => expectHTML(html`<p>hello<p>world</p></p>`).to.eq('<p>hello<p>world</p></p>'))
         test(`#06`, () => expectHTML(html`<div label="hello"/>`).to.eq('<div label="hello"></div>'))
         test(`#07`, () => expectHTML(
@@ -56,7 +56,7 @@
         ).to.eq(
             '<svg height="90" width="160"><line x1="0" y1="0" x2="160" y2="90" style="stroke:blue;stroke-width:4"></line></svg>'
         ))
-        test(`#08`, () => expectHTML(html` hello ${' '} world   ! `).to.eq(' hello   world ! '))
+        test(`#08`, () => expectHTML(html`hello ${' '} world`).to.eq('hello   world'))
         test(`#09`, () => expectHTML(html`${1}<p>${[1, BigInt(2), ' ']}</p>${true}`).to.eq('1<p>12 </p>'))
         test(`#10`, () => expectHTML(html`<!-- <hello> -->`).to.eq('<!-- <hello> -->'))
         test(`#11`, () => expectHTML(html`<!- > -->`).to.eq('<!--- --> --&gt;'))
