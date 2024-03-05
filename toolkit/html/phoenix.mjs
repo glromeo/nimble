@@ -16,15 +16,15 @@ export const HOLE = '\x01'
 const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
 const XHTML_NAMESPACE_URI = 'http://www.w3.org/1999/xhtml'
 
-const TEXT = 10
-const OPEN = 11
-const TAG = 12
-const WS = 13
-const A_N = 14
-const BRK = 15
-const A_V = 16
-const QUOTE = 17
-const CLOSE = 18
+const TEXT_NODE = 10
+const TAG_OPEN = 11
+const TAG_NAME = 12
+const WHITESPACE = 13
+const ATTR_NAME = 14
+const ASSIGN = 15
+const ATTR_VALUE = 16
+const QUOTED_VALUE = 17
+const TAG_CLOSE = 18
 
 const isWhitespace = ch => ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r'
 
@@ -60,7 +60,7 @@ const VOID_TAGS = Object.assign(Object.create(null), {
 
 function parseHTML(html) {
     let queue = []
-    let state = TEXT
+    let state = TEXT_NODE
     let tagName = null
     let nsURI = null
     let start = 0
@@ -101,65 +101,65 @@ function parseHTML(html) {
 
     function flushText(end) {
         if (end > start) {
-            queue.push(TEXT, html.slice(start, end))
+            queue.push(TEXT_NODE, html.slice(start, end))
         }
     }
 
     while (++end < html.length) {
         const ch = html[end]
         switch (state) {
-            case TEXT:
+            case TEXT_NODE:
                 if (ch === '<') {
-                    state = OPEN
+                    state = TAG_OPEN
                 } else if (ch === HOLE) {
                     flushText(end)
                     queue.push(HOOK_NODE)
                     start = end + 1
                 }
                 continue
-            case OPEN:
+            case TAG_OPEN:
                 if (isWhitespace(ch)) {
-                    state = TEXT
+                    state = TEXT_NODE
                 } else {
                     flushText(end - 1)
                     if (ch === HOLE) {
                         queue.push(HOOK_TAG)
-                        state = WS
+                        state = WHITESPACE
                     } else if (ch === '!') {
                         start = end + 1
                         state = COMMENT
                     } else if (ch === '/') {
                         start = end + 1
-                        state = CLOSE
+                        state = TAG_CLOSE
                     } else if (ch === '>') {
                         queue.push(FRAGMENT)
                         start = end + 1
-                        state = TEXT
+                        state = TEXT_NODE
                     } else {
                         start = end
-                        state = TAG
+                        state = TAG_NAME
                     }
                 }
                 continue
-            case TAG:
+            case TAG_NAME:
                 if (ch === HOLE) {
                     pushTag()
                     queue.push(HOOK_ATTR)
-                    state = WS
+                    state = WHITESPACE
                 } else if (ch === '/') {
                     pushTag()
                     start = end + 1
-                    state = CLOSE
+                    state = TAG_CLOSE
                 } else if (ch === '>') {
                     pushTag()
                     if (tagName in VOID_TAGS) {
                         popTag()
                     }
                     start = end + 1
-                    state = TEXT
+                    state = TEXT_NODE
                 } else if (isWhitespace(ch)) {
                     pushTag()
-                    state = WS
+                    state = WHITESPACE
                 }
                 continue
             case COMMENT:
@@ -174,64 +174,64 @@ function parseHTML(html) {
                         queue.push(COMMENT, html.slice(start, end))
                     }
                     start = end + 1
-                    state = TEXT
+                    state = TEXT_NODE
                 }
                 continue
-            case WS:
+            case WHITESPACE:
                 if (ch === HOLE) {
                     queue.push(HOOK_ATTR)
-                    state = WS
+                    state = WHITESPACE
                 } else if (ch === '/') {
                     start = end + 1
-                    state = CLOSE
+                    state = TAG_CLOSE
                 } else if (ch === '>') {
                     if (tagName in VOID_TAGS) {
                         popTag()
                     }
                     start = end + 1
-                    state = TEXT
+                    state = TEXT_NODE
                 } else if (!isWhitespace(ch)) {
                     start = end
-                    state = A_N
+                    state = ATTR_NAME
                 }
                 continue
-            case A_N:
+            case ATTR_NAME:
                 if (ch === HOLE) {
                     queue.push(HOOK_ATTR)
-                    state = WS
+                    state = WHITESPACE
                 } else if (ch === '=' || isWhitespace(ch)) {
                     pushAttr()
-                    state = BRK
+                    state = ASSIGN
                 } else if (ch === '/') {
                     pushAttr()
                     queue.push('')
                     start = end + 1
-                    state = CLOSE
+                    state = TAG_CLOSE
                 } else if (ch === '>') {
                     pushAttr()
                     queue.push('')
                     start = end + 1
-                    state = CLOSE
+                    state = TAG_CLOSE
                 }
                 continue
-            case BRK:
+            case ASSIGN:
                 if (ch === HOLE) {
                     queue.push(HOOK_VALUE)
-                    state = WS
+                    state = WHITESPACE
                 } else if (ch === '\'' || ch === '"') {
                     quote = ch
                     start = end + 1
-                    state = QUOTE
+                    state = QUOTED_VALUE
                 } else if (ch === '/') {
                     queue.push('')
                     start = end + 1
-                    state = CLOSE
+                    state = TAG_CLOSE
                 } else if (!isWhitespace(ch)) {
                     start = end
-                    state = A_V
+                    state = ATTR_VALUE
                 }
                 continue
-            case QUOTE:
+            case QUOTED_VALUE:
                 if (ch === quote) {
                     if (end - start > 1) {
                         const values = html.slice(start, end).split(HOLE)
@@ -244,10 +244,10 @@ function parseHTML(html) {
                         pushValue()
                     }
                     quote = null
-                    state = WS
+                    state = WHITESPACE
                 }
                 continue
-            case A_V:
+            case ATTR_VALUE:
                 if (ch === HOLE) {
                     if (end - start === 1) {
                         queue.push(HOOK_VALUE)
@@ -255,45 +255,45 @@ function parseHTML(html) {
                         pushValue()
                         queue.push(HOOK_ATTR)
                     }
-                    state = WS
+                    state = WHITESPACE
                 } else if (ch === '/') {
                     pushValue()
                     start = end + 1
-                    state = CLOSE
+                    state = TAG_CLOSE
                 } else if (ch === '>') {
                     pushValue()
                     start = end + 1
-                    state = TEXT
+                    state = TEXT_NODE
                 } else if (isWhitespace(ch)) {
                     pushValue()
-                    state = WS
+                    state = WHITESPACE
                 }
                 continue
-            case CLOSE:
+            case TAG_CLOSE:
                 if (ch === '>') {
                     popTag()
                     start = end + 1
-                    state = TEXT
+                    state = TEXT_NODE
                 } else if (ch === '/') {
                     start = end + 1
                 } else if (isWhitespace(ch)) {
-                    state = WS
+                    state = WHITESPACE
                 }
         }
     }
 
     if (start < end) {
-        if (state === TEXT || state === OPEN) {
+        if (state === TEXT_NODE || state === TAG_OPEN) {
             flushText(end)
         }
-        if (state === A_N) {
+        if (state === ATTR_NAME) {
             pushAttr()
             queue.push('')
         }
-        if (state === BRK) {
+        if (state === ASSIGN) {
             queue.push('')
         }
-        if (state === WS) {
+        if (state === WHITESPACE) {
             queue.length = back.pop()
         }
     }
@@ -303,20 +303,20 @@ function parseHTML(html) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 expect.call(parseHTML, '', [])
-expect.call(parseHTML, ' ', [TEXT, ' '])
-expect.call(parseHTML, ' <', [TEXT, ' <'])
-expect.call(parseHTML, ' < ', [TEXT, ' < '])
-expect.call(parseHTML, ' <>', [TEXT, ' ', FRAGMENT])
-expect.call(parseHTML, ' <a', [TEXT, ' '])
-expect.call(parseHTML, ' <a ', [TEXT, ' '])
-expect.call(parseHTML, ' <svg ', [TEXT, ' '])
-expect.call(parseHTML, ' <a>', [TEXT, ' ', ELEMENT, 'a'])
-expect.call(parseHTML, ' <svg>', [TEXT, ' ', ELEMENT_NS, SVG_NAMESPACE_URI, 'svg'])
+expect.call(parseHTML, ' ', [TEXT_NODE, ' '])
+expect.call(parseHTML, ' <', [TEXT_NODE, ' <'])
+expect.call(parseHTML, ' < ', [TEXT_NODE, ' < '])
+expect.call(parseHTML, ' <>', [TEXT_NODE, ' ', FRAGMENT])
+expect.call(parseHTML, ' <a', [TEXT_NODE, ' '])
+expect.call(parseHTML, ' <a ', [TEXT_NODE, ' '])
+expect.call(parseHTML, ' <svg ', [TEXT_NODE, ' '])
+expect.call(parseHTML, ' <a>', [TEXT_NODE, ' ', ELEMENT, 'a'])
+expect.call(parseHTML, ' <svg>', [TEXT_NODE, ' ', ELEMENT_NS, SVG_NAMESPACE_URI, 'svg'])
 expect.call(parseHTML, '<a>', [ELEMENT, 'a'])
 expect.call(parseHTML, '<svg>', [ELEMENT_NS, SVG_NAMESPACE_URI, 'svg'])
-expect.call(parseHTML, '<p>hello</p>', [ELEMENT, 'p', TEXT, 'hello', PARENT_NODE])
+expect.call(parseHTML, '<p>hello</p>', [ELEMENT, 'p', TEXT_NODE, 'hello', PARENT_NODE])
 expect.call(parseHTML, '</>', [PARENT_NODE])
-expect.call(parseHTML, '< />', [TEXT, '< />'])
+expect.call(parseHTML, '< />', [TEXT_NODE, '< />'])
 expect.call(parseHTML, '<a/>', [ELEMENT, 'a', PARENT_NODE])
 expect.call(parseHTML, '<a />', [ELEMENT, 'a', PARENT_NODE])
 expect.call(parseHTML, '<a / >', [ELEMENT, 'a'])
@@ -330,19 +330,19 @@ expect.call(parseHTML, `<a u='3'>`, [ELEMENT, 'a', ATTR, 'u', '3'])
 expect.call(parseHTML, `<a "b c"=d>`, [ELEMENT, 'a', ATTR, '"b', 'c"=d'])
 expect.call(parseHTML, `<a u='3' f="g"/>`, [ELEMENT, 'a', ATTR, 'u', '3', ATTR, 'f', 'g', PARENT_NODE])
 expect.call(parseHTML, `<img>`, [ELEMENT, 'img', PARENT_NODE])
-expect.call(parseHTML, `  pre  <p><img></p>  post  `, [TEXT, '  pre  ', ELEMENT, 'p', ELEMENT, 'img', PARENT_NODE, PARENT_NODE, TEXT, '  post  '])
+expect.call(parseHTML, `  pre  <p><img></p>  post  `, [TEXT_NODE, '  pre  ', ELEMENT, 'p', ELEMENT, 'img', PARENT_NODE, PARENT_NODE, TEXT_NODE, '  post  '])
 expect.call(parseHTML, `<!>`, [COMMENT, ''])
 expect.call(parseHTML, `<!->`, [COMMENT, '-'])
 expect.call(parseHTML, `<!-->`, [COMMENT, ''])
 expect.call(parseHTML, `<!--->`, [COMMENT, ''])
 expect.call(parseHTML, `<!---->`, [COMMENT, ''])
-expect.call(parseHTML, `<!-->-->`, [COMMENT, '', TEXT, '-->'])
+expect.call(parseHTML, `<!-->-->`, [COMMENT, '', TEXT_NODE, '-->'])
 expect.call(parseHTML, `<!-- > -->`, [COMMENT, ' > '])
 expect.call(parseHTML, `<!-- -> -->`, [COMMENT, ' -> '])
-expect.call(parseHTML, `<!-- --> -->`, [COMMENT, ' ', TEXT, ' -->'])
-expect.call(parseHTML, ` <!--no comment--> `, [TEXT, ' ', COMMENT, 'no comment', TEXT, ' '])
+expect.call(parseHTML, `<!-- --> -->`, [COMMENT, ' ', TEXT_NODE, ' -->'])
+expect.call(parseHTML, ` <!--no comment--> `, [TEXT_NODE, ' ', COMMENT, 'no comment', TEXT_NODE, ' '])
 expect.call(parseHTML, `${HOLE}`, [HOOK_NODE])
-expect.call(parseHTML, `x${HOLE}y`, [TEXT, 'x', HOOK_NODE, TEXT, 'y'])
+expect.call(parseHTML, `x${HOLE}y`, [TEXT_NODE, 'x', HOOK_NODE, TEXT_NODE, 'y'])
 expect.call(parseHTML, `<${HOLE}>`, [HOOK_TAG])
 expect.call(parseHTML, `<p${HOLE}>`, [ELEMENT, 'p', HOOK_ATTR])
 expect.call(parseHTML, `<p ${HOLE} ${HOLE}>`, [ELEMENT, 'p', HOOK_ATTR, HOOK_ATTR])
@@ -384,7 +384,7 @@ export function html(strings) {
             let a = 1
             for (let q = 0; q < queue.length; ++q) {
                 switch (queue[q]) {
-                    case TEXT:
+                    case TEXT_NODE:
                         parent.appendChild(document.createTextNode(queue[++q]))
                         continue
                     case FRAGMENT:
@@ -452,25 +452,52 @@ export function html(strings) {
 }
 
 function hookNode(scope, parent, value) {
-    value = value ?? ''
+    const type = typeof value
+    if (type === 'bigint' || type === 'number' || type === 'string') {
+        parent.appendChild(document.createTextNode(value))
+    } else if (type === 'function') {
+        hookNode(scope, parent, value.call(scope, parent))
+    } else if (type === 'object' && value !== null) {
+        if (value[atomTag]) {
+            let node = parent.appendChild(document.createTextNode(''))
+            let pending
+            const update = () => {
+                node = updateNode(scope, node, scope.get(value))
+                pending = 0
+            }
+            scope.bind(value, () => pending ||= requestAnimationFrame(update))
+            update()
+        } else if (value[Symbol.iterator]) {
+            for (const item of value) {
+                hookNode(scope, parent, item)
+            }
+        } else if (value instanceof Node) {
+            parent.appendChild(value)
+        }
+    }
+}
+
+function updateNode(scope, node, value) {
     switch (typeof value) {
         case 'bigint':
         case 'number':
         case 'string':
-            return parent.appendChild(document.createTextNode(value))
-        case 'function':
-            return hookNode(scope, parent, value = value.call(scope, parent))
-        case 'object':
-            if (value instanceof Node) {
-                node.replaceWith(value)
-                return
+            if (node.nodeType === 3) {
+                node.data = value
+            } else {
+                node.replaceWith(node = document.createTextNode(value))
             }
+            return node
+        case 'function':
+            value = value.call(scope, node)
+            return value !== undefined ? updateNode(scope, node, value) : node
+        case 'object':
             if (value[atomTag]) {
                 if (bind) {
                     let pending = 0
                     const update = () => {
                         if (node.isConnected) {
-                            setNode(scope, node, scope.get(value))
+                            updateNode(scope, node, scope.get(value))
                             pending = 0
                         } else {
                             // I rather stop the listeners when they return false
@@ -478,14 +505,61 @@ function hookNode(scope, parent, value) {
                     }
                     scope.bind(value, () => pending ||= requestAnimationFrame(update))
                 }
-                return node = setNode(scope, node, scope.get(value))
+                return node = updateNode(scope, node, scope.get(value))
             }
             if (value[Symbol.iterator]) {
-                for (const item of value) {
-                    hookNode(scope, parent, item)
+                if (node.nodeType === 3) {
+                    let last = node
+                    for (const v of value) {
+                        const next = last.splitText(0)
+                        updateNode(scope, last, v, bind)
+                        last = next
+                    }
+                } else {
+                    node.replaceWith(node = I_NODE.cloneNode(true))
+                    for (const v of value) {
+                        updateNode(scope, node.appendChild(document.createTextNode('')), v, bind)
+                    }
                 }
+                return node
+            }
+            if (value.tag) {
+                const {tag, attrs, children} = value
+                const el = createElement(tag)
+                if (attrs) {
+                    spreadAttr(scope, el, attrs, bind)
+                }
+                for (const name of node.getAttributeNames()) {
+                    let attribute = node.getAttribute(name)
+                    el.setAttribute(name, attribute)
+                }
+                const className = node.getAttribute('class')
+                if (className) {
+                    el.setAttribute('class', `${attrs.class} ${className}`)
+                }
+                const style = node.getAttribute('style')
+                if (style) {
+                    el.setAttribute('style', `${attrs.style};${style}`)
+                }
+                if (children) {
+                    for (const c of children) {
+                        updateNode(scope, el.appendChild(document.createTextNode('')), c, bind)
+                    }
+                }
+                node.replaceWith(el)
+                return node
+            }
+            if (value instanceof Node) {
+                node.replaceWith(value)
                 return
             }
+        default:
+            if (node.nodeType === 3) {
+                node.data = ''
+            } else {
+                node.replaceWith(node = document.createTextNode(''))
+            }
+            return node
     }
 }
 
@@ -630,107 +704,6 @@ function hookText(scope, nodes, field, values) {
         }
     }
     update()
-}
-
-/**
- * setNode tries to set the data of a text node whenever possible, otherwise replaces it with an appropriate element
- *
- * @param scope
- * @param node
- * @param value
- * @param bind
- * @returns {*|Text|Node}
- */
-function setNode(scope, node, value, bind) {
-    value = value ?? ''
-    switch (typeof value) {
-        case 'bigint':
-        case 'number':
-        case 'string':
-            if (node.nodeType === 3) {
-                node.data = value
-                return
-            } else {
-                value = document.createTextNode(value)
-                node.replaceWith(value)
-                return
-            }
-        case 'function':
-            value = value.call(scope, node)
-            if (value !== undefined && node.isConnected) {
-                setNode(scope, node, value)
-            }
-            return
-        case 'object':
-            if (value instanceof Node) {
-                node.replaceWith(value)
-                return
-            }
-            if (value[atomTag]) {
-                if (bind) {
-                    let pending = 0
-                    const update = () => {
-                        if (node.isConnected) {
-                            setNode(scope, node, scope.get(value))
-                            pending = 0
-                        } else {
-                            // I rather stop the listeners when they return false
-                        }
-                    }
-                    scope.bind(value, () => pending ||= requestAnimationFrame(update))
-                }
-                return node = setNode(scope, node, scope.get(value))
-            }
-            if (value[Symbol.iterator]) {
-                if (node.nodeType === 3) {
-                    let last = node
-                    for (const v of value) {
-                        const next = last.splitText(0)
-                        setNode(scope, last, v, bind)
-                        last = next
-                    }
-                } else {
-                    node.replaceWith(node = I_NODE.cloneNode(true))
-                    for (const v of value) {
-                        setNode(scope, node.appendChild(document.createTextNode('')), v, bind)
-                    }
-                }
-                return node
-            }
-            if (value.tag) {
-                const {tag, attrs, children} = value
-                const el = createElement(tag)
-                if (attrs) {
-                    spreadAttr(scope, el, attrs, bind)
-                }
-                for (const name of node.getAttributeNames()) {
-                    let attribute = node.getAttribute(name)
-                    el.setAttribute(name, attribute)
-                }
-                const className = node.getAttribute('class')
-                if (className) {
-                    el.setAttribute('class', `${attrs.class} ${className}`)
-                }
-                const style = node.getAttribute('style')
-                if (style) {
-                    el.setAttribute('style', `${attrs.style};${style}`)
-                }
-                if (children) {
-                    for (const c of children) {
-                        setNode(scope, el.appendChild(document.createTextNode('')), c, bind)
-                    }
-                }
-                node.replaceWith(el)
-                return node
-            }
-        default:
-            if (node.nodeType === 3) {
-                node.data = ''
-            } else {
-                node.replaceWith(node = document.createTextNode(''))
-            }
-            return node
-    }
 }
 
 function setProperty(scope, node, name, value, bind) {
