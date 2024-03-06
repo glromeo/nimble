@@ -179,12 +179,12 @@ function parseHTML(html) {
                 if (ch === '>') {
                     if (html[start] === '-' && html[start + 1] === '-') {
                         if (html[end - 1] === '-' && html[end - 2] === '-') {
-                            hooks.push(COMMENT, html.slice(start + 2, end - 2))
+                            node.appendChild(document.createComment(html.slice(start + 2, end - 2)))
                         } else {
                             continue
                         }
                     } else {
-                        hooks.push(COMMENT, html.slice(start, end))
+                        node.appendChild(document.createComment(html.slice(start, end)))
                     }
                     start = end + 1
                     state = TEXT_NODE
@@ -309,57 +309,6 @@ function parseHTML(html) {
 
     return hooks
 }
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// expect.call(parseHTML, '', [[]])
-// expect.call(parseHTML, ' ', [[3, ' ']])
-// expect.call(parseHTML, ' <', [[3, ' <']])
-// expect.call(parseHTML, ' < ', [[3, ' < ']])
-// expect.call(parseHTML, ' <>', [[3, ' '], 200, 1])
-// expect.call(parseHTML, ' <a', [[3, ' '], 200, 1])
-// expect.call(parseHTML, ' <a ', [[3, ' '], 200, 1])
-// expect.call(parseHTML, ' <svg ', [[3, ' '], 200, 1])
-// expect.call(parseHTML, ' <a>', [[3, ' ', ELEMENT, 'a']])
-// expect.call(parseHTML, ' <svg>', [[3, ' ', ELEMENT_NS, SVG_NAMESPACE_URI, 'svg']])
-// expect.call(parseHTML, '<a>', [ELEMENT, 'a'])
-// expect.call(parseHTML, '<svg>', [ELEMENT_NS, SVG_NAMESPACE_URI, 'svg'])
-// expect.call(parseHTML, '<p>hello</p>', [ELEMENT, 'p', TEXT_NODE, 'hello', PARENT_NODE])
-// expect.call(parseHTML, '</>', [PARENT_NODE])
-// expect.call(parseHTML, '< />', [TEXT_NODE, '< />'])
-// expect.call(parseHTML, '<a/>', [ELEMENT, 'a', PARENT_NODE])
-// expect.call(parseHTML, '<a />', [ELEMENT, 'a', PARENT_NODE])
-// expect.call(parseHTML, '<a / >', [ELEMENT, 'a'])
-// expect.call(parseHTML, '<a //>', [ELEMENT, 'a', PARENT_NODE])
-// expect.call(parseHTML, '<a u>', [ELEMENT, 'a', ATTR, 'u', ''])
-// expect.call(parseHTML, '<a =u>', [ELEMENT, 'a', ATTR, '=u', ''])
-// expect.call(parseHTML, '<a u/>', [ELEMENT, 'a', ATTR, 'u', '', PARENT_NODE])
-// expect.call(parseHTML, '<a u=1>', [ELEMENT, 'a', ATTR, 'u', '1'])
-// expect.call(parseHTML, '<a u="2">', [ELEMENT, 'a', ATTR, 'u', '2'])
-// expect.call(parseHTML, `<a u='3'>`, [ELEMENT, 'a', ATTR, 'u', '3'])
-// expect.call(parseHTML, `<a "b c"=d>`, [ELEMENT, 'a', ATTR, '"b', 'c"=d'])
-// expect.call(parseHTML, `<a u='3' f="g"/>`, [ELEMENT, 'a', ATTR, 'u', '3', ATTR, 'f', 'g', PARENT_NODE])
-// expect.call(parseHTML, `<img>`, [ELEMENT, 'img', PARENT_NODE])
-// expect.call(parseHTML, `  pre  <p><img></p>  post  `, [TEXT_NODE, '  pre  ', ELEMENT, 'p', ELEMENT, 'img', PARENT_NODE, PARENT_NODE, TEXT_NODE, '  post  '])
-// expect.call(parseHTML, `<!>`, [COMMENT, ''])
-// expect.call(parseHTML, `<!->`, [COMMENT, '-'])
-// expect.call(parseHTML, `<!-->`, [COMMENT, ''])
-// expect.call(parseHTML, `<!--->`, [COMMENT, ''])
-// expect.call(parseHTML, `<!---->`, [COMMENT, ''])
-// expect.call(parseHTML, `<!-->-->`, [COMMENT, '', TEXT_NODE, '-->'])
-// expect.call(parseHTML, `<!-- > -->`, [COMMENT, ' > '])
-// expect.call(parseHTML, `<!-- -> -->`, [COMMENT, ' -> '])
-// expect.call(parseHTML, `<!-- --> -->`, [COMMENT, ' ', TEXT_NODE, ' -->'])
-// expect.call(parseHTML, ` <!--no comment--> `, [TEXT_NODE, ' ', COMMENT, 'no comment', TEXT_NODE, ' '])
-// expect.call(parseHTML, `${HOLE}`, [HOOK_NODE])
-// expect.call(parseHTML, `x${HOLE}y`, [TEXT_NODE, 'x', HOOK_NODE, TEXT_NODE, 'y'])
-// expect.call(parseHTML, `<${HOLE}>`, [HOOK_TAG])
-// expect.call(parseHTML, `<p${HOLE}>`, [ELEMENT, 'p', HOOK_ATTR])
-// expect.call(parseHTML, `<p ${HOLE} ${HOLE}>`, [ELEMENT, 'p', HOOK_ATTR, HOOK_ATTR])
-// expect.call(parseHTML, `<p${HOLE} />`, [ELEMENT, 'p', HOOK_ATTR, PARENT_NODE])
-// expect.call(parseHTML, `<p${HOLE}a>`, [ELEMENT, 'p', HOOK_ATTR, ATTR, 'a', ''])
-// expect.call(parseHTML, `<${HOLE} a=b>`, [HOOK_TAG, ATTR, 'a', 'b'])
-// expect.call(parseHTML, `<b ${HOLE}=${HOLE}>`, [ELEMENT, 'b', HOOK_ATTR, HOOK_ATTR])
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const CACHE = new WeakMap()
 
