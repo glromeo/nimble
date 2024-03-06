@@ -108,7 +108,6 @@ function parseHTML(html) {
 
     function setAttr() {
         node.setAttribute(name, end > start ? html.slice(start, end) : '')
-        name = null
     }
 
     function flushText(end) {
@@ -263,7 +262,7 @@ function parseHTML(html) {
             case ATTR_VALUE:
                 if (ch === HOLE) {
                     if (end - start === 1) {
-                        hooks.push(HOOK_VALUE)
+                        hooks.push(HOOK_VALUE, name)
                     } else {
                         setAttr()
                         hooks.push(HOOK_ATTR)
