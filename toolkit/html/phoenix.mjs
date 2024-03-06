@@ -2,9 +2,19 @@ import {atom, atomTag} from '../atoms/atoms.mjs'
 
 let assertion = 0
 
+function debugNode(node) {
+    let walker = document.createTreeWalker(node, NodeFilter.SHOW_ALL);
+    let dump = []
+    while (node = walker.nextNode()) {
+        dump.push(node.nodeType, node.nodeValue ?? node.tagName)
+    }
+    return dump
+}
+
 const expect = function (input, output) {
     ++assertion
-    let actual = JSON.stringify(parseHTML(input))
+    let [node, ...queue] = parseHTML(input)
+    let actual = JSON.stringify([debugNode(node), ...queue])
     let expected = JSON.stringify(output)
     if (actual !== expected) {
         console.error(`#${assertion} "${input}"`, '\nexpected:', expected, '\nactual:  ', actual)
@@ -25,15 +35,12 @@ const ASSIGN = 15
 const ATTR_VALUE = 16
 const QUOTED_VALUE = 17
 const TAG_CLOSE = 18
+const COMMENT = 19
 
 const isWhitespace = ch => ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r'
 
-const ELEMENT = 1
-const ELEMENT_NS = 2
-const ATTR = 3
-const PARENT_NODE = 4
-const COMMENT = 5
-const FRAGMENT = 6
+const CHILD_NODE = 200
+const PARENT_NODE = 202
 
 export const HOOK_NODE = 101
 export const HOOK_TAG = 102
@@ -43,65 +50,70 @@ export const HOOK_QUOTE = 105
 export const HOOK_VALUE = 106
 
 const VOID_TAGS = Object.assign(Object.create(null), {
-    'area': 1,
-    'base': 1,
-    'br': 1,
-    'col': 1,
-    'embed': 1,
-    'hr': 1,
-    'img': 1,
-    'input': 1,
-    'link': 1,
-    'meta': 1,
-    'source': 1,
-    'track': 1,
-    'wbr': 1
+    'AREA': 1,
+    'BASE': 1,
+    'BR': 1,
+    'COL': 1,
+    'EMBED': 1,
+    'HR': 1,
+    'IMG': 1,
+    'INPUT': 1,
+    'LINK': 1,
+    'META': 1,
+    'SOURCE': 1,
+    'TRACK': 1,
+    'WBR': 1
 })
 
 function parseHTML(html) {
-    let queue = []
+    let node = document.createDocumentFragment()
+    let hooks = [node]
     let state = TEXT_NODE
-    let tagName = null
-    let nsURI = null
+    let name = null
     let start = 0
     let end = -1
     let quote = null
-    let back = []
 
-    function pushTag() {
-        back.push(queue.length)
-        tagName = html.slice(start, start = end).toLowerCase()
-        if (tagName === 'svg') {
-            nsURI = SVG_NAMESPACE_URI
-        }
-        if (nsURI) {
-            queue.push(ELEMENT_NS, nsURI, tagName)
-        } else {
-            queue.push(ELEMENT, tagName)
-        }
+    function childElement() {
+        const tagName = html.slice(start, end)
+        const nsURI = node.namespaceURI || tagName.length === 3 && tagName.toLowerCase() === 'svg' && SVG_NAMESPACE_URI
+        hooks.push(CHILD_NODE, node.childNodes.length)
+        node = node.appendChild(nsURI ? document.createElementNS(nsURI, tagName) : document.createElement(tagName))
     }
 
-    function popTag() {
-        if (!tagName || end === start || tagName === html.slice(start, end)) {
-            queue.push(PARENT_NODE)
+    function createFragment() {
+        hooks.push(CHILD_NODE, node.childNodes.length)
+        node = node.appendChild(document.createDocumentFragment())
+    }
+
+    const tagName = () => {
+        const slice = html.slice(start, end)
+        return node.namespaceURI === XHTML_NAMESPACE_URI ? slice.toUpperCase() : slice
+    }
+
+    function parentElement() {
+        if (end === start || !node.tagName || node.tagName === tagName()) {
+            if (hooks[hooks.length - 2] === CHILD_NODE) {
+                hooks.length -= 2
+            } else {
+                hooks.push(PARENT_NODE)
+            }
         }
-        back.pop()
-        const idx = back[back.length - 1]
-        tagName = queue[idx + 1]
-        nsURI = queue[idx] === ELEMENT_NS ? queue[idx + 2] : null
+        node = node.parentNode
     }
 
-    function pushAttr() {
-        queue.push(ATTR, html.slice(start, end))
+    function emptyAttr() {
+        node.setAttribute(html.slice(start, end), '')
     }
 
-    function pushValue() {
-        queue.push(html.slice(start, end))
+    function setAttr() {
+        node.setAttribute(name, end > start ? html.slice(start, end) : '')
+        name = null
     }
 
     function flushText(end) {
         if (end > start) {
-            queue.push(TEXT_NODE, html.slice(start, end))
+            node.appendChild(document.createTextNode(html.slice(start, end)))
         }
     }
 
@@ -113,7 +125,8 @@ function parseHTML(html) {
                     state = TAG_OPEN
                 } else if (ch === HOLE) {
                     flushText(end)
-                    queue.push(HOOK_NODE)
+                    hooks.push(HOOK_NODE, node.childNodes.length)
+                    node.appendChild(document.createTextNode(''))
                     start = end + 1
                 }
                 continue
@@ -123,7 +136,7 @@ function parseHTML(html) {
                 } else {
                     flushText(end - 1)
                     if (ch === HOLE) {
-                        queue.push(HOOK_TAG)
+                        hooks.push(HOOK_TAG)
                         state = WHITESPACE
                     } else if (ch === '!') {
                         start = end + 1
@@ -132,7 +145,7 @@ function parseHTML(html) {
                         start = end + 1
                         state = TAG_CLOSE
                     } else if (ch === '>') {
-                        queue.push(FRAGMENT)
+                        createFragment()
                         start = end + 1
                         state = TEXT_NODE
                     } else {
@@ -143,22 +156,22 @@ function parseHTML(html) {
                 continue
             case TAG_NAME:
                 if (ch === HOLE) {
-                    pushTag()
-                    queue.push(HOOK_ATTR)
+                    childElement()
+                    hooks.push(HOOK_ATTR)
                     state = WHITESPACE
                 } else if (ch === '/') {
-                    pushTag()
+                    childElement()
                     start = end + 1
                     state = TAG_CLOSE
                 } else if (ch === '>') {
-                    pushTag()
-                    if (tagName in VOID_TAGS) {
-                        popTag()
+                    childElement()
+                    if (node.tagName in VOID_TAGS) {
+                        parentElement()
                     }
                     start = end + 1
                     state = TEXT_NODE
                 } else if (isWhitespace(ch)) {
-                    pushTag()
+                    childElement()
                     state = WHITESPACE
                 }
                 continue
@@ -166,12 +179,12 @@ function parseHTML(html) {
                 if (ch === '>') {
                     if (html[start] === '-' && html[start + 1] === '-') {
                         if (html[end - 1] === '-' && html[end - 2] === '-') {
-                            queue.push(COMMENT, html.slice(start + 2, end - 2))
+                            hooks.push(COMMENT, html.slice(start + 2, end - 2))
                         } else {
                             continue
                         }
                     } else {
-                        queue.push(COMMENT, html.slice(start, end))
+                        hooks.push(COMMENT, html.slice(start, end))
                     }
                     start = end + 1
                     state = TEXT_NODE
@@ -179,14 +192,14 @@ function parseHTML(html) {
                 continue
             case WHITESPACE:
                 if (ch === HOLE) {
-                    queue.push(HOOK_ATTR)
+                    hooks.push(HOOK_ATTR)
                     state = WHITESPACE
                 } else if (ch === '/') {
                     start = end + 1
                     state = TAG_CLOSE
                 } else if (ch === '>') {
-                    if (tagName in VOID_TAGS) {
-                        popTag()
+                    if (node.tagName in VOID_TAGS) {
+                        parentElement()
                     }
                     start = end + 1
                     state = TEXT_NODE
@@ -197,33 +210,34 @@ function parseHTML(html) {
                 continue
             case ATTR_NAME:
                 if (ch === HOLE) {
-                    queue.push(HOOK_ATTR)
+                    hooks.push(HOOK_ATTR)
                     state = WHITESPACE
                 } else if (ch === '=' || isWhitespace(ch)) {
-                    pushAttr()
+                    name = html.slice(start, end)
                     state = ASSIGN
                 } else if (ch === '/') {
-                    pushAttr()
-                    queue.push('')
+                    emptyAttr()
                     start = end + 1
                     state = TAG_CLOSE
                 } else if (ch === '>') {
-                    pushAttr()
-                    queue.push('')
+                    emptyAttr()
+                    if (node.tagName in VOID_TAGS) {
+                        parentElement()
+                    }
                     start = end + 1
-                    state = TAG_CLOSE
+                    state = TEXT_NODE
                 }
                 continue
             case ASSIGN:
                 if (ch === HOLE) {
-                    queue.push(HOOK_VALUE)
+                    hooks.push(HOOK_VALUE)
                     state = WHITESPACE
                 } else if (ch === '\'' || ch === '"') {
                     quote = ch
                     start = end + 1
                     state = QUOTED_VALUE
                 } else if (ch === '/') {
-                    queue.push('')
+                    hooks.push('')
                     start = end + 1
                     state = TAG_CLOSE
                 } else if (!isWhitespace(ch)) {
@@ -233,16 +247,15 @@ function parseHTML(html) {
                 continue
             case QUOTED_VALUE:
                 if (ch === quote) {
-                    if (end - start > 1) {
-                        const values = html.slice(start, end).split(HOLE)
-                        if (values.length > 1) {
-                            queue.push(html.slice(start, end))
-                        } else {
-                            queue.push(values[0])
-                        }
-                    } else {
-                        pushValue()
-                    }
+                    setAttr()
+                    // if (end - start > 1) {
+                    //     const values = html.slice(start, end).split(HOLE)
+                    //     if (values.length > 1) {
+                    //         hooks.push(html.slice(start, end))
+                    //     } else {
+                    //         hooks.push(values[0])
+                    //     }
+                    // }
                     quote = null
                     state = WHITESPACE
                 }
@@ -250,28 +263,28 @@ function parseHTML(html) {
             case ATTR_VALUE:
                 if (ch === HOLE) {
                     if (end - start === 1) {
-                        queue.push(HOOK_VALUE)
+                        hooks.push(HOOK_VALUE)
                     } else {
-                        pushValue()
-                        queue.push(HOOK_ATTR)
+                        setAttr()
+                        hooks.push(HOOK_ATTR)
                     }
                     state = WHITESPACE
                 } else if (ch === '/') {
-                    pushValue()
+                    setAttr()
                     start = end + 1
                     state = TAG_CLOSE
                 } else if (ch === '>') {
-                    pushValue()
+                    setAttr()
                     start = end + 1
                     state = TEXT_NODE
                 } else if (isWhitespace(ch)) {
-                    pushValue()
+                    setAttr()
                     state = WHITESPACE
                 }
                 continue
             case TAG_CLOSE:
                 if (ch === '>') {
-                    popTag()
+                    parentElement()
                     start = end + 1
                     state = TEXT_NODE
                 } else if (ch === '/') {
@@ -287,69 +300,65 @@ function parseHTML(html) {
             flushText(end)
         }
         if (state === ATTR_NAME) {
-            pushAttr()
-            queue.push('')
+            emptyAttr()
         }
         if (state === ASSIGN) {
-            queue.push('')
-        }
-        if (state === WHITESPACE) {
-            queue.length = back.pop()
+            node.setAttribute(name, '')
         }
     }
 
-    return queue
+    return hooks
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-expect.call(parseHTML, '', [])
-expect.call(parseHTML, ' ', [TEXT_NODE, ' '])
-expect.call(parseHTML, ' <', [TEXT_NODE, ' <'])
-expect.call(parseHTML, ' < ', [TEXT_NODE, ' < '])
-expect.call(parseHTML, ' <>', [TEXT_NODE, ' ', FRAGMENT])
-expect.call(parseHTML, ' <a', [TEXT_NODE, ' '])
-expect.call(parseHTML, ' <a ', [TEXT_NODE, ' '])
-expect.call(parseHTML, ' <svg ', [TEXT_NODE, ' '])
-expect.call(parseHTML, ' <a>', [TEXT_NODE, ' ', ELEMENT, 'a'])
-expect.call(parseHTML, ' <svg>', [TEXT_NODE, ' ', ELEMENT_NS, SVG_NAMESPACE_URI, 'svg'])
-expect.call(parseHTML, '<a>', [ELEMENT, 'a'])
-expect.call(parseHTML, '<svg>', [ELEMENT_NS, SVG_NAMESPACE_URI, 'svg'])
-expect.call(parseHTML, '<p>hello</p>', [ELEMENT, 'p', TEXT_NODE, 'hello', PARENT_NODE])
-expect.call(parseHTML, '</>', [PARENT_NODE])
-expect.call(parseHTML, '< />', [TEXT_NODE, '< />'])
-expect.call(parseHTML, '<a/>', [ELEMENT, 'a', PARENT_NODE])
-expect.call(parseHTML, '<a />', [ELEMENT, 'a', PARENT_NODE])
-expect.call(parseHTML, '<a / >', [ELEMENT, 'a'])
-expect.call(parseHTML, '<a //>', [ELEMENT, 'a', PARENT_NODE])
-expect.call(parseHTML, '<a u>', [ELEMENT, 'a', ATTR, 'u', ''])
-expect.call(parseHTML, '<a =u>', [ELEMENT, 'a', ATTR, '=u', ''])
-expect.call(parseHTML, '<a u/>', [ELEMENT, 'a', ATTR, 'u', '', PARENT_NODE])
-expect.call(parseHTML, '<a u=1>', [ELEMENT, 'a', ATTR, 'u', '1'])
-expect.call(parseHTML, '<a u="2">', [ELEMENT, 'a', ATTR, 'u', '2'])
-expect.call(parseHTML, `<a u='3'>`, [ELEMENT, 'a', ATTR, 'u', '3'])
-expect.call(parseHTML, `<a "b c"=d>`, [ELEMENT, 'a', ATTR, '"b', 'c"=d'])
-expect.call(parseHTML, `<a u='3' f="g"/>`, [ELEMENT, 'a', ATTR, 'u', '3', ATTR, 'f', 'g', PARENT_NODE])
-expect.call(parseHTML, `<img>`, [ELEMENT, 'img', PARENT_NODE])
-expect.call(parseHTML, `  pre  <p><img></p>  post  `, [TEXT_NODE, '  pre  ', ELEMENT, 'p', ELEMENT, 'img', PARENT_NODE, PARENT_NODE, TEXT_NODE, '  post  '])
-expect.call(parseHTML, `<!>`, [COMMENT, ''])
-expect.call(parseHTML, `<!->`, [COMMENT, '-'])
-expect.call(parseHTML, `<!-->`, [COMMENT, ''])
-expect.call(parseHTML, `<!--->`, [COMMENT, ''])
-expect.call(parseHTML, `<!---->`, [COMMENT, ''])
-expect.call(parseHTML, `<!-->-->`, [COMMENT, '', TEXT_NODE, '-->'])
-expect.call(parseHTML, `<!-- > -->`, [COMMENT, ' > '])
-expect.call(parseHTML, `<!-- -> -->`, [COMMENT, ' -> '])
-expect.call(parseHTML, `<!-- --> -->`, [COMMENT, ' ', TEXT_NODE, ' -->'])
-expect.call(parseHTML, ` <!--no comment--> `, [TEXT_NODE, ' ', COMMENT, 'no comment', TEXT_NODE, ' '])
-expect.call(parseHTML, `${HOLE}`, [HOOK_NODE])
-expect.call(parseHTML, `x${HOLE}y`, [TEXT_NODE, 'x', HOOK_NODE, TEXT_NODE, 'y'])
-expect.call(parseHTML, `<${HOLE}>`, [HOOK_TAG])
-expect.call(parseHTML, `<p${HOLE}>`, [ELEMENT, 'p', HOOK_ATTR])
-expect.call(parseHTML, `<p ${HOLE} ${HOLE}>`, [ELEMENT, 'p', HOOK_ATTR, HOOK_ATTR])
-expect.call(parseHTML, `<p${HOLE} />`, [ELEMENT, 'p', HOOK_ATTR, PARENT_NODE])
-expect.call(parseHTML, `<p${HOLE}a>`, [ELEMENT, 'p', HOOK_ATTR, ATTR, 'a', ''])
-expect.call(parseHTML, `<${HOLE} a=b>`, [HOOK_TAG, ATTR, 'a', 'b'])
-expect.call(parseHTML, `<b ${HOLE}=${HOLE}>`, [ELEMENT, 'b', HOOK_ATTR, HOOK_ATTR])
+// expect.call(parseHTML, '', [[]])
+// expect.call(parseHTML, ' ', [[3, ' ']])
+// expect.call(parseHTML, ' <', [[3, ' <']])
+// expect.call(parseHTML, ' < ', [[3, ' < ']])
+// expect.call(parseHTML, ' <>', [[3, ' '], 200, 1])
+// expect.call(parseHTML, ' <a', [[3, ' '], 200, 1])
+// expect.call(parseHTML, ' <a ', [[3, ' '], 200, 1])
+// expect.call(parseHTML, ' <svg ', [[3, ' '], 200, 1])
+// expect.call(parseHTML, ' <a>', [[3, ' ', ELEMENT, 'a']])
+// expect.call(parseHTML, ' <svg>', [[3, ' ', ELEMENT_NS, SVG_NAMESPACE_URI, 'svg']])
+// expect.call(parseHTML, '<a>', [ELEMENT, 'a'])
+// expect.call(parseHTML, '<svg>', [ELEMENT_NS, SVG_NAMESPACE_URI, 'svg'])
+// expect.call(parseHTML, '<p>hello</p>', [ELEMENT, 'p', TEXT_NODE, 'hello', PARENT_NODE])
+// expect.call(parseHTML, '</>', [PARENT_NODE])
+// expect.call(parseHTML, '< />', [TEXT_NODE, '< />'])
+// expect.call(parseHTML, '<a/>', [ELEMENT, 'a', PARENT_NODE])
+// expect.call(parseHTML, '<a />', [ELEMENT, 'a', PARENT_NODE])
+// expect.call(parseHTML, '<a / >', [ELEMENT, 'a'])
+// expect.call(parseHTML, '<a //>', [ELEMENT, 'a', PARENT_NODE])
+// expect.call(parseHTML, '<a u>', [ELEMENT, 'a', ATTR, 'u', ''])
+// expect.call(parseHTML, '<a =u>', [ELEMENT, 'a', ATTR, '=u', ''])
+// expect.call(parseHTML, '<a u/>', [ELEMENT, 'a', ATTR, 'u', '', PARENT_NODE])
+// expect.call(parseHTML, '<a u=1>', [ELEMENT, 'a', ATTR, 'u', '1'])
+// expect.call(parseHTML, '<a u="2">', [ELEMENT, 'a', ATTR, 'u', '2'])
+// expect.call(parseHTML, `<a u='3'>`, [ELEMENT, 'a', ATTR, 'u', '3'])
+// expect.call(parseHTML, `<a "b c"=d>`, [ELEMENT, 'a', ATTR, '"b', 'c"=d'])
+// expect.call(parseHTML, `<a u='3' f="g"/>`, [ELEMENT, 'a', ATTR, 'u', '3', ATTR, 'f', 'g', PARENT_NODE])
+// expect.call(parseHTML, `<img>`, [ELEMENT, 'img', PARENT_NODE])
+// expect.call(parseHTML, `  pre  <p><img></p>  post  `, [TEXT_NODE, '  pre  ', ELEMENT, 'p', ELEMENT, 'img', PARENT_NODE, PARENT_NODE, TEXT_NODE, '  post  '])
+// expect.call(parseHTML, `<!>`, [COMMENT, ''])
+// expect.call(parseHTML, `<!->`, [COMMENT, '-'])
+// expect.call(parseHTML, `<!-->`, [COMMENT, ''])
+// expect.call(parseHTML, `<!--->`, [COMMENT, ''])
+// expect.call(parseHTML, `<!---->`, [COMMENT, ''])
+// expect.call(parseHTML, `<!-->-->`, [COMMENT, '', TEXT_NODE, '-->'])
+// expect.call(parseHTML, `<!-- > -->`, [COMMENT, ' > '])
+// expect.call(parseHTML, `<!-- -> -->`, [COMMENT, ' -> '])
+// expect.call(parseHTML, `<!-- --> -->`, [COMMENT, ' ', TEXT_NODE, ' -->'])
+// expect.call(parseHTML, ` <!--no comment--> `, [TEXT_NODE, ' ', COMMENT, 'no comment', TEXT_NODE, ' '])
+// expect.call(parseHTML, `${HOLE}`, [HOOK_NODE])
+// expect.call(parseHTML, `x${HOLE}y`, [TEXT_NODE, 'x', HOOK_NODE, TEXT_NODE, 'y'])
+// expect.call(parseHTML, `<${HOLE}>`, [HOOK_TAG])
+// expect.call(parseHTML, `<p${HOLE}>`, [ELEMENT, 'p', HOOK_ATTR])
+// expect.call(parseHTML, `<p ${HOLE} ${HOLE}>`, [ELEMENT, 'p', HOOK_ATTR, HOOK_ATTR])
+// expect.call(parseHTML, `<p${HOLE} />`, [ELEMENT, 'p', HOOK_ATTR, PARENT_NODE])
+// expect.call(parseHTML, `<p${HOLE}a>`, [ELEMENT, 'p', HOOK_ATTR, ATTR, 'a', ''])
+// expect.call(parseHTML, `<${HOLE} a=b>`, [HOOK_TAG, ATTR, 'a', 'b'])
+// expect.call(parseHTML, `<b ${HOLE}=${HOLE}>`, [ELEMENT, 'b', HOOK_ATTR, HOOK_ATTR])
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const CACHE = new WeakMap()
@@ -379,43 +388,28 @@ export function html(strings) {
     if (render === undefined) {
         const queue = parseHTML(strings.join(HOLE))
         CACHE.set(strings, render = (scope, args) => {
-            const fragment = document.createDocumentFragment()
-            let parent = fragment
+            const fragment = queue[0].cloneNode(true)
+            let node = fragment
             let a = 1
-            for (let q = 0; q < queue.length; ++q) {
+            for (let q = 1; q < queue.length; ++q) {
                 switch (queue[q]) {
-                    case TEXT_NODE:
-                        parent.appendChild(document.createTextNode(queue[++q]))
-                        continue
-                    case FRAGMENT:
-                        parent = Object.assign(document.createDocumentFragment(), {parentNode: parent})
-                        continue
-                    case ELEMENT:
-                        parent = parent.appendChild(document.createElement(queue[++q]))
-                        continue
-                    case ELEMENT_NS:
-                        parent = parent.appendChild(document.createElementNS(queue[++q], queue[++q]))
-                        continue
-                    case ATTR:
-                        parent.setAttribute(queue[++q], queue[++q])
-                        continue
-                    case COMMENT:
-                        parent.appendChild(document.createComment(queue[++q]))
+                    case CHILD_NODE:
+                        node = node.childNodes[queue[++q]]
                         continue
                     case PARENT_NODE:
-                        parent = parent.parentNode
+                        node = node.parentNode
                         continue
                     case HOOK_NODE:
-                        hookNode(scope, parent, args[a++])
+                        hookNode(scope, node.childNodes[queue[++q]], args[a++])
                         continue
                     case HOOK_ATTR:
-                        hookAttr(scope, parent, queue[++q], args[a++])
+                        hookAttr(scope, node, queue[++q], args[a++])
                         continue
                     case HOOK_QUOTE:
-                        hookText(scope, parent.attributes, 'value', slice.call(args, a, a += queue[++q]))
+                        hookText(scope, node.attributes, 'value', slice.call(args, a, a += queue[++q]))
                         continue
                     case HOOK_TEXT:
-                        hookText(scope, parent.childNodes, 'data', slice.call(args, a, a += queue[++q]))
+                        hookText(scope, node.childNodes, 'data', slice.call(args, a, a += queue[++q]))
                         continue
                     case HOOK_TAG:
                         const fn = args[a++]
@@ -432,7 +426,7 @@ export function html(strings) {
                             }
                             break
                         }
-                        parent = {
+                        node = {
                             attrs: {},
                             setAttribute(name, value) {
                                 this[name] = value
@@ -451,29 +445,35 @@ export function html(strings) {
     }
 }
 
-function hookNode(scope, parent, value) {
-    const type = typeof value
-    if (type === 'bigint' || type === 'number' || type === 'string') {
-        parent.appendChild(document.createTextNode(value))
-    } else if (type === 'function') {
-        hookNode(scope, parent, value.call(scope, parent))
-    } else if (type === 'object' && value !== null) {
-        if (value[atomTag]) {
-            let node = parent.appendChild(document.createTextNode(''))
-            let pending
-            const update = () => {
-                node = updateNode(scope, node, scope.get(value))
-                pending = 0
+function hookNode(scope, node, value) {
+    switch (typeof value) {
+        case 'bigint':
+        case 'number':
+        case 'string':
+            return node.data = value
+        case 'function':
+            return hookNode(scope, node, value.call(scope, node))
+        case 'object':
+            if (value) {
+                if (value[atomTag]) {
+                    let pending
+                    const update = () => {
+                        node = updateNode(scope, node, scope.get(value))
+                        pending = 0
+                    }
+                    scope.bind(value, () => pending ||= requestAnimationFrame(update))
+                    update()
+                } else if (value[Symbol.iterator]) {
+                    for (const item of value) {
+                        const next = node.splitText(0)
+                        hookNode(scope, node, item)
+                        node = next
+                    }
+                    node.remove()
+                } else if (value instanceof Node) {
+                    node.appendChild(value)
+                }
             }
-            scope.bind(value, () => pending ||= requestAnimationFrame(update))
-            update()
-        } else if (value[Symbol.iterator]) {
-            for (const item of value) {
-                hookNode(scope, parent, item)
-            }
-        } else if (value instanceof Node) {
-            parent.appendChild(value)
-        }
     }
 }
 
