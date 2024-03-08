@@ -22,32 +22,33 @@ const expect = function (input, output) {
 };
 
 export const HOLE = "\x01";
+export const PLACEHOLDER_NODE = document.createComment('');
 
 const SVG_NAMESPACE_URI = "http://www.w3.org/2000/svg";
 const XHTML_NAMESPACE_URI = "http://www.w3.org/1999/xhtml";
 
-const TEXT_NODE = 10;
-const TAG_OPEN = 11;
-const TAG_NAME = 12;
-const WHITESPACE = 13;
-const ATTR_NAME = 14;
-const ASSIGN = 15;
-const ATTR_VALUE = 16;
-const QUOTED_VALUE = 17;
-const TAG_CLOSE = 18;
-const COMMENT = 19;
+const TEXT_NODE = 100;
+const TAG_OPEN = 101;
+const TAG_NAME = 102;
+const WHITESPACE = 103;
+const ATTR_NAME = 104;
+const ASSIGN = 105;
+const ATTR_VALUE = 106;
+const QUOTED_VALUE = 107;
+const TAG_CLOSE = 108;
+const COMMENT = 109;
+
+export const CHILD_NODE = 200;
+export const PARENT_NODE = 201;
+export const HOOK_NODE = 202;
+export const HOOK_SLOT = 203;
+export const HOOK_ATTR = 204;
+export const HOOK_COMMENT = 205;
+export const HOOK_QUOTE = 206;
+export const HOOK_VALUE = 207;
 
 const isWhitespace = ch => ch === " " || ch === "\n" || ch === "\t" || ch === "\r";
 
-const CHILD_NODE = 200;
-const PARENT_NODE = 202;
-
-export const HOOK_NODE = 101;
-export const HOOK_TAG = 102;
-export const HOOK_ATTR = 103;
-export const HOOK_TEXT = 104;
-export const HOOK_QUOTE = 105;
-export const HOOK_VALUE = 106;
 
 const VOID_TAGS = Object.assign(Object.create(null), {
     "AREA": 1,
@@ -74,7 +75,7 @@ export function parseHTML(html) {
     let end = -1;
     let quote = null;
 
-    function childElement() {
+    function appendElement() {
         hooks.push(CHILD_NODE, node.childNodes.length);
         const tagName = html.slice(start, end).toLowerCase();
         node = node.appendChild(
@@ -86,9 +87,9 @@ export function parseHTML(html) {
         );
     }
 
-    function createFragment() {
+    function appendSlot() {
         hooks.push(CHILD_NODE, node.childNodes.length);
-        node = node.appendChild(document.createDocumentFragment());
+        node = node.appendChild(document.createElement("slot"));
     }
 
     function matchTagName() {
@@ -124,7 +125,7 @@ export function parseHTML(html) {
                 if (ch === HOLE) {
                     appendText(end);
                     hooks.push(HOOK_NODE, node.childNodes.length);
-                    node.appendChild(document.createTextNode(""));
+                    node.appendChild(PLACEHOLDER_NODE.cloneNode());
                     start = end + 1;
                 }
                 continue;
@@ -135,7 +136,8 @@ export function parseHTML(html) {
                 }
                 appendText(end - 1);
                 if (ch === HOLE) {
-                    hooks.push(HOOK_TAG, node.childNodes.length);
+                    appendSlot();
+                    hooks.push(HOOK_SLOT);
                     state = WHITESPACE;
                     continue;
                 }
@@ -150,7 +152,7 @@ export function parseHTML(html) {
                     continue;
                 }
                 if (ch === ">") {
-                    createFragment();
+                    appendSlot();
                     start = end + 1;
                     state = TEXT_NODE;
                     continue;
@@ -160,19 +162,19 @@ export function parseHTML(html) {
                 continue;
             case TAG_NAME:
                 if (ch === HOLE) {
-                    childElement();
+                    appendElement();
                     hooks.push(HOOK_ATTR);
                     state = WHITESPACE;
                     continue;
                 }
                 if (ch === "/") {
-                    childElement();
+                    appendElement();
                     start = end + 1;
                     state = TAG_CLOSE;
                     continue;
                 }
                 if (ch === ">") {
-                    childElement();
+                    appendElement();
                     if (node.tagName in VOID_TAGS) {
                         parentElement();
                     }
@@ -181,7 +183,7 @@ export function parseHTML(html) {
                     continue;
                 }
                 if (isWhitespace(ch)) {
-                    childElement();
+                    appendElement();
                     state = WHITESPACE;
                 }
                 continue;
@@ -252,7 +254,7 @@ export function parseHTML(html) {
                 continue;
             case ASSIGN:
                 if (ch === HOLE) {
-                    hooks.push(HOOK_VALUE);
+                    hooks.push(HOOK_VALUE, name);
                     state = WHITESPACE;
                     continue;
                 }
@@ -358,21 +360,10 @@ export function html(strings) {
         return null;
     }
     if (!strings.raw) {
-        let [scope, target] = arguments;
-        switch (typeof target) {
-            case "string":
-                target = document.querySelector(target);
-            case "object":
-                return function () {
-                    const fragment = html.apply(scope, arguments);
-                    target.replaceChildren(fragment);
-                    return fragment;
-                };
-            default:
-                return function () {
-                    return html.apply(scope, arguments);
-                };
-        }
+        const scope = strings;
+        return function () {
+            return html.apply(scope, arguments);
+        };
     }
     let render = CACHE.get(strings);
     if (render === undefined) {
@@ -393,15 +384,18 @@ export function html(strings) {
                         hookNode(scope, node.childNodes[queue[++q]], args[a++]);
                         continue;
                     case HOOK_ATTR:
+                        hookAttr(scope, node, null, args[a++]);
+                        continue;
+                    case HOOK_VALUE:
                         hookAttr(scope, node, queue[++q], args[a++]);
                         continue;
                     case HOOK_QUOTE:
                         hookText(scope, node.attributes, "value", slice.call(args, a, a += queue[++q]));
                         continue;
-                    case HOOK_TEXT:
+                    case HOOK_COMMENT:
                         hookText(scope, node.childNodes, "data", slice.call(args, a, a += queue[++q]));
                         continue;
-                    case HOOK_TAG:
+                    case HOOK_SLOT:
                         const fn = args[a++];
                         const attrs = {};
                         const children = [];
@@ -435,39 +429,42 @@ export function html(strings) {
     }
 }
 
+const SIBLINGS = Symbol();
+
 function hookNode(scope, node, value) {
-    switch (typeof value) {
-        case "bigint":
-        case "number":
-        case "string":
-            return node.data = value;
-        case "function":
-            return hookNode(scope, node, value.call(scope, node));
-        case "object":
-            if (value) {
-                if (value[atomTag]) {
-                    let pending;
-                    const update = () => {
-                        node = updateNode(scope, node, scope.get(value));
-                        pending = 0;
-                    };
-                    scope.bind(value, () => pending ||= requestAnimationFrame(update));
-                    update();
-                } else if (value[Symbol.iterator]) {
-                    for (const item of value) {
-                        const next = node.splitText(0);
-                        hookNode(scope, node, item);
-                        node = next;
-                    }
-                    node.remove();
-                } else if (value instanceof Node) {
-                    node.appendChild(value);
-                }
-            }
+    const type = typeof value;
+    if (type === "function") {
+        hookNode(scope, node, value.call(scope, node));
+        return
     }
+    if (type === "object" && value !== null) {
+        if (value[atomTag]) {
+            let pending;
+            const update = () => {
+                node = updateNode(scope, node, scope.get(value));
+                pending = 0;
+            };
+            scope.bind(value, () => pending ||= requestAnimationFrame(update));
+            update();
+            return;
+        }
+        if (value[Symbol.iterator]) {
+            const fragment = document.createDocumentFragment()
+            for (const item of value) {
+                hookNode(scope, fragment.appendChild(PLACEHOLDER_NODE.cloneNode()), item);
+            }
+            node.replaceWith(fragment);
+            return;
+        }
+    }
+    updateNode(scope, node, value);
 }
 
 function updateNode(scope, node, value) {
+    if (value === null) {
+        node.replaceWith(node = PLACEHOLDER_NODE.cloneNode())
+        return node
+    }
     switch (typeof value) {
         case "bigint":
         case "number":
@@ -483,37 +480,31 @@ function updateNode(scope, node, value) {
             return value !== undefined ? updateNode(scope, node, value) : node;
         case "object":
             if (value[atomTag]) {
-                if (bind) {
-                    let pending = 0;
-                    const update = () => {
-                        if (node.isConnected) {
-                            updateNode(scope, node, scope.get(value));
-                            pending = 0;
-                        } else {
-                            // I rather stop the listeners when they return false
-                        }
-                    };
-                    scope.bind(value, () => pending ||= requestAnimationFrame(update));
-                }
-                return node = updateNode(scope, node, scope.get(value));
+                return updateNode(scope, node, scope.get(value));
             }
             if (value[Symbol.iterator]) {
-                if (node.nodeType === 3) {
-                    let last = node;
-                    for (const v of value) {
-                        const next = last.splitText(0);
-                        updateNode(scope, last, v, bind);
-                        last = next;
+                if (node.tagName === 'slot') {
+                    // TODO: This is a rudimental diff & replace... a lot of room for improvement here
+                    let childIndex = 0
+                    for (const item of value) {
+                        let childNode = node.childNodes[childIndex++];
+                        if (childNode.$item !== item) {
+                            childNode = updateNode(scope, PLACEHOLDER_NODE.cloneNode(), item);
+                        }
+                        childNode.$item = item
                     }
                 } else {
-                    node.replaceWith(node = I_NODE.cloneNode(true));
-                    for (const v of value) {
-                        updateNode(scope, node.appendChild(document.createTextNode("")), v, bind);
+                    const slot = document.createElement('slot')
+                    for (const item of value) {
+                        const childNode = updateNode(scope, slot.appendChild(PLACEHOLDER_NODE.cloneNode()), item);
+                        childNode.$item = item
                     }
+                    node.replaceWith(slot);
                 }
                 return node;
             }
             if (value.tag) {
+                // TODO: This needs to be refactored once the Attrs logis is settled
                 const {tag, attrs, children} = value;
                 const el = createElement(tag);
                 if (attrs) {
@@ -544,44 +535,108 @@ function updateNode(scope, node, value) {
                 return;
             }
         default:
-            if (node.nodeType === 3) {
-                node.data = "";
-            } else {
-                node.replaceWith(node = document.createTextNode(""));
-            }
-            return node;
+            node.replaceWith(node = PLACEHOLDER_NODE.cloneNode())
+            return node
     }
 }
 
-function hookAttr(scope, node, name, value) {
-    if (name === null) {
-        if (value) {
-            if (value[atomTag]) {
-                const atom = value;
-                let names = Object.keys(value = store.get(atom));
+function hookAttr(scope, node, value) {
+
+    const type = typeof value;
+
+    if (type === "function") {
+        hookAttr(scope, node, value.call(scope, node));
+        return
+    }
+
+    if (type === "object" && value !== null) {
+
+        if (value[atomTag]) {
+            const atom = value;
+            let names = Object.keys(value = store.get(atom));
+            let pending;
+            const update = () => {
                 for (const name of names) {
+                    if (!(name in value)) {
+                        node.removeAttribute(name);
+                    }
+                }
+                for (const name of names = Object.keys(value)) {
                     setAttr(scope, node, name, value[name]);
                 }
-                scope.bind(atom, value => {
-                    for (const name of names) {
-                        if (!(name in value)) {
-                            node.removeAttribute(name);
-                        }
-                    }
-                    for (const name of names = Object.keys(value)) {
-                        setAttr(scope, node, name, value[name]);
-                    }
-                });
-            } else if (typeof value === "object" && value.constructor !== Array) {
-                for (const entry of Object.entries(value)) {
-                    const [name, value] = entry;
-                    hookAttr(scope, node, name, value);
+                pending = 0;
+            };
+            scope.bind(value, () => pending ||= requestAnimationFrame(update));
+            update();
+            return;
+        }
+
+        for (const entry of value.entries?.() ?? Object.entries(value)) {
+            const [name, value] = entry;
+            hookValue(scope, node, name, value);
+        }
+    }
+}
+
+function format(value) {
+    switch (typeof value) {
+        case "bigint":
+        case "number":
+        case "string":
+            return value;
+        default:
+            return "";
+    }
+}
+
+function hookValue(scope, node, name, value) {
+
+    const type = typeof value;
+
+    if (type === "function") {
+        hookValue(scope, node, name, value.call(scope, node));
+        return
+    }
+
+    if (type === "object" && value !== null) {
+        if (value[atomTag]) {
+            const atom = value
+            let pending;
+            const update = () => {
+                setAttr(scope, node, name, scope.get(atom))
+                pending = 0
+            };
+            scope.bind(atom, () => pending ||= requestAnimationFrame(update));
+            update();
+            return;
+        }
+        if (value[Symbol.iterator]) {
+            const parts = [];
+            let pending;
+            const update = () => {
+                node.setAttribute(name, parts.join(" "));
+                pending = 0;
+            };
+            for (const part of value) {
+                if (part?.[atomTag]) {
+                    const p = parts.length;
+                    scope.bind(part, v => {
+                        parts[p] = format(v);
+                        update();
+                    });
+                    parts.push(format(scope.get(part)));
+                } else {
+                    parts.push(format(part));
                 }
             }
+            scope.bind(atom, () => pending ||= requestAnimationFrame(update));
+            update()
+            return
         }
-        return;
     }
-    value = value ?? false;
+
+    setAttr(scope, node, name, value)
+
     switch (typeof value) {
         case "bigint":
         case "number":
@@ -596,21 +651,6 @@ function hookAttr(scope, node, name, value) {
         case "function":
             return node.setAttribute(name, value.call(scope, node));
         case "object":
-            if (value[atomTag]) {
-                const atom = value;
-                if (bind) {
-                    let pending = false;
-                    const update = () => pending = !(node = setAttr(node, name, value));
-                    scope.bind(atom, v => {
-                        value = v;
-                        pending ||= requestAnimationFrame(update);
-                    });
-                    update();
-                    return node;
-                } else {
-                    return node = setAttr(node, name, scope.get(atom));
-                }
-            }
             if (value[Symbol.iterator]) {
                 const parts = [];
                 if (bind) {
@@ -720,17 +760,6 @@ function setHandler(scope, node, event, value, bind) {
         }
     } else if (typeof value === "function") {
         node.addEventListener(event, value);
-    }
-}
-
-function format(value) {
-    switch (typeof value) {
-        case "bigint":
-        case "number":
-        case "string":
-            return value;
-        default:
-            return "";
     }
 }
 

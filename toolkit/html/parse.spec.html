@@ -17,7 +17,7 @@
     import {WebConsole} from '../test/web-console.mjs'
     import {atom, molecule} from '../atoms/atoms.mjs'
     import {HOLE, parseHTML, html} from '../html/phoenix.mjs'
-    import {HOOK_ATTR, HOOK_NODE, HOOK_TAG} from './phoenix.mjs'
+    import { CHILD_NODE, HOOK_ATTR, HOOK_NODE, HOOK_SLOT, PARENT_NODE } from "./phoenix.mjs";
 
     mocha.setup('tdd')
     mocha.checkLeaks()
@@ -162,66 +162,68 @@
         // testParse(`${HOLE}`, dom`#`, [HOOK_NODE,0])
         // testParse(`x${HOLE}y`, dom`@${dom`#x`}${dom`#`}${dom`#y`}`, [HOOK_NODE, 1])
         // testParse(`<${HOLE}>`, '', [HOOK_TAG, 0])
-        testParse(`<p${HOLE}>`, '<p>', [200, 0, HOOK_ATTR])
-        // testParse(`<p ${HOLE} ${HOLE}>`, SAME)        // [ELEMENT, 'p', HOOK_ATTR, HOOK_ATTR])
-        // testParse(`<p${HOLE} />`, SAME)        // [ELEMENT, 'p', HOOK_ATTR, PARENT_NODE])
-        // testParse(`<p${HOLE}a>`, SAME)        // [ELEMENT, 'p', HOOK_ATTR, ATTR, 'a', ''])
-        // testParse(`<${HOLE} a=b>`, SAME)        // [HOOK_TAG, ATTR, 'a', 'b'])
-        // testParse(`<b ${HOLE}=${HOLE}>`, SAME)        // [ELEMENT, 'b', HOOK_ATTR, HOOK_ATTR])
-        //
-        // test(`#00`, () => expectHTML(html`hello`).to.eq('hello'))
-        // test(`#01`, () => expectHTML(html`<p>hello</p>`).to.eq('<p>hello</p>'))
-        // test(`#02`, () => expectHTML(html` <my-tag></my-tag> `).to.eq(' <my-tag></my-tag> '))
-        // test(`#03`, () => expectHTML(html`ciao<p>hello</p>salut`).to.eq('ciao<p>hello</p>salut'))
-        // test(`#04`, () => expectHTML(html` \n <p> t t </p> \t `).to.eq(' \n <p> t t </p> \t '))
-        // test(`#05`, () => expectHTML(html`<p>hello<p>world</p></p>`).to.eq('<p>hello<p>world</p></p>'))
-        // test(`#06`, () => expectHTML(html`<div label="hello"/>`).to.eq('<div label="hello"></div>'))
-        // test(`#07`, () => expectHTML(
-        //     html`<svg height="90" width="160"><line x1="0" y1="0" x2="160" y2="90" style="stroke:blue;stroke-width:4" /></svg>`
-        // ).to.eq(
-        //     '<svg height="90" width="160"><line x1="0" y1="0" x2="160" y2="90" style="stroke:blue;stroke-width:4"></line></svg>'
-        // ))
-        // test(`#08`, () => expectHTML(html`hello ${' '} world`).to.eq('hello   world'))
-        // test(`#09`, () => expectHTML(html`${1}<p>${[1, BigInt(2), ' ']}</p>${true}`).to.eq('1<p>12 </p>'))
-        // test(`#10`, () => expectHTML(html`<!-- <hello> -->`).to.eq('<!-- <hello> -->'))
-        // test(`#11`, () => expectHTML(html`<!- > -->`).to.eq('<!--- --> --&gt;'))
-        // test(`#12`, () => expectHTML(html`<p a></p>`).to.eq('<p a=""></p>'))
-        // test(`#13`, () => expectHTML(html`<p a=b></p>`).to.eq('<p a="b"></p>'))
-        // test(`#14`, () => expectHTML(html`<p a='b > d'></p>`).to.eq('<p a="b > d"></p>'))
-        // test(`#15`, () => expectHTML(html`<p a=${'b'}><a b=${2} c=${true}></a></p>`).to.eq('<p a="b"><a b="2" c=""></a></p>'))
-        // test(`#16`, () => expectHTML(html`<p fn=${function (node) {
-        //     expect(this).to.eq(scope)
-        //     expect(node.tagName).to.eq('P')
-        //     return "ok"
-        // }}></p>`).to.eq('<p fn="ok"></p>'))
-        // test(`#17`, () => expectHTML(html`<p a${{b: 'c'}}></p>`).to.eq('<p a="" b="c"></p>'))
-        // test(`#18`, () => expectHTML(html`<p a="abc${'def'}ghi${'   '}jkl"></p>`).to.eq('<p a="abcdefghi   jkl"></p>'))
-        // test(`#19`, () => expectHTML(html`<!-- ${'one'} ${2} -->`).to.eq('<!-- one 2 -->'))
-        // test(`#20`, () => expectHTML(html` <p>${function (node) {
-        //     expect(this).to.eq(scope)
-        //     expect(node.tagName).to.eq('P')
-        //     return "hello"
-        // }}</p> `).to.eq(' <p>hello</p> '))
-        // test(`#21`, () => expectHTML(html` <img> `).to.eq(' <img> '))
-        //
-        // test(`#22`, () => expectHTML(html` <${function (context) {
-        //     expect(this).to.eq(scope)
-        //     const {a, b, c} = context
-        //     expect(a).to.eq('1')
-        //     expect(b).to.eq(2)
-        //     expect(c).to.eq(3)
-        //     expect(context.nodeName).to.eq('#document-fragment')
-        //     return {tag:'img', attrs: {src:'about:blank'}}
-        // }} a="1" b=${2} c="${3}">hello <p>world</p>${'!'}</>`).to.eq(' <img src="about:blank"> '))
-        // return;
-        // test(`#19`, () => expectHTML(html`hello ${atom('world')}`).to.eq('hello world'))
-        // test(`#20`, () => expectHTML(html`${['I',[2.1,2.2,2.3],'X',[4.1,4.2,4.3],'V']}`).to.eq('I2.12.22.3X4.14.24.3V'))
-        // test(`#21`, () => expectHTML(html`hello ${html`world`}`).to.eq('hello world'))
-        // test(`#22`, () => expectHTML(html`hello ${html`${atom('world')}`}`).to.eq('hello world'))
-        // test(`#23`, () => expectHTML(html`<${{tag:'svg'}} width="100" height=${"50"}></>`).to.eq('<svg width="100" height="50"></svg>'))
-        //
-        // test(`#25`, () => expectHTML(html` <${atom({tag:'svg'})}> `).to.eq(' <svg></svg> '))
-        // test(`#26`, () => expectHTML(html`<!-- ${atom('hello')} ${'world'} -->`).to.eq('<!-- hello world -->'))
+        // testParse(`<p${HOLE}>`, '<p>', [CHILD_NODE, 0, HOOK_ATTR])
+        // testParse(`<p ${HOLE} ${HOLE}>`, '<p>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
+        // testParse(`<p${HOLE} />`, '<p>', [CHILD_NODE, 0, HOOK_ATTR, PARENT_NODE])
+        // testParse(`<a />xyz<p${HOLE}a>`, '<a></a>xyz<p a>', [CHILD_NODE, 2, HOOK_ATTR])
+        // testParse(`<${HOLE} a=b>`, '<slot a=b>', [CHILD_NODE,0,HOOK_SLOT])
+        // testParse(`<b ${HOLE}=${HOLE}>`, '<b>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
+
+        test(`#00`, () => expectHTML(html`hello`).to.eq('hello'))
+        test(`#01`, () => expectHTML(html`<p>hello</p>`).to.eq('<p>hello</p>'))
+        test(`#02`, () => expectHTML(html` <my-tag></my-tag> `).to.eq(' <my-tag></my-tag> '))
+        test(`#03`, () => expectHTML(html`ciao<p>hello</p>salut`).to.eq('ciao<p>hello</p>salut'))
+        test(`#04`, () => expectHTML(html` \n <p> t t </p> \t `).to.eq(' \n <p> t t </p> \t '))
+        test(`#05`, () => expectHTML(html`<p>hello<p>world</p></p>`).to.eq('<p>hello<p>world</p></p>'))
+        test(`#06`, () => expectHTML(html`<div label="hello"/>`).to.eq('<div label="hello"></div>'))
+        test(`#07`, () => expectHTML(
+            html`<svg height="90" width="160"><line x1="0" y1="0" x2="160" y2="90" style="stroke:blue;stroke-width:4" /></svg>`
+        ).to.eq(
+            '<svg height="90" width="160"><line x1="0" y1="0" x2="160" y2="90" style="stroke:blue;stroke-width:4"></line></svg>'
+        ))
+        test(`#08`, () => expectHTML(html`hello ${null} world`).to.eq('hello <!----> world'))
+        test(`#09`, () => expectHTML(html`hello ${' '} world`).to.eq('hello   world'))
+        test(`#10`, () => expectHTML(html`${1}<p>${[1, BigInt(2), ' ']}</p>${true}`).to.eq('1<p>12 </p>'))
+        test(`#11`, () => expectHTML(html`<!-- <hello> -->`).to.eq('<!-- <hello> -->'))
+        test(`#12`, () => expectHTML(html`<!- > -->`).to.eq('<!--- --> --&gt;'))
+        test(`#13`, () => expectHTML(html`<p a></p>`).to.eq('<p a=""></p>'))
+        test(`#14`, () => expectHTML(html`<p a=b></p>`).to.eq('<p a="b"></p>'))
+        test(`#15`, () => expectHTML(html`<p a='b > d'></p>`).to.eq('<p a="b > d"></p>'))
+
+        test(`#16`, () => expectHTML(html`<p a=${'b'}><a b=${2} c=${true}></a></p>`).to.eq('<p a="b"><a b="2" c=""></a></p>'))
+        test(`#17`, () => expectHTML(html`<p fn=${function (node) {
+            expect(this).to.eq(scope)
+            expect(node.tagName).to.eq('P')
+            return "ok"
+        }}></p>`).to.eq('<p fn="ok"></p>'))
+        test(`#18`, () => expectHTML(html`<p a${{b: 'c'}}></p>`).to.eq('<p a="" b="c"></p>'))
+        test(`#19`, () => expectHTML(html`<p a="abc${'def'}ghi${'   '}jkl"></p>`).to.eq('<p a="abcdefghi   jkl"></p>'))
+        test(`#20`, () => expectHTML(html`<!-- ${'one'} ${2} -->`).to.eq('<!-- one 2 -->'))
+        test(`#21`, () => expectHTML(html` <p>${function (node) {
+            expect(this).to.eq(scope)
+            expect(node.tagName).to.eq('P')
+            return "hello"
+        }}</p> `).to.eq(' <p>hello</p> '))
+        test(`#22`, () => expectHTML(html` <img> `).to.eq(' <img> '))
+
+        test(`#23`, () => expectHTML(html` <${function (context) {
+            expect(this).to.eq(scope)
+            const {a, b, c} = context
+            expect(a).to.eq('1')
+            expect(b).to.eq(2)
+            expect(c).to.eq(3)
+            expect(context.nodeName).to.eq('#document-fragment')
+            return {tag:'img', attrs: {src:'about:blank'}}
+        }} a="1" b=${2} c="${3}">hello <p>world</p>${'!'}</>`).to.eq(' <img src="about:blank"> '))
+        return;
+        test(`#24`, () => expectHTML(html`hello ${atom('world')}`).to.eq('hello world'))
+        test(`#25`, () => expectHTML(html`${['I',[2.1,2.2,2.3],'X',[4.1,4.2,4.3],'V']}`).to.eq('I2.12.22.3X4.14.24.3V'))
+        test(`#26`, () => expectHTML(html`hello ${html`world`}`).to.eq('hello world'))
+        test(`#27`, () => expectHTML(html`hello ${html`${atom('world')}`}`).to.eq('hello world'))
+        test(`#28`, () => expectHTML(html`<${{tag:'svg'}} width="100" height=${"50"}></>`).to.eq('<svg width="100" height="50"></svg>'))
+
+        test(`#29`, () => expectHTML(html` <${atom({tag:'svg'})}> `).to.eq(' <svg></svg> '))
+        test(`#30`, () => expectHTML(html`<!-- ${atom('hello')} ${'world'} -->`).to.eq('<!-- hello world -->'))
     })
 
     mocha.run()
