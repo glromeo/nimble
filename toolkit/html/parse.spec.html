@@ -16,8 +16,7 @@
 <script type="module">
     import {WebConsole} from '../test/web-console.mjs'
     import {atom, molecule} from '../atoms/atoms.mjs'
-    import {HOLE, parseHTML, html} from '../html/phoenix.mjs'
-    import { CHILD_NODE, HOOK_ATTR, HOOK_NODE, HOOK_SLOT, PARENT_NODE } from "./phoenix.mjs";
+    import {parseHTML, html, HOLE, CHILD_NODE, HOOK_ATTR, HOOK_NODE, PARENT_NODE} from './html.mjs'
 
     mocha.setup('tdd')
     mocha.checkLeaks()
@@ -120,64 +119,69 @@
             })
         }
 
-        // testParse('', SAME)
-        // testParse(' ', SAME)
-        // testParse(' <', SAME)
-        // testParse(' < ', SAME)
-        // testParse(' <>', ' ')
-        // testParse(' <a', SAME)
-        // testParse(' <a ', SAME)
-        // testParse(' <svg ', SAME)
-        // testParse(' <a>', SAME)
-        // testParse(' <svg>', SAME)
-        // testParse('<a>', SAME)
-        // testParse('<svg>', SAME)
-        // testParse('<p>hello</p>', SAME)
-        // testParse('</>', SAME)
-        // testParse('< />', SAME)
-        // testParse('<a/>', SAME)
-        // testParse('<a />', SAME)
-        // testParse('<a / >', SAME)
-        // testParse('<a //>', SAME)
-        // testParse('<a u>', SAME)
-        // testParse('<a =u>', Error`Failed to execute 'setAttribute' on 'Element': '=u' is not a valid attribute name.`, [])
-        // testParse('<a u/>', SAME)
-        // testParse('<a u=1>', SAME)
-        // testParse('<a u="2">', SAME)
-        // testParse(`<a u='3'>`, SAME)
-        // testParse(`<a "b c"=d>`, Error`Failed to execute 'setAttribute' on 'Element': '"b' is not a valid attribute name.`, [])
-        // testParse(`<a u='3' f="g"/>`, SAME)
-        // testParse(`<img>`, SAME)
-        // testParse(`  pre  <p><img></p>  post  `, SAME)
-        // testParse(`<!>`, SAME)
-        // testParse(`<!->`, SAME)
-        // testParse(`<!-->`, SAME)
-        // testParse(`<!--->`, SAME)
-        // testParse(`<!---->`, SAME)
-        // testParse(`<!-->-->`, SAME)
-        // testParse(`<!-- > -->`, SAME)
-        // testParse(`<!-- -> -->`, SAME)
-        // testParse(`<!-- --> -->`, SAME)
-        // testParse(` <!--no comment--> `, SAME)
-        // testParse(`${HOLE}`, dom`#`, [HOOK_NODE,0])
-        // testParse(`x${HOLE}y`, dom`@${dom`#x`}${dom`#`}${dom`#y`}`, [HOOK_NODE, 1])
-        // testParse(`<${HOLE}>`, '', [HOOK_TAG, 0])
-        // testParse(`<p${HOLE}>`, '<p>', [CHILD_NODE, 0, HOOK_ATTR])
-        // testParse(`<p ${HOLE} ${HOLE}>`, '<p>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
-        // testParse(`<p${HOLE} />`, '<p>', [CHILD_NODE, 0, HOOK_ATTR, PARENT_NODE])
-        // testParse(`<a />xyz<p${HOLE}a>`, '<a></a>xyz<p a>', [CHILD_NODE, 2, HOOK_ATTR])
-        // testParse(`<${HOLE} a=b>`, '<slot a=b>', [CHILD_NODE,0,HOOK_SLOT])
-        // testParse(`<b ${HOLE}=${HOLE}>`, '<b>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
+        testParse('', SAME)
+        testParse(' ', SAME)
+        testParse(' <', SAME)
+        testParse(' < ', SAME)
+        testParse(' <>', ' <slot>')
+        testParse(' <a', SAME)
+        testParse(' <a ', SAME)
+        testParse(' <svg ', SAME)
+        testParse(' <a>', SAME)
+        testParse(' <svg>', SAME)
+        testParse('<a>', SAME)
+        testParse('<svg>', SAME)
+        testParse('<p>hello</p>', SAME)
+        testParse('</>', SAME)
+        testParse('< />', SAME)
+        testParse('<a/>', SAME)
+        testParse('<a />', SAME)
+        testParse('<a / >', SAME)
+        testParse('<a //>', SAME)
+        testParse('<a u>', SAME)
+        testParse('<a =u>', Error`Failed to execute 'setAttribute' on 'Element': '=u' is not a valid attribute name.`, [])
+        testParse('<a u/>', SAME)
+        testParse('<a u=1>', SAME)
+        testParse('<a u="2">', SAME)
+        testParse(`<a u='3'>`, SAME)
+        testParse(`<a "b c"=d>`, Error`Failed to execute 'setAttribute' on 'Element': '"b' is not a valid attribute name.`, [])
+        testParse(`<a u='3' f="g"/>`, SAME)
+        testParse(`<img>`, SAME)
+        testParse(`  pre  <p><img></p>  post  `, SAME)
+        testParse(`<!>`, SAME)
+        testParse(`<!->`, SAME)
+        testParse(`<!-->`, SAME)
+        testParse(`<!--->`, SAME)
+        testParse(`<!---->`, SAME)
+        testParse(`<!-->-->`, SAME)
+        testParse(`<!-- > -->`, SAME)
+        testParse(`<!-- -> -->`, SAME)
+        testParse(`<!-- --> -->`, SAME)
+        testParse(` <!--no comment--> `, SAME)
+        testParse(`${HOLE}`, dom`#`, [HOOK_NODE, 0])
+        testParse(`x${HOLE}y`, dom`@${dom`#x`}${dom`#`}${dom`#y`}`, [HOOK_NODE, 1])
+        testParse(`<${HOLE}>`, '', [HOOK_NODE, 0])
+        testParse(`<p${HOLE}>`, '<p>', [CHILD_NODE, 0, HOOK_ATTR])
+        testParse(`<p ${HOLE} ${HOLE}>`, '<p>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
+        testParse(`<p${HOLE} />`, '<p>', [CHILD_NODE, 0, HOOK_ATTR, PARENT_NODE])
+        testParse(`<a />xyz<p${HOLE}a>`, '<a></a>xyz<p a>', [CHILD_NODE, 2, HOOK_ATTR])
+        testParse(`<${HOLE} a=b>`, '<slot a=b>', [CHILD_NODE, 0, HOOK_NODE])
+        testParse(`<b ${HOLE}=${HOLE}>`, '<b>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
 
         test(`#00`, () => expectHTML(html`hello`).to.eq('hello'))
         test(`#01`, () => expectHTML(html`<p>hello</p>`).to.eq('<p>hello</p>'))
-        test(`#02`, () => expectHTML(html` <my-tag></my-tag> `).to.eq(' <my-tag></my-tag> '))
+        test(`#02`, () => expectHTML(html`
+            <my-tag></my-tag> `).to.eq(' <my-tag></my-tag> '))
         test(`#03`, () => expectHTML(html`ciao<p>hello</p>salut`).to.eq('ciao<p>hello</p>salut'))
-        test(`#04`, () => expectHTML(html` \n <p> t t </p> \t `).to.eq(' \n <p> t t </p> \t '))
+        test(`#04`, () => expectHTML(html`<p> t t </p>`).to.eq(' \n <p> t t </p> \t '))
         test(`#05`, () => expectHTML(html`<p>hello<p>world</p></p>`).to.eq('<p>hello<p>world</p></p>'))
-        test(`#06`, () => expectHTML(html`<div label="hello"/>`).to.eq('<div label="hello"></div>'))
+        test(`#06`, () => expectHTML(html`
+            <div label="hello"/>`).to.eq('<div label="hello"></div>'))
         test(`#07`, () => expectHTML(
-            html`<svg height="90" width="160"><line x1="0" y1="0" x2="160" y2="90" style="stroke:blue;stroke-width:4" /></svg>`
+            html`
+                <svg height="90" width="160">
+                    <line x1="0" y1="0" x2="160" y2="90" style="stroke:blue;stroke-width:4"/>
+                </svg>`
         ).to.eq(
             '<svg height="90" width="160"><line x1="0" y1="0" x2="160" y2="90" style="stroke:blue;stroke-width:4"></line></svg>'
         ))
@@ -189,12 +193,12 @@
         test(`#13`, () => expectHTML(html`<p a></p>`).to.eq('<p a=""></p>'))
         test(`#14`, () => expectHTML(html`<p a=b></p>`).to.eq('<p a="b"></p>'))
         test(`#15`, () => expectHTML(html`<p a='b > d'></p>`).to.eq('<p a="b > d"></p>'))
-
-        test(`#16`, () => expectHTML(html`<p a=${'b'}><a b=${2} c=${true}></a></p>`).to.eq('<p a="b"><a b="2" c=""></a></p>'))
+        test(`#16`, () => expectHTML(html`<p a=${'b'}><a b=${2} c=${true}></a>
+        </p>`).to.eq('<p a="b"><a b="2" c=""></a></p>'))
         test(`#17`, () => expectHTML(html`<p fn=${function (node) {
             expect(this).to.eq(scope)
             expect(node.tagName).to.eq('P')
-            return "ok"
+            return 'ok'
         }}></p>`).to.eq('<p fn="ok"></p>'))
         test(`#18`, () => expectHTML(html`<p a${{b: 'c'}}></p>`).to.eq('<p a="" b="c"></p>'))
         test(`#19`, () => expectHTML(html`<p a="abc${'def'}ghi${'   '}jkl"></p>`).to.eq('<p a="abcdefghi   jkl"></p>'))
@@ -202,27 +206,30 @@
         test(`#21`, () => expectHTML(html` <p>${function (node) {
             expect(this).to.eq(scope)
             expect(node.tagName).to.eq('P')
-            return "hello"
+            return 'hello'
         }}</p> `).to.eq(' <p>hello</p> '))
         test(`#22`, () => expectHTML(html` <img> `).to.eq(' <img> '))
 
-        test(`#23`, () => expectHTML(html` <${function (context) {
-            expect(this).to.eq(scope)
-            const {a, b, c} = context
-            expect(a).to.eq('1')
-            expect(b).to.eq(2)
-            expect(c).to.eq(3)
-            expect(context.nodeName).to.eq('#document-fragment')
-            return {tag:'img', attrs: {src:'about:blank'}}
-        }} a="1" b=${2} c="${3}">hello <p>world</p>${'!'}</>`).to.eq(' <img src="about:blank"> '))
-        return;
+        test(`#23`, () => expectHTML(html`
+            <${function (slot) {
+                expect(this).to.eq(scope)
+                const {a, b, c} = slot.attributes
+                expect(a).to.eq('1')
+                expect(b).to.eq(HOLE)
+                expect(slot.tagName).to.eq('SLOT')
+                return {tag: 'img', attrs: {class: 'red', style: 'display: block', src: 'about:blank'}}
+            }} a="1" b=${2} c="${3}">hello <p>world</p>${'!'}
+            </>`).to.eq(' <img a="1" b="2" c="3" src="about:blank"> '))
+
         test(`#24`, () => expectHTML(html`hello ${atom('world')}`).to.eq('hello world'))
-        test(`#25`, () => expectHTML(html`${['I',[2.1,2.2,2.3],'X',[4.1,4.2,4.3],'V']}`).to.eq('I2.12.22.3X4.14.24.3V'))
+        test(`#25`, () => expectHTML(html`${['I', [2.1, 2.2, 2.3], 'X', [4.1, 4.2, 4.3], 'V']}`).to.eq('I2.12.22.3X4.14.24.3V'))
         test(`#26`, () => expectHTML(html`hello ${html`world`}`).to.eq('hello world'))
         test(`#27`, () => expectHTML(html`hello ${html`${atom('world')}`}`).to.eq('hello world'))
-        test(`#28`, () => expectHTML(html`<${{tag:'svg'}} width="100" height=${"50"}></>`).to.eq('<svg width="100" height="50"></svg>'))
+        test(`#28`, () => expectHTML(html`
+            <${{tag: 'svg'}} width="100" height=${'50'}></>`).to.eq('<svg width="100" height="50"></svg>'))
 
-        test(`#29`, () => expectHTML(html` <${atom({tag:'svg'})}> `).to.eq(' <svg></svg> '))
+        test(`#29`, () => expectHTML(html`
+            <${atom({tag: 'svg'})}> `).to.eq(' <svg></svg> '))
         test(`#30`, () => expectHTML(html`<!-- ${atom('hello')} ${'world'} -->`).to.eq('<!-- hello world -->'))
     })
 

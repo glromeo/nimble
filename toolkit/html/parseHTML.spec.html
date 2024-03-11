@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>parseHTML spec</title>
+</head>
+<body>
+<div id="root"></div>
+<script src="../../node_modules/chai/chai.js"></script>
+<script src="../../node_modules/mocha/mocha.js"></script>
+<script type="module">
+    import {parseHTML, HOLE, CHILD_NODE, HOOK_ATTR, HOOK_NODE, PARENT_NODE} from './parseHTML.mjs'
+    import {WebConsole} from '../test/web-console.mjs'
+
+    mocha.setup('tdd')
+    mocha.checkLeaks()
+    mocha.reporter(WebConsole)
+
+    const {expect} = chai
+
+    function snapshot(root) {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_ALL)
+        let node, text = ''
+        while (node = walker.nextNode()) {
+            if (node.tagName) {
+                text += `<${node.tagName}`
+                if (node.attributes) for (const {name, value} of node.attributes) {
+                    text += ` ${name}=${value}`
+                }
+                text += '>'
+            } else {
+                text += `[${node.data}]`
+            }
+            if (node.nextSibling === null && node.parentNode !== root) {
+                text += '</>'
+            }
+        }
+        return text
+    }
+
+    function dom(strings) {
+        const text = strings.join(HOLE)
+        const hasChild = text.endsWith(' \x01')
+        switch (text[0]) {
+            case '#':
+                let data = text.slice(1)
+                if (hasChild) {
+                    data += arguments[arguments.length - 1]
+                }
+                return document.createTextNode(data)
+            case '@':
+                const fragment = document.createDocumentFragment()
+                for (let i = 1; i < arguments.length; i++) {
+                    fragment.appendChild(arguments[i])
+                }
+                return fragment
+            default:
+                const parts = (hasChild ? text.slice(0, -2) : text).split(' ')
+                const el = document.createElement(parts[0])
+                for (let i = 1, argIndex = 0; i < parts.length; i++) {
+                    const [attrName, attrValue] = parts[i].split('=')
+                    el.setAttribute(attrName, attrValue === HOLE ? arguments[++argIndex] : attrValue)
+                }
+                if (hasChild) {
+                    const child = arguments[arguments.length - 1]
+                    if (typeof child === 'string') {
+                        el.innerHTML = child
+                    } else {
+                        el.appendChild(child)
+                    }
+                }
+                return el
+        }
+    }
+
+    suite('text nodes', () => {
+
+        const testCase = (id, input, expected, HOOKS) => {
+            test(`#${id}: '${input}'`, () => {
+                try {
+                    const [fragment, ...hooks] = parseHTML(input)
+                    const actual = snapshot(dom`div ${fragment}`)
+                    expect(actual).to.eq(expected)
+                    expect(JSON.stringify(hooks)).to.eq(JSON.stringify(HOOKS))
+                } catch (error) {
+                    if (expected instanceof Error) {
+                        expect(error.message).to.eq(expected.message)
+                    } else {
+                        throw error
+                    }
+                }
+            })
+        }
+
+        const SAME = null
+
+        testCase('00', '', '', [])
+        testCase('01', ' ', '[ ]', [])
+        testCase('02', ' <', '[ <]', [])
+        testCase('03', ' < ', '[ < ]', [])
+        testCase('04', ' <>', '[ ]<SLOT>', [CHILD_NODE, 1])
+        testCase('05', ' <a', '[ ]', [])
+        testCase('06', ' <a ', '[ ]', [])
+        testCase('07', ' <svg ', SAME, [CHILD_NODE, 1])
+        testCase('08', ' <a>', SAME, [CHILD_NODE, 1])
+        testCase('09', ' <svg>', SAME, [CHILD_NODE, 1])
+        testCase('10', '<a>', SAME, [CHILD_NODE, 0])
+        testCase('11', '<svg>', SAME, [CHILD_NODE, 0])
+        testCase('12', '<p>hello</p>', SAME, [])
+        testCase('13', '</>', SAME, [])
+        testCase('14', '< />', SAME, [])
+        testCase('15', '<a/>', SAME, [])
+        testCase('16', '<a />', SAME, [])
+        testCase('17', '<a / >', SAME, [])
+        testCase('18', '<a //>', SAME, [])
+        testCase('19', '<a u>', SAME, [])
+        testCase('20', '<a =u>', Error`Failed to execute 'setAttribute' on 'Element': '=u' is not a valid attribute name.`, [])
+        testCase('21', '<a u/>', SAME, [])
+        testCase('22', '<a u=1>', SAME, [])
+        testCase('23', '<a u="2">', SAME, [])
+        testCase('24', `<a u='3'>`, SAME, [])
+        testCase('25', `<a "b c"=d>`, Error`Failed to execute 'setAttribute' on 'Element': '"b' is not a valid attribute name.`, [])
+        testCase('26', `<a u='3' f="g"/>`, SAME, [])
+        testCase('27', `<img>`, SAME, [])
+        testCase('28', `  pre  <p><img></p>  post  `, SAME, [])
+        testCase('29', `<!>`, SAME, [])
+        testCase('30', `<!->`, SAME, [])
+        testCase('31', `<!-->`, SAME, [])
+        testCase('32', `<!--->`, SAME, [])
+        testCase('33', `<!---->`, SAME, [])
+        testCase('34', `<!-->-->`, SAME, [])
+        testCase('35', `<!-- > -->`, SAME, [])
+        testCase('36', `<!-- -> -->`, SAME, [])
+        testCase('37', `<!-- --> -->`, SAME, [])
+        testCase('38', ` <!--no comment--> `, SAME, [])
+        testCase('39', `${HOLE}`, dom`#`, [HOOK_NODE, 0])
+        testCase('40', `x${HOLE}y`, dom`@${dom`#x`}${dom`#`}${dom`#y`}`, [HOOK_NODE, 1])
+        testCase('41', `<${HOLE}>`, '', [HOOK_NODE, 0])
+        testCase('42', `<p${HOLE}>`, '<p>', [CHILD_NODE, 0, HOOK_ATTR])
+        testCase('43', `<p ${HOLE} ${HOLE}>`, '<p>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
+        testCase('44', `<p${HOLE} />`, '<p>', [CHILD_NODE, 0, HOOK_ATTR, PARENT_NODE])
+        testCase('45', `<a />xyz<p${HOLE}a>`, '<a></a>xyz<p a>', [CHILD_NODE, 2, HOOK_ATTR])
+        testCase('46', `<${HOLE} a=b>`, '<slot a=b>', [CHILD_NODE, 0, HOOK_NODE])
+        testCase('47', `<b ${HOLE}=${HOLE}>`, '<b>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
+    })
+
+    mocha.run()
+
+</script>
+</body>
+</html>
