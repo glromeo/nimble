@@ -349,6 +349,7 @@ export function parseHTML(html) {
         }
         if (state === WHITESPACE) {
             node.remove()
+            hooks.lenght = hooks.lastIndexOf(CHILD_NODE)
         }
     }
 
