@@ -9,7 +9,17 @@
 <script src="../../node_modules/chai/chai.js"></script>
 <script src="../../node_modules/mocha/mocha.js"></script>
 <script type="module">
-    import {parseHTML, HOLE, CHILD_NODE, HOOK_ATTR, HOOK_NODE, PARENT_NODE} from './parseHTML.mjs'
+    import {
+        parseHTML,
+        HOLE,
+        CHILD_NODE,
+        HOOK_ATTR,
+        HOOK_NODE,
+        PARENT_NODE,
+        HOOK_VALUE,
+        HOOK_QUOTE,
+        HOOK_COMMENT
+    } from './parseHTML.mjs'
     import {WebConsole} from '../test/web-console.mjs'
 
     mocha.setup('tdd')
@@ -25,14 +35,16 @@
             if (node.tagName) {
                 text += `<${node.tagName}`
                 if (node.attributes) for (const {name, value} of node.attributes) {
-                    text += ` ${name}=${value}`
+                    text += ` [${name}]=[${value}]`
                 }
-                text += '>'
+                text += node.childNodes.length ? '>' : '/>'
+            } else if (node.nodeType === 8) {
+                text += `{${node.data}}`
             } else {
                 text += `[${node.data}]`
             }
             if (node.nextSibling === null && node.parentNode !== root) {
-                text += '</>'
+                text += `<${node.parentNode.tagName}/>`
             }
         }
         return text
@@ -98,51 +110,55 @@
         testCase('01', ' ', '[ ]', [])
         testCase('02', ' <', '[ <]', [])
         testCase('03', ' < ', '[ < ]', [])
-        testCase('04', ' <>', '[ ]<SLOT>', [CHILD_NODE, 1])
+        testCase('04', ' <>', '[ ]<SLOT/>', [CHILD_NODE, 1])
         testCase('05', ' <a', '[ ]', [])
         testCase('06', ' <a ', '[ ]', [])
-        testCase('07', ' <svg ', '[ ]<svg>', [])
-        return
-        testCase('08', ' <a>', SAME, [CHILD_NODE, 1])
-        testCase('09', ' <svg>', SAME, [CHILD_NODE, 1])
-        testCase('10', '<a>', SAME, [CHILD_NODE, 0])
-        testCase('11', '<svg>', SAME, [CHILD_NODE, 0])
-        testCase('12', '<p>hello</p>', SAME, [])
-        testCase('13', '</>', SAME, [])
-        testCase('14', '< />', SAME, [])
-        testCase('15', '<a/>', SAME, [])
-        testCase('16', '<a />', SAME, [])
-        testCase('17', '<a / >', SAME, [])
-        testCase('18', '<a //>', SAME, [])
-        testCase('19', '<a u>', SAME, [])
+        testCase('07', ' <svg ', '[ ]', [])
+        testCase('08', ' <a>', '[ ]<A/>', [CHILD_NODE, 1])
+        testCase('09', ' <svg>', '[ ]<svg/>', [CHILD_NODE, 1])
+        testCase('10', '<a>', '<A/>', [CHILD_NODE, 0])
+        testCase('11', '<SVG>', '<svg/>', [CHILD_NODE, 0])
+        testCase('12', '<p>hello</p>', '<P>[hello]<P/>', [])
+        testCase('13', '</>', '', [PARENT_NODE])
+        testCase('14', '< />', '[< />]', [])
+        testCase('15', '<a/>', '<A/>', [])
+        testCase('16', '<a />', '<A/>', [])
+        testCase('17', '<a / >', '<A/>', [CHILD_NODE, 0])
+        testCase('18', '<a //>', '<A/>', [])
+        testCase('19', '<a u>', '<A [u]=[]/>', [CHILD_NODE, 0])
         testCase('20', '<a =u>', Error`Failed to execute 'setAttribute' on 'Element': '=u' is not a valid attribute name.`, [])
-        testCase('21', '<a u/>', SAME, [])
-        testCase('22', '<a u=1>', SAME, [])
-        testCase('23', '<a u="2">', SAME, [])
-        testCase('24', `<a u='3'>`, SAME, [])
+        testCase('21', '<a u/>', '<A [u]=[]/>', [])
+        testCase('22', '<a u=1>', '<A [u]=[1]/>', [CHILD_NODE, 0])
+        testCase('23', '<a u="2">', '<A [u]=[2]/>', [CHILD_NODE, 0])
+        testCase('24', `<a u='3'>`, '<A [u]=[3]/>', [CHILD_NODE, 0])
         testCase('25', `<a "b c"=d>`, Error`Failed to execute 'setAttribute' on 'Element': '"b' is not a valid attribute name.`, [])
-        testCase('26', `<a u='3' f="g"/>`, SAME, [])
-        testCase('27', `<img>`, SAME, [])
-        testCase('28', `  pre  <p><img></p>  post  `, SAME, [])
-        testCase('29', `<!>`, SAME, [])
-        testCase('30', `<!->`, SAME, [])
-        testCase('31', `<!-->`, SAME, [])
-        testCase('32', `<!--->`, SAME, [])
-        testCase('33', `<!---->`, SAME, [])
-        testCase('34', `<!-->-->`, SAME, [])
-        testCase('35', `<!-- > -->`, SAME, [])
-        testCase('36', `<!-- -> -->`, SAME, [])
-        testCase('37', `<!-- --> -->`, SAME, [])
-        testCase('38', ` <!--no comment--> `, SAME, [])
-        testCase('39', `${HOLE}`, dom`#`, [HOOK_NODE, 0])
-        testCase('40', `x${HOLE}y`, dom`@${dom`#x`}${dom`#`}${dom`#y`}`, [HOOK_NODE, 1])
-        testCase('41', `<${HOLE}>`, '', [HOOK_NODE, 0])
-        testCase('42', `<p${HOLE}>`, '<p>', [CHILD_NODE, 0, HOOK_ATTR])
-        testCase('43', `<p ${HOLE} ${HOLE}>`, '<p>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
-        testCase('44', `<p${HOLE} />`, '<p>', [CHILD_NODE, 0, HOOK_ATTR, PARENT_NODE])
-        testCase('45', `<a />xyz<p${HOLE}a>`, '<a></a>xyz<p a>', [CHILD_NODE, 2, HOOK_ATTR])
-        testCase('46', `<${HOLE} a=b>`, '<slot a=b>', [CHILD_NODE, 0, HOOK_NODE])
-        testCase('47', `<b ${HOLE}=${HOLE}>`, '<b>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
+        testCase('26', `<a u='3' f="g"/>`, '<A [u]=[3] [f]=[g]/>', [])
+        testCase('27', `<img>`, '<IMG/>', [])
+        testCase('28', `  pre  <p><img></p>  post  `, '[  pre  ]<P><IMG/><P/>[  post  ]', [])
+        testCase('29', `<!>`, '{}', [])
+        testCase('30', `<!->`, '{-}', [])
+        testCase('31', `<!-->`, '{}', [])
+        testCase('32', `<!--->`, '{}', [])
+        testCase('33', `<!---->`, '{}', [])
+        testCase('34', `<!-->-->`, '{}[-->]', [])
+        testCase('35', `<!-- > -->`, '{ > }', [])
+        testCase('36', `<!-- -> -->`, '{ -> }', [])
+        testCase('37', `<!-- --> -->`, '{ }[ -->]', [])
+        testCase('38', ` <!--no comment--> `, '[ ]{no comment}[ ]', [])
+        testCase('39', `${HOLE}`, '{}', [HOOK_NODE, 0])
+        testCase('40', `x${HOLE}y`, '[x]{}[y]', [HOOK_NODE, 1])
+        testCase('41', `<${HOLE}>`, '<SLOT/>', [HOOK_NODE, 0, CHILD_NODE, 0])
+        testCase('42', `<p${HOLE}>`, '<P/>', [CHILD_NODE, 0, HOOK_ATTR])
+        testCase('43', `<p ${HOLE} ${HOLE}>`, '<P/>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
+        testCase('44', `<p${HOLE} />`, '<P/>', [CHILD_NODE, 0, HOOK_ATTR, PARENT_NODE])
+        testCase('45', `<a />xyz<p${HOLE}a>`, '<A/>[xyz]<P [a]=[]/>', [CHILD_NODE, 2, HOOK_ATTR])
+        testCase('46', `<${HOLE} a=b>`, '<SLOT [a]=[b]/>', [HOOK_NODE, 0, CHILD_NODE, 0])
+        testCase('47', `<b ${HOLE}=${HOLE}>`, Error`Failed to execute 'setAttribute' on 'Element': '=' is not a valid attribute name.`, [])
+        testCase('48', `<b a=${HOLE}>`, '<B/>', [CHILD_NODE, 0, HOOK_VALUE, 'a'])
+        testCase('49', `<b a=b${HOLE}>`, '<B [a]=[b]/>', [CHILD_NODE, 0, HOOK_ATTR])
+        testCase('50', `<b a=b${HOLE}c d>`, '<B [a]=[b] [c]=[] [d]=[]/>', [CHILD_NODE, 0, HOOK_ATTR])
+        testCase('51', `<b a='b${HOLE}c'>`, '<B [a]=[b\x01c]/>', [CHILD_NODE, 0, HOOK_QUOTE, 'a'])
+        testCase('52', `<!-- ${HOLE} -->`, '{ \x01 }', [HOOK_COMMENT, 0])
     })
 
     mocha.run()

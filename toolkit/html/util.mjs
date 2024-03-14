@@ -1,14 +1,8 @@
-type HT = {
-    tag: string
-    attrs: Record<string, string>
-    children: (string | HT)[]
-}
-
-export function toHyperScript(node: Node): string | HT | ((string | HT)[]) {
+export function toHyperScript(node) {
     switch (node.nodeType) {
         case Node.ELEMENT_NODE: {
-            const {tagName, attributes, childNodes} = node as HTMLElement
-            const hso: HT = {
+            const {tagName, attributes, childNodes} = node
+            const hso = {
                 tag: tagName,
                 attrs: {},
                 children: []
@@ -19,9 +13,9 @@ export function toHyperScript(node: Node): string | HT | ((string | HT)[]) {
             for (const child of childNodes) {
                 const items = toHyperScript(child)
                 if (items.constructor === Array) {
-                    hso.children.push(...(items as (string | HT)[]))
+                    hso.children.push(...items)
                 } else {
-                    hso.children.push(items as string | HT)
+                    hso.children.push(items)
                 }
             }
             return hso
@@ -30,16 +24,16 @@ export function toHyperScript(node: Node): string | HT | ((string | HT)[]) {
         case Node.CDATA_SECTION_NODE:
         case Node.PROCESSING_INSTRUCTION_NODE:
         case Node.COMMENT_NODE:
-            return (node as Text).data
+            return node.data
         default: {
-            const {childNodes} = node as DocumentFragment
-            const hsa = [] as (string | HT)[]
+            const {childNodes} = node
+            const hsa = []
             for (const child of childNodes) {
                 const items = toHyperScript(child)
                 if (items.constructor === Array) {
-                    hsa.push(...(items as (string | HT)[]))
+                    hsa.push(...items)
                 } else {
-                    hsa.push(items as string | HT)
+                    hsa.push(items)
                 }
             }
             return hsa
@@ -47,9 +41,9 @@ export function toHyperScript(node: Node): string | HT | ((string | HT)[]) {
     }
 }
 
-export function AntIcon(module: any | {default: any}) {
+export function AntIcon(module) {
     const {icon, name, theme} = module.default ?? module
-    const get = ({tag, attrs, children}:HT) => ({
+    const get = ({tag, attrs, children}) => ({
         tag,
         attrs: {
             ...attrs,
@@ -59,8 +53,8 @@ export function AntIcon(module: any | {default: any}) {
         children
     })
     if (typeof icon === 'function') {
-        return (...args:any[]) => get(icon(...args)) as HT
+        return (...args) => get(icon(...args))
     } else {
-        return get(icon) as HT
+        return get(icon)
     }
 }

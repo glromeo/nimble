@@ -77,11 +77,11 @@ export function parseHTML(html) {
         if (end === start || !node.tagName || matchTagName()) {
             if (hooks[hooks.length - 2] === CHILD_NODE) {
                 hooks.length -= 2
-            } else {
+            } else if (node.parentNode) {
                 hooks.push(PARENT_NODE)
             }
         }
-        node = node.parentNode
+        node = node.parentNode ?? node
     }
 
     function appendText(end) {
@@ -153,9 +153,11 @@ export function parseHTML(html) {
                 state = TAG_NAME
                 continue
             case TAG_NAME:
-                if (ch === HOLE) {
+                if (isWhitespace(ch) || ch === HOLE) {
                     appendElement()
-                    hooks.push(HOOK_ATTR)
+                    if (ch === HOLE) {
+                        hooks.push(HOOK_ATTR)
+                    }
                     state = WHITESPACE
                     continue
                 }
@@ -172,11 +174,6 @@ export function parseHTML(html) {
                     }
                     start = end + 1
                     state = TEXT_NODE
-                    continue
-                }
-                if (isWhitespace(ch)) {
-                    appendElement()
-                    state = WHITESPACE
                 }
                 continue
             case COMMENT:
@@ -197,7 +194,6 @@ export function parseHTML(html) {
             case WHITESPACE:
                 if (ch === HOLE) {
                     hooks.push(HOOK_ATTR)
-                    state = WHITESPACE
                     continue
                 }
                 if (ch === '/') {
@@ -219,13 +215,15 @@ export function parseHTML(html) {
                 }
                 continue
             case ATTR_NAME:
-                if (ch === HOLE) {
+                if (isWhitespace(ch) || ch === HOLE) {
                     unaryAttr()
-                    hooks.push(HOOK_ATTR)
+                    if (ch === HOLE) {
+                        hooks.push(HOOK_ATTR)
+                    }
                     state = WHITESPACE
                     continue
                 }
-                if (ch === '=' || isWhitespace(ch)) {
+                if (ch === '=') {
                     name = html.slice(start, end)
                     state = ASSIGN
                     continue
@@ -294,7 +292,7 @@ export function parseHTML(html) {
                 continue
             case ATTR_VALUE:
                 if (ch === HOLE) {
-                    if (end - start === 1) {
+                    if (end === start) {
                         hooks.push(HOOK_VALUE, name)
                     } else {
                         setAttribute()
@@ -349,7 +347,7 @@ export function parseHTML(html) {
         }
         if (state === WHITESPACE) {
             node.remove()
-            hooks.lenght = hooks.lastIndexOf(CHILD_NODE)
+            hooks.length = hooks.lastIndexOf(CHILD_NODE)
         }
     }
 

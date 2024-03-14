@@ -1,6 +1,18 @@
 import {atom, atomTag} from '../atoms/atoms.mjs'
 
-import {SVG_NAMESPACE_URI} from './parseHTML.mjs'
+import {
+    CHILD_NODE,
+    HOLE,
+    HOOK_ATTR,
+    HOOK_COMMENT,
+    HOOK_NODE,
+    HOOK_QUOTE,
+    HOOK_VALUE,
+    PARENT_NODE,
+    parseHTML,
+    PLACEHOLDER_NODE,
+    SVG_NAMESPACE_URI
+} from './parseHTML.mjs'
 
 const CACHE = new WeakMap()
 
@@ -62,8 +74,6 @@ export function html(strings) {
         return scope => render(scope, args)
     }
 }
-
-const SIBLINGS = Symbol()
 
 function hookNode(scope, node, value) {
     const type = typeof value
