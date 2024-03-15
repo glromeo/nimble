@@ -29,22 +29,24 @@
     const {expect} = chai
 
     function snapshot(root) {
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_ALL)
-        let node, text = ''
-        while (node = walker.nextNode()) {
+        let text = ''
+        for (const node of root.childNodes) {
             if (node.tagName) {
                 text += `<${node.tagName}`
                 if (node.attributes) for (const {name, value} of node.attributes) {
                     text += ` [${name}]=[${value}]`
                 }
-                text += node.childNodes.length ? '>' : '/>'
+                if (node.childNodes.length) {
+                    text += '>'
+                    text += snapshot(node)
+                    text += `</${node.tagName}>`
+                } else {
+                    text += '/>'
+                }
             } else if (node.nodeType === 8) {
                 text += `{${node.data}}`
             } else {
                 text += `[${node.data}]`
-            }
-            if (node.nextSibling === null && node.parentNode !== root) {
-                text += `<${node.parentNode.tagName}/>`
             }
         }
         return text
@@ -118,8 +120,8 @@
         testCase('09', ' <svg>', '[ ]<svg/>', [CHILD_NODE, 1])
         testCase('10', '<a>', '<A/>', [CHILD_NODE, 0])
         testCase('11', '<SVG>', '<svg/>', [CHILD_NODE, 0])
-        testCase('12', '<p>hello</p>', '<P>[hello]<P/>', [])
-        testCase('13', '</>', '', [PARENT_NODE])
+        testCase('12', '<p>hello</p>', '<P>[hello]</P>', [])
+        testCase('13', '</>', '', [])
         testCase('14', '< />', '[< />]', [])
         testCase('15', '<a/>', '<A/>', [])
         testCase('16', '<a />', '<A/>', [])
@@ -134,7 +136,7 @@
         testCase('25', `<a "b c"=d>`, Error`Failed to execute 'setAttribute' on 'Element': '"b' is not a valid attribute name.`, [])
         testCase('26', `<a u='3' f="g"/>`, '<A [u]=[3] [f]=[g]/>', [])
         testCase('27', `<img>`, '<IMG/>', [])
-        testCase('28', `  pre  <p><img></p>  post  `, '[  pre  ]<P><IMG/><P/>[  post  ]', [])
+        testCase('28', `  pre  <p><img></p>  post  `, '[  pre  ]<P><IMG/></P>[  post  ]', [])
         testCase('29', `<!>`, '{}', [])
         testCase('30', `<!->`, '{-}', [])
         testCase('31', `<!-->`, '{}', [])
@@ -159,6 +161,8 @@
         testCase('50', `<b a=b${HOLE}c d>`, '<B [a]=[b] [c]=[] [d]=[]/>', [CHILD_NODE, 0, HOOK_ATTR])
         testCase('51', `<b a='b${HOLE}c'>`, '<B [a]=[b\x01c]/>', [CHILD_NODE, 0, HOOK_QUOTE, 'a'])
         testCase('52', `<!-- ${HOLE} -->`, '{ \x01 }', [HOOK_COMMENT, 0])
+        testCase('53', `<a><b>x</b></a>`, '<A><B>[x]</B></A>', [])
+        testCase('54', `<a><b>x${HOLE}</b></a>`, '<A><B>[x]{}</B></A>', [CHILD_NODE, 0, CHILD_NODE, 0, HOOK_NODE, 1, PARENT_NODE, PARENT_NODE])
     })
 
     mocha.run()

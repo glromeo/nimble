@@ -78,7 +78,7 @@ export function html(strings) {
 function hookNode(scope, node, value) {
     const type = typeof value
     if (type === 'function') {
-        hookNode(scope, node, value.call(scope, node.parentNode))
+        hookNode(scope, node, value.call(scope, node))
         return
     }
     if (type === 'object' && value !== null) {
@@ -199,7 +199,7 @@ function hookAttr(scope, node, value) {
     if (type === 'object' && value !== null) {
         if (value[atomTag]) {
             const atom = value
-            let names = Object.keys(value = store.get(atom))
+            let names = Object.keys(value = scope.get(atom))
             let pending
             const update = () => {
                 for (const name of names) {
@@ -218,7 +218,11 @@ function hookAttr(scope, node, value) {
         }
         for (const entry of value.entries?.() ?? Object.entries(value)) {
             const [name, value] = entry
-            hookValue(scope, node, name, value)
+            try {
+                hookValue(scope, node, name, value)
+            } catch(error) {
+                console.error(`Unable to hook attributes on node <${node.tagName}>.`, error.message)
+            }
         }
     }
     setAttr(scope, node, value)
