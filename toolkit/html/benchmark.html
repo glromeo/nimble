@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<script type="module">
+    import {molecule} from '../atoms/atoms.mjs'
+    import {html} from './html.mjs'
+    import {html2} from './html.alt.mjs'
+    import {parseHTML} from './parseHTML.mjs'
+    import {parseHtml} from './parseHtml.alt.mjs'
+
+    const fixture = (a, b, c) => `
+        <body>
+            <!-- This is a comment -->
+            <div id="container" class="main-container">
+                <header>
+                    <h1 line="${a}">Welcome</h1>
+                    <nav>
+                        <ul>
+                            <li><a href="#" title="Home">Home</a></li>
+                            <li><a href="#" title="About">About</a></li>
+                            <li><a href="#" title="Contact">Contact ${b}</a></li>
+                        </ul>
+                    </nav>
+                </header>
+                <!-- End of header -->
+                <section version=${c}>
+                    <article>
+                        <h2>Article Title</h2>
+                        <p>This is a sample article.</p>
+                        <footer>
+                            <p>Published on: <time datetime="2024-03-17">March 17, 2024</time></p>
+                        </footer>
+                    </article>
+                </section>
+            </div>
+        </body>
+    `
+
+    const scope = molecule()
+
+    console.time("old render time")
+    for (let i = 0; i < 1000; i++) try {
+        html`
+            <body>
+            <!-- This is a comment -->
+            <div id="container" class="main-container">
+                <header>
+                    <h1 line="${Math.random()*1000}">Welcome</h1>
+                    <nav>
+                        <ul>
+                            <li><a href="#" title="Home">Home</a></li>
+                            <li><a href="#" title="About">About</a></li>
+                            <li><a href="#" title="Contact">Contact ${`${i}`}</a></li>
+                        </ul>
+                    </nav>
+                </header>
+                <!-- End of header -->
+                <section version=${Math.random()*1000}>
+                    <article>
+                        <h2>Article Title</h2>
+                        <p>This is a sample article.</p>
+                        <footer>
+                            <p>Published on: <time datetime="2024-03-17">March 17, 2024</time></p>
+                        </footer>
+                    </article>
+                </section>
+            </div>
+            </body>
+        `(scope)
+    } catch(error) {
+        console.error(error)
+        i = Number.MAX_SAFE_INTEGER
+    }
+    console.timeEnd("old render time")
+
+    console.time("new render time")
+    for (let i = 0; i < 1000; i++) try {
+        html2`
+            <body>
+            <!-- This is a comment -->
+            <div id="container" class="main-container">
+                <header>
+                    <h1 line="${Math.random()*1000}">Welcome</h1>
+                    <nav>
+                        <ul>
+                            <li><a href="#" title="Home">Home</a></li>
+                            <li><a href="#" title="About">About</a></li>
+                            <li><a href="#" title="Contact">Contact ${`${i}`}</a></li>
+                        </ul>
+                    </nav>
+                </header>
+                <!-- End of header -->
+                <section version=${Math.random()*1000}>
+                    <article>
+                        <h2>Article Title</h2>
+                        <p>This is a sample article.</p>
+                        <footer>
+                            <p>Published on: <time datetime="2024-03-17">March 17, 2024</time></p>
+                        </footer>
+                    </article>
+                </section>
+            </div>
+            </body>
+        `(scope)
+    } catch(error) {
+        console.error(error)
+        i = Number.MAX_SAFE_INTEGER
+    }
+    console.timeEnd("new render time")
+
+    console.time("old parse time")
+    for (let i = 0; i < 1000; i++) try {
+        parseHTML(fixture(Math.random()*1000,Math.random()*1000,Math.random()*1000))
+    } catch(error) {
+        console.error(error)
+        i = Number.MAX_SAFE_INTEGER
+    }
+    console.timeEnd("old parse time")
+
+    console.time("new parse time")
+    for (let i = 0; i < 1000; i++) try {
+        parseHtml(fixture(Math.random()*1000,Math.random()*1000,Math.random()*1000))
+    } catch(error) {
+        console.error(error)
+        i = Number.MAX_SAFE_INTEGER
+    }
+    console.timeEnd("new parse time")
+
+</script>
+</body>
+</html>
