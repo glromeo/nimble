@@ -8,9 +8,8 @@
 <script type="module">
     import {molecule} from '../atoms/atoms.mjs'
     import {html} from './html.mjs'
-    import {html2} from './html.alt.mjs'
+    import {html as preactHtml, render} from 'https://unpkg.com/htm/preact/standalone.module.js'
     import {parseHTML} from './parseHTML.mjs'
-    import {parseHtml} from './parseHtml.alt.mjs'
 
     const fixture = (a, b, c) => `
         <body>
@@ -42,93 +41,99 @@
 
     const scope = molecule()
 
-    console.time("old render time")
-    for (let i = 0; i < 1000; i++) try {
-        html`
-            <body>
-            <!-- This is a comment -->
-            <div id="container" class="main-container">
+    setTimeout(() => requestAnimationFrame(() => {
+        console.time('parse time')
+        for (let i = 0; i < 1000; i++) try {
+            parseHTML(fixture(Math.random() * 1000, Math.random() * 1000, Math.random() * 1000))
+        } catch (error) {
+            console.error(error)
+            i = Number.MAX_SAFE_INTEGER
+        }
+        console.timeEnd('parse time')
+    }), 0)
+
+    setTimeout(() => requestAnimationFrame(() => {
+        console.time('preact render time')
+        for (let i = 0; i < 350; i++) try {
+            render(preactHtml`
+                <body line="${Math.random() * 1000}">
+                <!-- This is a comment ${`${i}`} -->
+                ${`${i}`}
+                <div id="container" class="main-container" line="${Math.random() * 1000}">
+                    <header>
+                        <h1 line="${Math.random() * 1000}">Welcome ${`${i}`}</h1>
+                        <nav>
+                            <ul line="${Math.random() * 1000}">
+                                <li line="${Math.random() * 1000}"><a href="#" title="Home">Home ${`${i}`}</a></li>
+                                <li line="${Math.random() * 1000}"><a href="#" title="About">About</a>${`${i}`}</li>
+                                <li line="${Math.random() * 1000}"><a href="#" title="Contact">Contact ${`${i}`}</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    </header>
+                    <!-- End of header -->
+                    <section version=${Math.random() * 1000}>
+                        <article>
+                            <h2 line="${Math.random() * 1000}">Article Title ${`${i}`}</h2>
+                            <p line="${Math.random() * 1000}">This is a sample article. ${`${i}`}</p>
+                            <footer line="${Math.random() * 1000}">
+                                <p line="${Math.random() * 1000}">Published on:
+                                    <time datetime="2024-03-17">March 17, 2024</time>
+                                </p>
+                            </footer>
+                        </article>
+                    </section>
+                </div>
+                ${`${i}`}
+                ${`${i}`}
+                </body>
+            `, document.createDocumentFragment())
+        } catch (error) {
+            console.error(error)
+            i = Number.MAX_SAFE_INTEGER
+        }
+        console.timeEnd('preact render time')
+    }), 1000)
+
+    setTimeout(() => requestAnimationFrame(() => {
+        console.time('html render time')
+        for (let i = 0; i < 350; i++) try {
+            html`
+            <body line="${Math.random() * 1000}">
+            <!-- This is a comment ${`${i}`} -->
+            ${`${i}`}
+            <div id="container" class="main-container" line="${Math.random() * 1000}">
                 <header>
-                    <h1 line="${Math.random()*1000}">Welcome</h1>
+                    <h1 line="${Math.random() * 1000}">Welcome ${`${i}`}</h1>
                     <nav>
-                        <ul>
-                            <li><a href="#" title="Home">Home</a></li>
-                            <li><a href="#" title="About">About</a></li>
-                            <li><a href="#" title="Contact">Contact ${`${i}`}</a></li>
+                        <ul line="${Math.random() * 1000}">
+                            <li line="${Math.random() * 1000}"><a href="#" title="Home">Home ${`${i}`}</a></li>
+                            <li line="${Math.random() * 1000}"><a href="#" title="About">About</a>${`${i}`}</li>
+                            <li line="${Math.random() * 1000}"><a href="#" title="Contact">Contact ${`${i}`}</a></li>
                         </ul>
                     </nav>
                 </header>
                 <!-- End of header -->
-                <section version=${Math.random()*1000}>
+                <section version=${Math.random() * 1000}>
                     <article>
-                        <h2>Article Title</h2>
-                        <p>This is a sample article.</p>
-                        <footer>
-                            <p>Published on: <time datetime="2024-03-17">March 17, 2024</time></p>
+                        <h2 line="${Math.random() * 1000}">Article Title ${`${i}`}</h2>
+                        <p line="${Math.random() * 1000}">This is a sample article. ${`${i}`}</p>
+                        <footer line="${Math.random() * 1000}">
+                            <p line="${Math.random() * 1000}">Published on: <time datetime="2024-03-17">March 17, 2024</time></p>
                         </footer>
                     </article>
                 </section>
             </div>
+            ${`${i}`}
+            ${`${i}`}
             </body>
         `(scope)
-    } catch(error) {
-        console.error(error)
-        i = Number.MAX_SAFE_INTEGER
-    }
-    console.timeEnd("old render time")
-
-    console.time("new render time")
-    for (let i = 0; i < 1000; i++) try {
-        html2`
-            <body>
-            <!-- This is a comment -->
-            <div id="container" class="main-container">
-                <header>
-                    <h1 line="${Math.random()*1000}">Welcome</h1>
-                    <nav>
-                        <ul>
-                            <li><a href="#" title="Home">Home</a></li>
-                            <li><a href="#" title="About">About</a></li>
-                            <li><a href="#" title="Contact">Contact ${`${i}`}</a></li>
-                        </ul>
-                    </nav>
-                </header>
-                <!-- End of header -->
-                <section version=${Math.random()*1000}>
-                    <article>
-                        <h2>Article Title</h2>
-                        <p>This is a sample article.</p>
-                        <footer>
-                            <p>Published on: <time datetime="2024-03-17">March 17, 2024</time></p>
-                        </footer>
-                    </article>
-                </section>
-            </div>
-            </body>
-        `(scope)
-    } catch(error) {
-        console.error(error)
-        i = Number.MAX_SAFE_INTEGER
-    }
-    console.timeEnd("new render time")
-
-    console.time("old parse time")
-    for (let i = 0; i < 1000; i++) try {
-        parseHTML(fixture(Math.random()*1000,Math.random()*1000,Math.random()*1000))
-    } catch(error) {
-        console.error(error)
-        i = Number.MAX_SAFE_INTEGER
-    }
-    console.timeEnd("old parse time")
-
-    console.time("new parse time")
-    for (let i = 0; i < 1000; i++) try {
-        parseHtml(fixture(Math.random()*1000,Math.random()*1000,Math.random()*1000))
-    } catch(error) {
-        console.error(error)
-        i = Number.MAX_SAFE_INTEGER
-    }
-    console.timeEnd("new parse time")
+        } catch (error) {
+            console.error(error)
+            i = Number.MAX_SAFE_INTEGER
+        }
+        console.timeEnd('html render time')
+    }), 2000)
 
 </script>
 </body>

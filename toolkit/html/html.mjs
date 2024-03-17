@@ -1,17 +1,24 @@
 import {atom, atomTag} from '../atoms/atoms.mjs'
 
+export const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
+export const XHTML_NAMESPACE_URI = 'http://www.w3.org/1999/xhtml'
+export const PLACEHOLDER_NODE = document.createComment('')
+
 import {
-    CHILD_NODE,
     HOLE,
-    HOOK_ATTR,
-    HOOK_COMMENT,
-    HOOK_NODE,
-    HOOK_QUOTE,
-    HOOK_VALUE,
+    APPEND_TEXT,
+    APPEND_COMMENT,
+    APPEND_CHILD,
+    BOOL_ATTR,
+    SET_ATTR,
     PARENT_NODE,
-    parseHTML,
-    PLACEHOLDER_NODE,
-    SVG_NAMESPACE_URI
+    HOOK_NODE,
+    HOOK_ELEMENT,
+    HOOK_COMMENT,
+    HOOK_ATTR,
+    HOOK_VALUE,
+    HOOK_QUOTE,
+    parseHTML
 } from './parseHTML.mjs'
 
 const CACHE = new WeakMap()
@@ -19,60 +26,74 @@ const CACHE = new WeakMap()
 const slice = Array.prototype.slice
 
 export function html(strings) {
-    if (!strings) {
-        return null
-    }
-    if (!strings.raw) {
-        const scope = strings
-        return function () {
-            return html.apply(scope, arguments)
-        }
-    }
     let render = CACHE.get(strings)
     if (render === undefined) {
-        const queue = parseHTML(strings.join(HOLE))
-        CACHE.set(strings, render = (scope, args) => {
-            const fragment = queue[0].cloneNode(true)
-            let node = fragment
-            let a = 1
-            for (let q = 1; q < queue.length; ++q) switch (queue[q]) {
-                case CHILD_NODE:
-                    node = node.childNodes[queue[++q]]
+        const [commands, args] = parseHTML(strings.join(HOLE))
+        CACHE.set(strings, render = (scope, vars) => {
+            const fragment = document.createDocumentFragment()
+            let node = fragment, tagName
+            for (let c = 0, a = 0, v = 1; c < commands.length; ++c) switch (commands[c]) {
+                case APPEND_TEXT:
+                    node.appendChild(document.createTextNode(args[a++]))
+                    continue
+                case APPEND_COMMENT:
+                    node.appendChild(document.createComment(args[a++]))
+                    continue
+                case APPEND_CHILD:
+                    tagName = args[a++]
+                    node = node.appendChild(
+                        node.namespaceURI !== XHTML_NAMESPACE_URI
+                            ? document.createElementNS(node.namespaceURI, tagName)
+                            : tagName === 'svg'
+                                ? document.createElementNS(SVG_NAMESPACE_URI, tagName)
+                                : document.createElement(tagName)
+                    )
                     continue
                 case PARENT_NODE:
-                    node = node.parentNode
+                    node = node.parentNode ?? node
+                    continue
+                case BOOL_ATTR:
+                    node.setAttribute(args[a++], '')
+                    continue
+                case SET_ATTR:
+                    node.setAttribute(args[a++], args[a++])
                     continue
                 case HOOK_NODE:
-                    hookNode(scope, node.childNodes[queue[++q]], args[a++])
+                    hookNode(scope, node.appendChild(PLACEHOLDER_NODE.cloneNode()), vars[v++])
+                    continue
+                case HOOK_ELEMENT:
+                    tagName = 'slot'
+                    node = node.appendChild(document.createElement(tagName))
+                    hookNode(scope, node, vars[v++])
                     continue
                 case HOOK_ATTR:
-                    hookAttr(scope, node, args[a++])
+                    hookAttr(scope, node, vars[v++])
                     continue
                 case HOOK_VALUE:
-                    hookValue(scope, node, queue[++q], args[a++])
+                    hookValue(scope, node, args[a++], vars[v++])
                     continue
                 case HOOK_QUOTE: {
-                    const attrNode = node.getAttributeNode(queue[++q])
-                    const strings = attrNode.value.split(HOLE)
-                    hookText(scope, attrNode, 'value', strings, slice.call(args, a, a += strings.length - 1))
+                    const name = args[a++]
+                    const value = args[a++]
+                    node.setAttribute(name, value)
+                    const target = node.getAttributeNode(name)
+                    const parts = value.split(HOLE)
+                    hookText(scope, target, 'value', parts, slice.call(vars, v, v += parts.length - 1))
                     continue
                 }
                 case HOOK_COMMENT: {
-                    const childNode = node.childNodes[queue[++q]]
-                    const strings = childNode.data.split(HOLE)
-                    hookText(scope, childNode, 'data', strings, slice.call(args, a, a += strings.length - 1))
+                    const data = args[a++]
+                    const target = node.appendChild(document.createComment(data))
+                    const parts = data.split(HOLE)
+                    hookText(scope, target, 'data', parts, slice.call(vars, v, v += parts.length - 1))
                     continue
                 }
             }
             return fragment
         })
     }
-    if (this) {
-        return render(this, arguments)
-    } else {
-        const args = arguments
-        return scope => render(scope, args)
-    }
+    const vars = arguments
+    return scope => render(scope, vars)
 }
 
 function hookNode(scope, node, value) {

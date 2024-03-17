@@ -31,8 +31,6 @@
                 "@ant-design/": "../../node_modules/@ant-design/"
             }
         }
-
-
     </script>
 </head>
 <body>
@@ -46,26 +44,45 @@
     import {toHyperScript, AntIcon} from './util.mjs'
     import {atom, molecule} from '../atoms/atoms.mjs'
 
-    const setupFns = []
-    const tests = {}
+    const nextFrame = async () => await new Promise(resolve => requestAnimationFrame(resolve))
 
-    function setup(fn) {
-        setupFns.push(fn)
+    const {expect} = chai
+
+    const tests = []
+
+    function test(title, spec) {
+        tests.push({
+            index: tests.length+1,
+            title,
+            spec,
+            fixtures: [],
+            $scope: molecule()
+        })
     }
 
-    function test(title, fn) {
-        tests[title] = fn
-    }
+    let render, passed = 0, failed = 0
+
+    const expectHTML = template => expect(render(template).innerHTML)
+    const expectText = template => expect(render(template).innerText)
 
     async function run() {
-        for (const [name, test] of Object.entries(tests)) try {
-            for (const fn of setupFns) {
-                await fn()
+        for (const {index, title, spec, fixtures, $scope} of tests) try {
+            render = template => {
+                const fixture = document.getElementById('root').appendChild(document.createElement('div'))
+                fixture.setAttribute('class', 'fixture')
+                fixture.setAttribute('data-test', String(title))
+                fixture.setAttribute('data-fixture', `${index}.${fixtures.length+1}`)
+                fixture.appendChild(template($scope))
+                fixtures.push(fixture)
+                return fixture
             }
-            tests[name] = await test()
+            await spec($scope)
+            fixtures.forEach(fixture => fixture.remove())
+            $scope.dismiss()
+            passed++
         } catch (error) {
             if (error.constructor.name === 'AssertionError') {
-                const diff = Diff.createPatch(name, error.expected, error.actual)
+                const diff = Diff.createPatch(title, error.expected, error.actual)
                 const diff2htmlUi = new Diff2HtmlUI(document.getElementById('diff'), diff, {
                     stickyFileHeaders: false,
                     outputFormat: 'side-by-side',
@@ -75,44 +92,19 @@
                     highlight: true
                 })
                 diff2htmlUi.draw()
-                console.error(`'${name}' failed with`,  error.stack)
+                console.error(`'${title}' failed with`,  error.stack)
+                console.error(`'${title}' $scope`, $scope)
                 return;
             } else {
                 console.error(error)
             }
+            failed++
         }
     }
 
-    const {expect} = chai
-
-    const nextFrame = async () => await new Promise(resolve => requestAnimationFrame(resolve))
-
-    let fixtureNumber = 0, testNumber = 0
-    let scope, get, set, sub
-
-    setup(() => {
-        testNumber++
-        fixtureNumber = 0
-        scope = molecule()
-        get = scope.get
-        set = scope.set
-        sub = scope.sub
-    })
-
-    const render = template => {
-        const fixture = document.getElementById('root').appendChild(document.createElement('div'))
-        fixture.setAttribute('class', 'fixture')
-        fixture.setAttribute('data-test', String(testNumber))
-        fixture.setAttribute('data-fixture', String(fixtureNumber++))
-        fixture.appendChild(template(scope))
-        return fixture
-    }
-    const expectHTML = template => expect(render(template).innerHTML)
-    const expectText = template => expect(render(template).innerText)
-
     test('#0 Its not a bug its a feature', () => {
-        // expectHTML(html`Hello \n${' '}World`).to.eq('Hello \n World')
-        // expectHTML(html` \n <div>Hello \t World</div> \n `).to.eq(' \n <div>Hello \t World</div> \n ')
+        expectHTML(html`Hello \n${' '}World`).to.eq('Hello \n World')
+        expectHTML(html` \n <div>Hello \t World</div> \n `).to.eq(' \n <div>Hello \t World</div> \n ')
         expectHTML(html`< div></div> < div></div>`).to.eq('&lt; div&gt; &lt; div&gt;')
     })
 
@@ -139,7 +131,7 @@
         expectHTML(html`${atom(() => 'Hello World')}`).to.eq('Hello World')
         expectHTML(html`${atom(() => html`Hello World`)}`).to.eq('Hello World')
     })
-    test('#3 text content (atoms changing)', async () => {
+    test('#3 text content (atoms changing)', async ({get, set, sub}) => {
         let a = atom('Hello World')
         expectHTML(html`${a}`).to.eq('Hello World')
         set(a, BigInt(1234567890))
@@ -193,9 +185,9 @@
         expect(cloned).to.equal(node)
         expect(toHyperScript(cloned)).to.deep.equal(toHyperScript(node))
     })
-    test('#7 functions are invoked with store and root', () => {
+    test('#7 functions are invoked with store and root', ($scope) => {
         expectHTML(html`Hello ${function (r) {
-            expect(this).to.equal(scope)
+            expect(this).to.equal($scope)
             expect(r.nodeType).to.equal(8) // comment placeholder
             expect(r.parentNode.nodeType).to.equal(11) // document fragment
             expect(r.parentNode.parentNode).to.be.null // it's not connected yet
@@ -246,22 +238,21 @@
         expectHTML(html`<div class="${atom('hello')} world"></div>`).to.eq('<div class="hello world"></div>')
         expectHTML(html`<svg viewBox="320 240 640 480"/>`).to.eq('<svg viewBox="320 240 640 480"></svg>')
     })
-    test('#12 spread', async () => {
-        expect(render(html`<p ${(node) => {
+    test('#12 spread', async ($scope) => {
+        expectHTML(html`<p ${(node) => {
             expect(node.tagName).to.equal('P')
-        }}/>`).innerHTML).to.eq('<p></p>')
-        expect(render(html`<p ${function (node) {
-            expect(this).to.equal(scope)
+        }}/>`).to.eq('<p></p>')
+        expectHTML(html`<p ${function (node) {
+            expect(this).to.equal($scope)
             expect(node.tagName).to.equal('P')
-        }}/>`).innerHTML).to.eq('<p></p>')
+        }}/>`).to.eq('<p></p>')
         expectHTML(html`<p ${1}/>`).to.eq('<p></p>')
         expectHTML(html`<p${''}/>`).to.eq('<p></p>')
         expectHTML(html`<p ${['']}/>`).to.eq('<p></p>')
         expectHTML(html`<p ${{class: 'para'}}/>`).to.eq('<p class="para"></p>')
         expectHTML(html`<p ${atom({class: 'para'})}/>`).to.eq('<p class="para"></p>')
         expectHTML(
-            html`
-                <div ${{class: 'hello', style: 'color: red; background: yellow'}}>Hello World</div>`
+            html`<div ${{class: 'hello', style: 'color: red; background: yellow'}}>Hello World</div>`
         ).to.eq('<div class="hello" style="color: red; background: yellow">Hello World</div>')
     })
     // test('#13 multi attrs (atom)', async () => {
@@ -303,9 +294,14 @@
     //     )
     // })
 
-    console.time('run tests')
-    run().finally(() => {
-        console.timeEnd('run tests')
+    console.time('html')
+    run().then(() => {
+        console.timeEnd('html')
+        if (failed) {
+            console.log("Failed:", passed, "tests passed", failed, "tests failed")
+        } else {
+            console.log("OK!", passed, "tests passed")
+        }
     })
 
 </script>

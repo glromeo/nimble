@@ -1,4 +1,4 @@
-import {html, css, atom, molecule} from '@nimble/toolkit'
+import {htmlOld, css, atom, molecule} from '@nimble/toolkit'
 import dog from './dog.svg.js'
 import './nav-bar.js'
 
@@ -27,7 +27,7 @@ setInterval(()=>{
 
 const navHeightAtom = atom("2rem")
 
-css`
+document.head.appendChild(css`
     body {
         margin: 0;
         height: 100vh;
@@ -68,10 +68,9 @@ css`
         fill: currentColor;
         color: ${rgbAtom};
     }
-`
+`(scope))
 
 render(html`
-${}
     <div class="nav-bar" 
          onmouseenter=${() => set(navHeightAtom, "5rem")}
          onmouseleave=${() => set(navHeightAtom, "2rem")}
@@ -85,5 +84,5 @@ ${}
     ${dog}
     <h1>Welcome to nimble</h1>
     <h2>quick to understand, think, devise, etc.</h2>
-`)
+`, '#root')
 

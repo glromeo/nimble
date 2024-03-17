@@ -1,4 +1,4 @@
-import {css, html, defaultStore, molecule, atom, Store} from '@nimble/toolkit'
+import {css, htmlOld, defaultStore, molecule, atom, Store} from '@nimble/toolkit'
 
 const {
     EVENT_RUN_BEGIN,
@@ -46,7 +46,7 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
 
         runner.once(EVENT_RUN_BEGIN, () => {
             style(store, document.head, unmount)
-            html(store, '#root')`
+            htmlOld(store, '#root')`
                 <div id="test-results">
                     Running...
                 </div>
@@ -56,9 +56,9 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
         runner.on(EVENT_SUITE_BEGIN, suite => {
             const testResults = document.getElementById('test-results')!
             const title = suite.title
-            html(store, testResults)`
+            htmlOld(store, testResults)`
                 <div class="suite" title=${title}>
-                    ${title && html`<div class="heading">${title}</div>`}
+                    ${title && htmlOld`<div class="heading">${title}</div>`}
                 </div>
             `
             Object.assign(suite.ctx, {
@@ -66,8 +66,8 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
                 fixture: 0,
                 root: testResults.lastElementChild as HTMLElement,
                 unmount: [] as Function[],
-                render(template: ReturnType<typeof html>) {
-                    html`
+                render(template: ReturnType<typeof htmlOld>) {
+                    htmlOld`
                         <div class="fixture" data-suite=${title} data-fixture=${this.fixture++}/>
                             ${template}
                         </div>
@@ -83,7 +83,7 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
 
         runner.on(EVENT_TEST_BEGIN, (test) => {
             const {store, root} = test.parent!.ctx
-            html`
+            htmlOld`
                 <div class="test" title=${test.title}>
                     <div class="heading">${test.title}</div>
                 </div>
@@ -93,8 +93,8 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
                 fixture: 0,
                 root: root.lastElementChild as HTMLElement,
                 unmount: [] as Function[],
-                render(template: ReturnType<typeof html>) {
-                    html`
+                render(template: ReturnType<typeof htmlOld>) {
+                    htmlOld`
                         <div class="fixture" data-test=${test.title} data-fixture=${this.fixture++}/>
                             ${template}
                         </div>
@@ -125,7 +125,7 @@ mocha.reporter(class Index extends Mocha.reporters.Base {
 })
 
 export const suite = (title:string, cb:(
-    ctx: {render: (template: ReturnType<typeof html>) => HTMLDivElement}
+    ctx: {render: (template: ReturnType<typeof htmlOld>) => HTMLDivElement}
 ) => Promise<void>|void) => {
     return window.suite(title, async function (this:any) {
         await cb(this.ctx)
@@ -133,7 +133,7 @@ export const suite = (title:string, cb:(
 }
 
 export const test = (title:string, cb:(
-    ctx: {render: (template: ReturnType<typeof html>) => HTMLDivElement}
+    ctx: {render: (template: ReturnType<typeof htmlOld>) => HTMLDivElement}
 ) => Promise<void>|void) => {
     return window.test(title, async function (this) {
         await cb(this.ctx)

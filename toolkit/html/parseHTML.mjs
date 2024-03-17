@@ -1,16 +1,17 @@
 export const HOLE = '\x01'
-export const PLACEHOLDER_NODE = document.createComment('')
 
-export const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
-export const XHTML_NAMESPACE_URI = 'http://www.w3.org/1999/xhtml'
-
-export const CHILD_NODE = 200
-export const PARENT_NODE = 201
-export const HOOK_NODE = 202
-export const HOOK_ATTR = 203
-export const HOOK_COMMENT = 204
-export const HOOK_VALUE = 205
-export const HOOK_QUOTE = 206
+export const APPEND_TEXT = 200
+export const APPEND_COMMENT = 201
+export const APPEND_CHILD = 202
+export const BOOL_ATTR = 203
+export const SET_ATTR = 204
+export const PARENT_NODE = 205
+export const HOOK_NODE = 206
+export const HOOK_ELEMENT = 207
+export const HOOK_COMMENT = 208
+export const HOOK_ATTR = 209
+export const HOOK_VALUE = 210
+export const HOOK_QUOTE = 211
 
 const TEXT_NODE = 100
 const TAG_OPEN = 101
@@ -24,86 +25,66 @@ const HOLEY_VALUE = 108
 const TAG_CLOSE = 109
 const COMMENT = 110
 
-const VOID_TAGS = Object.assign(Object.create(null), {
-    'AREA': 1,
-    'BASE': 1,
-    'BR': 1,
-    'COL': 1,
-    'EMBED': 1,
-    'HR': 1,
-    'IMG': 1,
-    'INPUT': 1,
-    'LINK': 1,
-    'META': 1,
-    'SOURCE': 1,
-    'TRACK': 1,
-    'WBR': 1
-})
-
 const isWhitespace = ch => ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r'
 
 export function parseHTML(html) {
-    let node = document.createDocumentFragment()
-    let hooks = [node]
+    let commands = [], args = []
+    let stack = []
+    let tagName = ''
     let state = TEXT_NODE
     let name = null
     let start = 0
     let end = -1
     let quote = null
 
-    function appendElement() {
-        hooks.push(CHILD_NODE, node.childNodes.length)
-        const tagName = html.slice(start, end).toLowerCase()
-        node = node.appendChild(
-            node.namespaceURI
-                ? document.createElementNS(node.namespaceURI, tagName)
-                : tagName === 'svg'
-                    ? document.createElementNS(SVG_NAMESPACE_URI, tagName)
-                    : document.createElement(tagName)
-        )
-    }
-
-    function appendSlot() {
-        hooks.push(CHILD_NODE, node.childNodes.length)
-        node = node.appendChild(document.createElement('slot'))
-    }
-
-    function matchTagName() {
-        const slice = html.slice(start, end)
-        return node.tagName === node.namespaceURI ? slice.toLowerCase() : slice.toUpperCase()
-    }
-
-    function parentElement() {
-        if (end === start || !node.tagName || matchTagName()) {
-            if (hooks[hooks.length - 2] === CHILD_NODE) {
-                hooks.length -= 2
-            } else if (node.parentNode) {
-                hooks.push(PARENT_NODE)
-            }
-        }
-        node = node.parentNode ?? node
-    }
-
-    function appendText(end) {
-        if (end > start) {
-            node.appendChild(document.createTextNode(html.slice(start, end)))
-        }
-    }
-
-    function unaryAttr() {
-        node.setAttribute(html.slice(start, end), '')
-    }
-
-    function setAttribute() {
-        node.setAttribute(name, html.slice(start, end))
-    }
+    const isVoid = () => (
+        tagName === 'area' ||
+        tagName === 'base' ||
+        tagName === 'br' ||
+        tagName === 'col' ||
+        tagName === 'embed' ||
+        tagName === 'hr' ||
+        tagName === 'img' ||
+        tagName === 'input' ||
+        tagName === 'link' ||
+        tagName === 'meta' ||
+        tagName === 'source' ||
+        tagName === 'track' ||
+        tagName === 'wbr'
+    )
 
     function appendComment(start, end) {
         const text = html.slice(start, end)
         if (text.indexOf(HOLE) >= 0) {
-            hooks.push(HOOK_COMMENT, node.childNodes.length)
+            commands.push(HOOK_COMMENT)
+        } else {
+            commands.push(APPEND_COMMENT)
         }
-        node.appendChild(document.createComment(text))
+        args.push(text)
+    }
+
+    function setAttr() {
+        commands.push(SET_ATTR)
+        args.push(name, html.slice(start, end))
+    }
+
+    function appendText(end) {
+        if (end > start) {
+            commands.push(APPEND_TEXT)
+            args.push(html.slice(start, end))
+        }
+    }
+
+    function appendSlot() {
+        stack.push(tagName)
+        commands.push(APPEND_CHILD)
+        args.push(tagName = 'slot')
+    }
+
+    function appendChild() {
+        stack.push(tagName)
+        commands.push(APPEND_CHILD)
+        args.push(tagName = html.slice(start, end).toLowerCase())
     }
 
     while (++end < html.length) {
@@ -116,8 +97,7 @@ export function parseHTML(html) {
                 }
                 if (ch === HOLE) {
                     appendText(end)
-                    hooks.push(HOOK_NODE, node.childNodes.length)
-                    node.appendChild(PLACEHOLDER_NODE.cloneNode())
+                    commands.push(HOOK_NODE)
                     start = end + 1
                 }
                 continue
@@ -128,8 +108,9 @@ export function parseHTML(html) {
                 }
                 appendText(end - 1)
                 if (ch === HOLE) {
-                    hooks.push(HOOK_NODE, node.childNodes.length)
-                    appendSlot()
+                    stack.push(tagName)
+                    tagName = null
+                    commands.push(HOOK_ELEMENT)
                     state = WHITESPACE
                     continue
                 }
@@ -154,23 +135,24 @@ export function parseHTML(html) {
                 continue
             case TAG_NAME:
                 if (isWhitespace(ch) || ch === HOLE) {
-                    appendElement()
+                    appendChild()
                     if (ch === HOLE) {
-                        hooks.push(HOOK_ATTR)
+                        commands.push(HOOK_ATTR)
                     }
                     state = WHITESPACE
                     continue
                 }
                 if (ch === '/') {
-                    appendElement()
+                    appendChild()
                     start = end + 1
                     state = TAG_CLOSE
                     continue
                 }
                 if (ch === '>') {
-                    appendElement()
-                    if (node.tagName in VOID_TAGS) {
-                        parentElement()
+                    appendChild()
+                    if (isVoid()) {
+                        tagName = stack.pop()
+                        commands.push(PARENT_NODE)
                     }
                     start = end + 1
                     state = TEXT_NODE
@@ -193,7 +175,7 @@ export function parseHTML(html) {
                 continue
             case WHITESPACE:
                 if (ch === HOLE) {
-                    hooks.push(HOOK_ATTR)
+                    commands.push(HOOK_ATTR)
                     continue
                 }
                 if (ch === '/') {
@@ -202,8 +184,9 @@ export function parseHTML(html) {
                     continue
                 }
                 if (ch === '>') {
-                    if (node.tagName in VOID_TAGS) {
-                        parentElement()
+                    if (isVoid()) {
+                        tagName = stack.pop()
+                        commands.push(PARENT_NODE)
                     }
                     start = end + 1
                     state = TEXT_NODE
@@ -216,9 +199,10 @@ export function parseHTML(html) {
                 continue
             case ATTR_NAME:
                 if (isWhitespace(ch) || ch === HOLE) {
-                    unaryAttr()
+                    commands.push(BOOL_ATTR)
+                    args.push(html.slice(start, end))
                     if (ch === HOLE) {
-                        hooks.push(HOOK_ATTR)
+                        commands.push(HOOK_ATTR)
                     }
                     state = WHITESPACE
                     continue
@@ -230,15 +214,18 @@ export function parseHTML(html) {
                     continue
                 }
                 if (ch === '/') {
-                    unaryAttr()
+                    commands.push(BOOL_ATTR)
+                    args.push(html.slice(start, end))
                     start = end + 1
                     state = TAG_CLOSE
                     continue
                 }
                 if (ch === '>') {
-                    unaryAttr()
-                    if (node.tagName in VOID_TAGS) {
-                        parentElement()
+                    commands.push(BOOL_ATTR)
+                    args.push(html.slice(start, end))
+                    if (isVoid()) {
+                        tagName = stack.pop()
+                        commands.push(PARENT_NODE)
                     }
                     start = end + 1
                     state = TEXT_NODE
@@ -246,7 +233,8 @@ export function parseHTML(html) {
                 continue
             case ASSIGN:
                 if (ch === HOLE) {
-                    hooks.push(HOOK_VALUE, name)
+                    commands.push(HOOK_VALUE)
+                    args.push(name)
                     state = WHITESPACE
                     continue
                 }
@@ -257,7 +245,8 @@ export function parseHTML(html) {
                     continue
                 }
                 if (ch === '/') {
-                    setAttribute()
+                    commands.push(SET_ATTR)
+                    args.push(name, html.slice(start, end))
                     start = end + 1
                     state = TAG_CLOSE
                     continue
@@ -273,7 +262,8 @@ export function parseHTML(html) {
                     continue
                 }
                 if (ch === quote) {
-                    setAttribute()
+                    commands.push(SET_ATTR)
+                    args.push(name, html.slice(start, end))
                     quote = null
                     state = WHITESPACE
                     continue
@@ -281,10 +271,11 @@ export function parseHTML(html) {
             case HOLEY_VALUE:
                 if (ch === quote) {
                     if (end - start === 1) {
-                        hooks.push(HOOK_VALUE, name)
+                        commands.push(HOOK_VALUE)
+                        args.push(name)
                     } else {
-                        setAttribute()
-                        hooks.push(HOOK_QUOTE, name)
+                        commands.push(HOOK_QUOTE)
+                        args.push(name, html.slice(start, end))
                     }
                     quote = null
                     state = WHITESPACE
@@ -293,31 +284,37 @@ export function parseHTML(html) {
                 continue
             case ATTR_VALUE:
                 if (ch === HOLE) {
-                    setAttribute()
-                    hooks.push(HOOK_ATTR)
+                    setAttr()
+                    commands.push(HOOK_ATTR)
                     state = WHITESPACE
                     continue
                 }
                 if (ch === '/') {
-                    setAttribute()
+                    commands.push(SET_ATTR)
+                    args.push(name, html.slice(start, end))
                     start = end + 1
                     state = TAG_CLOSE
                     continue
                 }
                 if (ch === '>') {
-                    setAttribute()
+                    commands.push(SET_ATTR)
+                    args.push(name, html.slice(start, end))
                     start = end + 1
                     state = TEXT_NODE
                     continue
                 }
                 if (isWhitespace(ch)) {
-                    setAttribute()
+                    commands.push(SET_ATTR)
+                    args.push(name, html.slice(start, end))
                     state = WHITESPACE
                 }
                 continue
             case TAG_CLOSE:
                 if (ch === '>') {
-                    parentElement()
+                    if (end === start || !tagName || tagName === html.slice(start, end).toLowerCase()) {
+                        tagName = stack.pop()
+                        commands.push(PARENT_NODE)
+                    }
                     start = end + 1
                     state = TEXT_NODE
                     continue
@@ -336,9 +333,9 @@ export function parseHTML(html) {
         appendText(end)
     }
     if (state > TAG_NAME) {
-        node.remove()
-        hooks.length = hooks.lastIndexOf(CHILD_NODE)
+        commands.length = commands.lastIndexOf(APPEND_CHILD)
+        args.length = args.lastIndexOf(tagName)
     }
 
-    return hooks
+    return [commands, args]
 }

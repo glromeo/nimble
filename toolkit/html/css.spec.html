@@ -38,7 +38,7 @@
 <script src="../../node_modules/mocha/mocha.js"></script>
 <script type="module">
     import {toHyperScript} from './util.js'
-    import {css, html, atom, suite, test} from '@nimble/toolkit'
+    import {css, htmlOld, atom, suite, test} from '@nimble/toolkit'
 
     const {expect} = chai
 
@@ -50,7 +50,7 @@
 
     suite('css', () => {
         test('text content', ({render}) => {
-            expect(render(html`Hello World`).innerText).to.eq('Hello World')
+            expect(render(htmlOld`Hello World`).innerText).to.eq('Hello World')
         })
     })
 

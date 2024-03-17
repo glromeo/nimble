@@ -6,184 +6,121 @@
 </head>
 <body>
 <div id="root"></div>
-<script src="../../node_modules/chai/chai.js"></script>
-<script src="../../node_modules/mocha/mocha.js"></script>
 <script type="module">
     import {
         parseHTML,
         HOLE,
-        CHILD_NODE,
-        HOOK_ATTR,
-        HOOK_NODE,
+        APPEND_TEXT,
+        APPEND_COMMENT,
+        APPEND_CHILD,
+        BOOL_ATTR,
+        SET_ATTR,
         PARENT_NODE,
+        HOOK_NODE,
+        HOOK_ELEMENT,
+        HOOK_COMMENT,
+        HOOK_ATTR,
         HOOK_VALUE,
-        HOOK_QUOTE,
-        HOOK_COMMENT
+        HOOK_QUOTE
     } from './parseHTML.mjs'
-    import {WebConsole} from '../test/web-console.mjs'
 
-    mocha.setup('tdd')
-    mocha.checkLeaks()
-    mocha.reporter(WebConsole)
+    let passed = 0, failed = 0
 
-    const {expect} = chai
-
-    function snapshot(root) {
-        let text = ''
-        for (const node of root.childNodes) {
-            if (node.tagName) {
-                text += `<${node.tagName}`
-                if (node.attributes) for (const {name, value} of node.attributes) {
-                    text += ` [${name}]=[${value}]`
-                }
-                if (node.childNodes.length) {
-                    text += '>'
-                    text += snapshot(node)
-                    text += `</${node.tagName}>`
-                } else {
-                    text += '/>'
-                }
-            } else if (node.nodeType === 8) {
-                text += `{${node.data}}`
-            } else {
-                text += `[${node.data}]`
-            }
-        }
-        return text
-    }
-
-    function dom(strings) {
-        const text = strings.join(HOLE)
-        const hasChild = text.endsWith(' \x01')
-        switch (text[0]) {
-            case '#':
-                let data = text.slice(1)
-                if (hasChild) {
-                    data += arguments[arguments.length - 1]
-                }
-                return document.createTextNode(data)
-            case '@':
-                const fragment = document.createDocumentFragment()
-                for (let i = 1; i < arguments.length; i++) {
-                    fragment.appendChild(arguments[i])
-                }
-                return fragment
-            default:
-                const parts = (hasChild ? text.slice(0, -2) : text).split(' ')
-                const el = document.createElement(parts[0])
-                for (let i = 1, argIndex = 0; i < parts.length; i++) {
-                    const [attrName, attrValue] = parts[i].split('=')
-                    el.setAttribute(attrName, attrValue === HOLE ? arguments[++argIndex] : attrValue)
-                }
-                if (hasChild) {
-                    const child = arguments[arguments.length - 1]
-                    if (typeof child === 'string') {
-                        el.innerHTML = child
-                    } else {
-                        el.appendChild(child)
-                    }
-                }
-                return el
+    const test = (id, input, commands, args) => {
+        const expected = JSON.stringify([commands, args])
+        const actual = JSON.stringify(parseHTML(input))
+        if (actual !== expected) {
+            failed++
+            console.error(`Test #${id} failed`, '\n\texpected:', expected, '\n\tactual:  ', actual)
+        } else {
+            passed++
         }
     }
 
-    suite('text nodes', () => {
+    console.time('parseHTML')
 
-        const testCase = (id, input, expected, HOOKS) => {
-            test(`#${id}: '${input}'`, () => {
-                try {
-                    const [fragment, ...hooks] = parseHTML(input)
-                    const actual = snapshot(dom`div ${fragment}`)
-                    expect(actual).to.eq(expected)
-                    expect(JSON.stringify(hooks)).to.eq(JSON.stringify(HOOKS))
-                } catch (error) {
-                    if (expected instanceof Error) {
-                        expect(error.message).to.eq(expected.message)
-                    } else {
-                        throw error
-                    }
-                }
-            })
-        }
+    test('00', '', [], [])
+    test('01', ' ', [APPEND_TEXT], [' '])
+    test('02', ' <', [APPEND_TEXT], [' <'])
+    test('03', ' < ', [APPEND_TEXT], [' < '])
+    test('04', ' <>', [APPEND_TEXT, APPEND_CHILD], [' ', 'slot'])
+    test('05', ' <a', [APPEND_TEXT], [' '])
+    test('06', ' <a ', [APPEND_TEXT], [' '])
+    test('07', ' <a b', [APPEND_TEXT], [' '])
+    test('08', ' <a a ', [APPEND_TEXT], [' ', 'a']) // It doesn't really matter
+    test('09', ' <a b=', [APPEND_TEXT], [' '])
+    test('10', ' <a b=c', [APPEND_TEXT], [' '])
+    test('11', ' <a b=c ', [APPEND_TEXT], [' '])
+    test('12', '<p><a b=c /', [APPEND_CHILD], ['p'])
+    test('13', ' <a b="c"', [APPEND_TEXT], [' '])
+    test('14', ' <svg ', [APPEND_TEXT], [' '])
+    test('15', ' <a>', [APPEND_TEXT, APPEND_CHILD], [' ', 'a'])
+    test('16', ' <svg>', [APPEND_TEXT, APPEND_CHILD], [' ', 'svg'])
+    test('17', '<A>', [APPEND_CHILD], ['a'])
+    test('18', '<SVG>', [APPEND_CHILD], ['svg'])
+    test('19', '<p>hello</p>', [APPEND_CHILD, APPEND_TEXT, PARENT_NODE], ['p', 'hello'])
+    test('20', '</>', [PARENT_NODE], [])
+    test('21', '< />', [APPEND_TEXT], ['< />'])
+    test('22', '<a/>', [APPEND_CHILD, PARENT_NODE], ['a'])
+    test('23', '<a />', [APPEND_CHILD, PARENT_NODE], ['a'])
+    test('24', '<a / >', [APPEND_CHILD], ['a'])
+    test('25', '<a //>', [APPEND_CHILD, PARENT_NODE], ['a'])
+    test('26', '<a u>', [APPEND_CHILD, BOOL_ATTR], ['a', 'u'])
+    test('27', '<a =u>', [APPEND_CHILD, BOOL_ATTR], ['a', '=u']) // This will fail later on...
+    test('28', '<a u/>', [APPEND_CHILD, BOOL_ATTR, PARENT_NODE], ['a', 'u'])
+    test('29', '<a u=/>', [APPEND_CHILD, SET_ATTR, PARENT_NODE], ['a', 'u', ''])
+    test('30', '<a u=1>', [APPEND_CHILD, SET_ATTR], ['a', 'u', '1'])
+    test('31', '<a u=1/>', [APPEND_CHILD, SET_ATTR, PARENT_NODE], ['a', 'u', '1'])
+    test('32', '<a U=1 >', [APPEND_CHILD, SET_ATTR], ['a', 'U', '1'])
+    test('33', '<a u="2">', [APPEND_CHILD, SET_ATTR], ['a', 'u', '2'])
+    test('34', `<a u='3'>`, [APPEND_CHILD, SET_ATTR], ['a', 'u', '3'])
+    test('35', `<a "b c"=d>`, [APPEND_CHILD, BOOL_ATTR, SET_ATTR], ['a', '"b', 'c"', 'd'])
+    test('36', `<a u='3' f="g"/>`, [APPEND_CHILD, SET_ATTR, SET_ATTR, PARENT_NODE], ['a', 'u', '3', 'f', 'g'])
+    test('37', `<img>`, [APPEND_CHILD, PARENT_NODE], ['img'])
+    test('38', '<img src>', [APPEND_CHILD, BOOL_ATTR, PARENT_NODE], ['img', 'src'])
+    test('39', '<img src >', [APPEND_CHILD, BOOL_ATTR, PARENT_NODE], ['img', 'src'])
+    test('40', '<img src/>', [APPEND_CHILD, BOOL_ATTR, PARENT_NODE], ['img', 'src'])
+    test('41', '<img src />', [APPEND_CHILD, BOOL_ATTR, PARENT_NODE], ['img', 'src'])
+    test('42', '<img class="image" >', [APPEND_CHILD, SET_ATTR, PARENT_NODE], ['img', 'class', 'image'])
+    test('43', '<img class="image" />', [APPEND_CHILD, SET_ATTR, PARENT_NODE], ['img', 'class', 'image'])
+    test('44', `  pre  <p><img></p>  post  `, [APPEND_TEXT, APPEND_CHILD, APPEND_CHILD, PARENT_NODE, PARENT_NODE, APPEND_TEXT], ['  pre  ', 'p', 'img', '  post  '])
+    test('45', `<!>`, [APPEND_COMMENT], [''])
+    test('46', `<!->`, [APPEND_COMMENT], ['-'])
+    test('47', `<!-->`, [APPEND_COMMENT], [''])
+    test('48', `<!--->`, [APPEND_COMMENT], [''])
+    test('49', `<!---->`, [APPEND_COMMENT], [''])
+    test('50', `<!-->-->`, [APPEND_COMMENT, APPEND_TEXT], ['', '-->'])
+    test('51', `<!-- > -->`, [APPEND_COMMENT], [' > '])
+    test('52', `<!-- -> -->`, [APPEND_COMMENT], [' -> '])
+    test('53', `<!-- --> -->`, [APPEND_COMMENT, APPEND_TEXT], [' ', ' -->'])
+    test('54', ` <!--no comment--> `, [APPEND_TEXT, APPEND_COMMENT, APPEND_TEXT], [' ', 'no comment', ' '])
+    test('55', `${HOLE}`, [HOOK_NODE], [])
+    test('56', `x${HOLE}y`, [APPEND_TEXT, HOOK_NODE, APPEND_TEXT], ['x', 'y'])
+    test('57', `<${HOLE}>`, [HOOK_ELEMENT], [])
+    test('58', `<p${HOLE}>`, [APPEND_CHILD, HOOK_ATTR], ['p'])
+    test('59', `<p a${HOLE}>`, [APPEND_CHILD, BOOL_ATTR, HOOK_ATTR], ['p', 'a'])
+    test('60', `<p ${HOLE} ${HOLE}>`, [APPEND_CHILD, HOOK_ATTR, HOOK_ATTR], ['p'])
+    test('61', `<p${HOLE} />`, [APPEND_CHILD, HOOK_ATTR, PARENT_NODE], ['p'])
+    test('62', `<a />xyz<p${HOLE}a>`, [APPEND_CHILD, PARENT_NODE, APPEND_TEXT, APPEND_CHILD, HOOK_ATTR, BOOL_ATTR], ['a', 'xyz', 'p', 'a'])
+    test('63', `<${HOLE} a=b>`, [HOOK_ELEMENT, SET_ATTR], ['a', 'b'])
+    test('64', `<b ${HOLE}=${HOLE}>`, [APPEND_CHILD, HOOK_ATTR, BOOL_ATTR, HOOK_ATTR], ['b', '='])
+    test('65', `<b a=${HOLE}>`, [APPEND_CHILD, HOOK_VALUE], ['b', 'a'])
+    test('66', `<b a='${HOLE}'>`, [APPEND_CHILD, HOOK_VALUE], ['b', 'a'])
+    test('67', `<b a="${HOLE}">`, [APPEND_CHILD, HOOK_VALUE], ['b', 'a'])
+    test('68', `<b a=b${HOLE}>`, [APPEND_CHILD, SET_ATTR, HOOK_ATTR], ['b', 'a', 'b'])
+    test('69', `<b a=b${HOLE}c d>`, [APPEND_CHILD, SET_ATTR, HOOK_ATTR, BOOL_ATTR, BOOL_ATTR], ['b', 'a', 'b', 'c', 'd'])
+    test('70', `<b a='b${HOLE}c'>`, [APPEND_CHILD, HOOK_QUOTE], ['b', 'a', 'b\x01c'])
+    test('71', `<!-- ${HOLE} -->`, [HOOK_COMMENT], [' \x01 '])
+    test('72', `<a><b>x</b></a>`, [APPEND_CHILD, APPEND_CHILD, APPEND_TEXT, PARENT_NODE, PARENT_NODE], ['a', 'b', 'x'])
+    test('73', `<a><b>x${HOLE}</b></a>`, [APPEND_CHILD, APPEND_CHILD, APPEND_TEXT, HOOK_NODE, PARENT_NODE, PARENT_NODE], ['a', 'b', 'x'])
 
-        const SAME = null
+    console.timeEnd('parseHTML')
 
-        testCase('00', '', '', [])
-        testCase('01', ' ', '[ ]', [])
-        testCase('02', ' <', '[ <]', [])
-        testCase('03', ' < ', '[ < ]', [])
-        testCase('04', ' <>', '[ ]<SLOT/>', [CHILD_NODE, 1])
-        testCase('05', ' <a', '[ ]', [])
-        testCase('06', ' <a ', '[ ]', [])
-        testCase('07', ' <a b', '[ ]', [])
-        testCase('08', ' <a b=', '[ ]', [])
-        testCase('09', ' <a b=c', '[ ]', [])
-        testCase('10', ' <a b=c ', '[ ]', [])
-        testCase('11', '<p><a b=c /', '<P/>', [CHILD_NODE, 0])
-        testCase('12', ' <a b="c"', '[ ]', [])
-        testCase('13', ' <svg ', '[ ]', [])
-        testCase('14', ' <a>', '[ ]<A/>', [CHILD_NODE, 1])
-        testCase('15', ' <svg>', '[ ]<svg/>', [CHILD_NODE, 1])
-        testCase('16', '<a>', '<A/>', [CHILD_NODE, 0])
-        testCase('17', '<SVG>', '<svg/>', [CHILD_NODE, 0])
-        testCase('18', '<p>hello</p>', '<P>[hello]</P>', [])
-        testCase('19', '</>', '', [])
-        testCase('20', '< />', '[< />]', [])
-        testCase('21', '<a/>', '<A/>', [])
-        testCase('22', '<a />', '<A/>', [])
-        testCase('23', '<a / >', '<A/>', [CHILD_NODE, 0])
-        testCase('24', '<a //>', '<A/>', [])
-        testCase('25', '<a u>', '<A [u]=[]/>', [CHILD_NODE, 0])
-        testCase('26', '<img class="image" >', '<IMG [class]=[image]/>', [])
-        testCase('27', '<img src>', '<IMG [src]=[]/>', [])
-        testCase('28', '<img src >', '<IMG [src]=[]/>', [])
-        testCase('29', '<a =u>', Error`Failed to execute 'setAttribute' on 'Element': '=u' is not a valid attribute name.`, [])
-        testCase('30', '<a u/>', '<A [u]=[]/>', [])
-        testCase('31', '<a u=/>', '<A [u]=[]/>', [])
-        testCase('32', '<img class="image" />', '<IMG [class]=[image]/>', [])
-        testCase('33', '<img src/>', '<IMG [src]=[]/>', [])
-        testCase('34', '<img src />', '<IMG [src]=[]/>', [])
-        testCase('35', '<a u=1>', '<A [u]=[1]/>', [CHILD_NODE, 0])
-        testCase('36', '<a u=1/>', '<A [u]=[1]/>', [])
-        testCase('37', '<a u=1 >', '<A [u]=[1]/>', [CHILD_NODE, 0])
-        testCase('38', '<a u="2">', '<A [u]=[2]/>', [CHILD_NODE, 0])
-        testCase('39', `<a u='3'>`, '<A [u]=[3]/>', [CHILD_NODE, 0])
-        testCase('40', `<a "b c"=d>`, Error`Failed to execute 'setAttribute' on 'Element': '"b' is not a valid attribute name.`, [])
-        testCase('41', `<a u='3' f="g"/>`, '<A [u]=[3] [f]=[g]/>', [])
-        testCase('42', `<img>`, '<IMG/>', [])
-        testCase('43', `  pre  <p><img></p>  post  `, '[  pre  ]<P><IMG/></P>[  post  ]', [])
-        testCase('44', `<!>`, '{}', [])
-        testCase('45', `<!->`, '{-}', [])
-        testCase('46', `<!-->`, '{}', [])
-        testCase('47', `<!--->`, '{}', [])
-        testCase('48', `<!---->`, '{}', [])
-        testCase('49', `<!-->-->`, '{}[-->]', [])
-        testCase('50', `<!-- > -->`, '{ > }', [])
-        testCase('51', `<!-- -> -->`, '{ -> }', [])
-        testCase('52', `<!-- --> -->`, '{ }[ -->]', [])
-        testCase('53', ` <!--no comment--> `, '[ ]{no comment}[ ]', [])
-        testCase('54', `${HOLE}`, '{}', [HOOK_NODE, 0])
-        testCase('55', `x${HOLE}y`, '[x]{}[y]', [HOOK_NODE, 1])
-        testCase('56', `<${HOLE}>`, '<SLOT/>', [HOOK_NODE, 0, CHILD_NODE, 0])
-        testCase('57', `<p${HOLE}>`, '<P/>', [CHILD_NODE, 0, HOOK_ATTR])
-        testCase('58', `<p a${HOLE}>`, '<P [a]=[]/>', [CHILD_NODE, 0, HOOK_ATTR])
-        testCase('59', `<p ${HOLE} ${HOLE}>`, '<P/>', [CHILD_NODE, 0, HOOK_ATTR, HOOK_ATTR])
-        testCase('60', `<p${HOLE} />`, '<P/>', [CHILD_NODE, 0, HOOK_ATTR, PARENT_NODE])
-        testCase('61', `<a />xyz<p${HOLE}a>`, '<A/>[xyz]<P [a]=[]/>', [CHILD_NODE, 2, HOOK_ATTR])
-        testCase('62', `<${HOLE} a=b>`, '<SLOT [a]=[b]/>', [HOOK_NODE, 0, CHILD_NODE, 0])
-        testCase('63', `<b ${HOLE}=${HOLE}>`, Error`Failed to execute 'setAttribute' on 'Element': '=' is not a valid attribute name.`, [])
-        testCase('64', `<b a=${HOLE}>`, '<B/>', [CHILD_NODE, 0, HOOK_VALUE, 'a'])
-        testCase('65', `<b a='${HOLE}'>`, '<B/>', [CHILD_NODE, 0, HOOK_VALUE, 'a'])
-        testCase('66', `<b a="${HOLE}">`, '<B/>', [CHILD_NODE, 0, HOOK_VALUE, 'a'])
-        testCase('67', `<b a=b${HOLE}>`, '<B [a]=[b]/>', [CHILD_NODE, 0, HOOK_ATTR])
-        testCase('68', `<b a=b${HOLE}c d>`, '<B [a]=[b] [c]=[] [d]=[]/>', [CHILD_NODE, 0, HOOK_ATTR])
-        testCase('69', `<b a='b${HOLE}c'>`, '<B [a]=[b\x01c]/>', [CHILD_NODE, 0, HOOK_QUOTE, 'a'])
-        testCase('70', `<!-- ${HOLE} -->`, '{ \x01 }', [HOOK_COMMENT, 0])
-        testCase('71', `<a><b>x</b></a>`, '<A><B>[x]</B></A>', [])
-        testCase('72', `<a><b>x${HOLE}</b></a>`, '<A><B>[x]{}</B></A>', [CHILD_NODE, 0, CHILD_NODE, 0, HOOK_NODE, 1, PARENT_NODE, PARENT_NODE])
-    })
-
-    mocha.run()
+    if (failed) {
+        console.log("Failed:", passed, "tests passed", failed, "tests failed")
+    } else {
+        console.log("OK!", passed, "tests passed")
+    }
 
 </script>
 </body>

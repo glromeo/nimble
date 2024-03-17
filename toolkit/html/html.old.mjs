@@ -1,93 +1,66 @@
 import {atom, atomTag} from '../atoms/atoms.mjs'
 
-export const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
-export const XHTML_NAMESPACE_URI = 'http://www.w3.org/1999/xhtml'
-export const PLACEHOLDER_NODE = document.createComment('')
-
 import {
+    CHILD_NODE,
     HOLE,
-    APPEND_TEXT,
-    APPEND_COMMENT,
-    APPEND_CHILD,
-    BOOL_ATTR,
-    SET_ATTR,
-    PARENT_NODE,
-    HOOK_NODE,
-    HOOK_ELEMENT,
-    HOOK_COMMENT,
     HOOK_ATTR,
-    HOOK_VALUE,
+    HOOK_COMMENT,
+    HOOK_NODE,
     HOOK_QUOTE,
-    parseHtml
-} from './parseHtml.alt.mjs'
+    HOOK_VALUE,
+    PARENT_NODE,
+    parseHTML,
+    PLACEHOLDER_NODE,
+    SVG_NAMESPACE_URI
+} from './parseHTML.mjs'
 
 const CACHE = new WeakMap()
 
 const slice = Array.prototype.slice
 
-export function html2(strings) {
+export function htmlOld(strings) {
     if (!strings) {
         return null
     }
     if (!strings.raw) {
         const scope = strings
         return function () {
-            return html.apply(scope, arguments)
+            return htmlOld.apply(scope, arguments)
         }
     }
     let render = CACHE.get(strings)
     if (render === undefined) {
-        const [commands, args] = parseHtml(strings.join(HOLE))
-        CACHE.set(strings, render = (scope, vars) => {
-            const fragment = document.createDocumentFragment()
-            let node = fragment, tagName
-            for (let c = 0, a = 0, v = 1; c < commands.length; ++c) switch (commands[c]) {
-                case APPEND_TEXT:
-                    node.appendChild(document.createTextNode(args[a++]))
-                    continue
-                case APPEND_COMMENT:
-                    node.appendChild(document.createComment(args[a++]))
-                    continue
-                case APPEND_CHILD:
-                    tagName = args[a++]
-                    node = node.appendChild(
-                        node.namespaceURI
-                            ? document.createElementNS(node.namespaceURI, tagName)
-                            : tagName === 'svg'
-                                ? document.createElementNS(SVG_NAMESPACE_URI, tagName)
-                                : document.createElement(tagName)
-                    )
+        const queue = parseHTML(strings.join(HOLE))
+        CACHE.set(strings, render = (scope, args) => {
+            const fragment = queue[0].cloneNode(true)
+            let node = fragment
+            let a = 1
+            for (let q = 1; q < queue.length; ++q) switch (queue[q]) {
+                case CHILD_NODE:
+                    node = node.childNodes[queue[++q]]
                     continue
                 case PARENT_NODE:
                     node = node.parentNode
                     continue
-                case BOOL_ATTR:
-                    node.setAttribute(args[a++], '')
-                    continue
-                case SET_ATTR:
-                    node.setAttribute(args[a++], args[a++])
-                    continue
                 case HOOK_NODE:
-                    hookNode(scope, node.appendChild(PLACEHOLDER_NODE.cloneNode()), vars[v++])
+                    hookNode(scope, node.childNodes[queue[++q]], args[a++])
                     continue
                 case HOOK_ATTR:
-                    hookAttr(scope, node, vars[v++])
+                    hookAttr(scope, node, args[a++])
                     continue
                 case HOOK_VALUE:
-                    hookValue(scope, node, args[a++], vars[v++])
+                    hookValue(scope, node, queue[++q], args[a++])
                     continue
                 case HOOK_QUOTE: {
-                    const name = args[a++]
-                    const value = args[a++]
-                    node.setAttribute(name, value)
-                    const attrNode = node.getAttributeNode(name)
-                    const parts = value.split(HOLE)
-                    hookText(scope, node.getAttributeNode(name), 'value', parts, slice.call(vars, v, v += parts.length - 1))
+                    const attrNode = node.getAttributeNode(queue[++q])
+                    const strings = attrNode.value.split(HOLE)
+                    hookText(scope, attrNode, 'value', strings, slice.call(args, a, a += strings.length - 1))
                     continue
                 }
                 case HOOK_COMMENT: {
-                    const strings = node.data.split(HOLE)
-                    hookText(scope, node, 'data', strings, slice.call(vars, v, v += strings.length - 1))
+                    const childNode = node.childNodes[queue[++q]]
+                    const strings = childNode.data.split(HOLE)
+                    hookText(scope, childNode, 'data', strings, slice.call(args, a, a += strings.length - 1))
                     continue
                 }
             }
