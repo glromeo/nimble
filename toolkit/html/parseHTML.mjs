@@ -226,6 +226,7 @@ export function parseHTML(html) {
                 if (ch === '=') {
                     name = html.slice(start, end)
                     state = ASSIGN
+                    start = end + 1
                     continue
                 }
                 if (ch === '/') {
@@ -256,7 +257,7 @@ export function parseHTML(html) {
                     continue
                 }
                 if (ch === '/') {
-                    hooks.push('')
+                    setAttribute()
                     start = end + 1
                     state = TAG_CLOSE
                     continue
@@ -292,12 +293,8 @@ export function parseHTML(html) {
                 continue
             case ATTR_VALUE:
                 if (ch === HOLE) {
-                    if (end === start) {
-                        hooks.push(HOOK_VALUE, name)
-                    } else {
-                        setAttribute()
-                        hooks.push(HOOK_ATTR)
-                    }
+                    setAttribute()
+                    hooks.push(HOOK_ATTR)
                     state = WHITESPACE
                     continue
                 }
@@ -335,20 +332,12 @@ export function parseHTML(html) {
         }
     }
 
-    if (start < end) {
-        if (state === TEXT_NODE || state === TAG_OPEN) {
-            appendText(end)
-        }
-        if (state === ATTR_NAME) {
-            node.setAttribute(html.slice(start, end), '')
-        }
-        if (state === ASSIGN) {
-            node.setAttribute(name, '')
-        }
-        if (state === WHITESPACE) {
-            node.remove()
-            hooks.length = hooks.lastIndexOf(CHILD_NODE)
-        }
+    if (start < end && state < TAG_NAME) {
+        appendText(end)
+    }
+    if (state > TAG_NAME) {
+        node.remove()
+        hooks.length = hooks.lastIndexOf(CHILD_NODE)
     }
 
     return hooks

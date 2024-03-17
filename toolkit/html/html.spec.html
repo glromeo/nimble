@@ -4,7 +4,8 @@
     <meta charset="utf-8"/>
     <title>Mocha Tests</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <link rel="stylesheet" href="../../node_modules/mocha/mocha.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css"/>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css"/>
     <style>
         body {
             height: 100vh;
@@ -21,261 +22,292 @@
             flex: 1 1 auto;
             overflow-y: auto;
         }
-
-        #mocha {
-            height: 33%;
-            overflow-y: auto;
-            position: relative;
-        }
-
-        #mocha #mocha-stats {
-            top: unset;
-            bottom: 15px;
-        }
     </style>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/diff@5.2.0/dist/diff.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
     <script type="importmap">
         {
             "imports": {
                 "@ant-design/": "../../node_modules/@ant-design/"
             }
         }
+
+
     </script>
 </head>
 <body>
 <div class="flex-column" style="height: 100%">
     <div id="root"></div>
-    <div id="mocha"></div>
+    <div id="diff"></div>
 </div>
 <script src="../../node_modules/chai/chai.js"></script>
-<script src="../../node_modules/mocha/mocha.js"></script>
 <script type="module">
     import {html} from './html.mjs'
     import {toHyperScript, AntIcon} from './util.mjs'
-    import {WebConsole} from '../test/web-console.mjs'
     import {atom, molecule} from '../atoms/atoms.mjs'
 
-    mocha.setup('tdd')
-    mocha.reporter(WebConsole)
+    const setupFns = []
+    const tests = {}
+
+    function setup(fn) {
+        setupFns.push(fn)
+    }
+
+    function test(title, fn) {
+        tests[title] = fn
+    }
+
+    async function run() {
+        for (const [name, test] of Object.entries(tests)) try {
+            for (const fn of setupFns) {
+                await fn()
+            }
+            tests[name] = await test()
+        } catch (error) {
+            if (error.constructor.name === 'AssertionError') {
+                const diff = Diff.createPatch(name, error.expected, error.actual)
+                const diff2htmlUi = new Diff2HtmlUI(document.getElementById('diff'), diff, {
+                    stickyFileHeaders: false,
+                    outputFormat: 'side-by-side',
+                    drawFileList: false,
+                    matching: 'words',
+                    diffStyle: 'char',
+                    highlight: true
+                })
+                diff2htmlUi.draw()
+                console.error(`'${name}' failed with`,  error.stack)
+                return;
+            } else {
+                console.error(error)
+            }
+        }
+    }
 
     const {expect} = chai
 
     const nextFrame = async () => await new Promise(resolve => requestAnimationFrame(resolve))
 
-    suite('html', () => {
+    let fixtureNumber = 0, testNumber = 0
+    let scope, get, set, sub
 
-        let fixtureNumber = 0, testNumber = 0
-        let scope, get, set, sub
-
-        setup(() => {
-            testNumber++
-            fixtureNumber = 0
-            scope = molecule()
-            get = scope.get
-            set = scope.set
-            sub = scope.sub
-        })
-
-        const render = template => {
-            const fixture = document.getElementById('root').appendChild(document.createElement('div'))
-            fixture.setAttribute('class', 'fixture')
-            fixture.setAttribute('data-test', String(testNumber))
-            fixture.setAttribute('data-fixture', String(fixtureNumber++))
-            fixture.appendChild(template(scope))
-            return fixture
-        }
-        const expectHTML = template => expect(render(template).innerHTML)
-        const expectText = template => expect(render(template).innerText)
-
-        test('#0 Its not a bug its a feature', () => {
-            // expectHTML(html`Hello \n${' '}World`).to.eq('Hello \n World')
-            // expectHTML(html` \n <div>Hello \t World</div> \n `).to.eq(' \n <div>Hello \t World</div> \n ')
-            expectHTML(html`< div></div> < div></div>`).to.eq('&lt; div&gt; &lt; div&gt;')
-        })
-
-        test('#1 text content', () => {
-            expectText(html`Hello World`).to.eq('Hello World')
-            expectHTML(html`Hello World`).to.eq('Hello World')
-            expectHTML(html`${BigInt(1234567890)}`).to.eq('1234567890')
-            expectHTML(html`${0}`).to.eq('0')
-            expectHTML(html`${1}`).to.eq('1')
-            expectHTML(html`${1_000_000_000.000_000_9}`).to.eq('1000000000.000001')
-            expectHTML(html`${true}`).to.eq('')
-            expectHTML(html`${false}`).to.eq('')
-            expectHTML(html`${Symbol()}`).to.eq('<!---->')
-        })
-        test('#2 text content (atoms)', () => {
-            expectHTML(html`${atom('Hello World')}`).to.eq('Hello World')
-            expectHTML(html`${atom(BigInt(1234567890))}`).to.eq('1234567890')
-            expectHTML(html`${atom(0)}`).to.eq('0')
-            expectHTML(html`${atom(1)}`).to.eq('1')
-            expectHTML(html`${atom(1_000_000_000.000_000_9)}`).to.eq('1000000000.000001')
-            expectHTML(html`${atom(true)}`).to.eq('')
-            expectHTML(html`${atom(false)}`).to.eq('')
-            expectHTML(html`${atom(Symbol())}`).to.eq('<!---->')
-            expectHTML(html`${atom(() => 'Hello World')}`).to.eq('Hello World')
-            expectHTML(html`${atom(() => html`Hello World`)}`).to.eq('Hello World')
-        })
-        test('#3 text content (atoms changing)', async () => {
-            let a = atom('Hello World')
-            expectHTML(html`${a}`).to.eq('Hello World')
-            set(a, BigInt(1234567890))
-            await nextFrame()
-            expectHTML(html`${a}`).to.eq('1234567890')
-            set(a, 0)
-            await nextFrame()
-            expectHTML(html`${a}`).to.eq('0')
-            set(a, 1)
-            await nextFrame()
-            expectHTML(html`${a}`).to.eq('1')
-            set(a, 1_000_000_000.000_000_9)
-            await nextFrame()
-            expectHTML(html`${a}`).to.eq('1000000000.000001')
-            set(a, true)
-            await nextFrame()
-            expectHTML(html`${a}`).to.eq('')
-            set(a, false)
-            await nextFrame()
-            expectHTML(html`${a}`).to.eq('')
-            set(a, Symbol())
-            await nextFrame()
-            expectHTML(html`${a}`).to.eq('<!---->')
-            set(a, () => 'Hello World')
-            await nextFrame()
-            expectHTML(html`${a}`).to.eq('Hello World')
-            set(a, html`Hello World`)
-            await nextFrame()
-            expectHTML(html`${a}`).to.eq('Hello World')
-        })
-        test('#4 text fragments', () => {
-            expectHTML(html`Hello ${'World'}`).to.eq('Hello World')
-            expectHTML(html`${'Hello'} ${'World'}`).to.eq('Hello World')
-            expectHTML(html`Hello ${html`World`}!`).to.eq('Hello World!')
-            expectText(html`Hello ${html`World`}!`).to.eq('Hello World!')
-        })
-        test('#5 html content', () => {
-            expectHTML(html`<!--Hello World-->`).to.eq('<!--Hello World-->')
-            expectText(html`<div>Hello World</div>`).to.eq('Hello World')
-            expectHTML(html`<p>Hello World</p>`).to.eq('<p>Hello World</p>')
-            expectHTML(html`Hello <p class=${'what'}>World</p>`).to.eq('Hello <p class="what">World</p>')
-            expectHTML(html`\t<div>Hello</div> <div>World</div>\n`).to.eq('\t<div>Hello</div> <div>World</div>\n')
-            expectHTML(html`Hello ${document.createComment('World')}`).to.eq('Hello <!--World-->')
-        })
-        test('#6 nodes are inserted (not cloned)', () => {
-            const node = document.createElement('div')
-            node.innerHTML = '<p>World</p>!'
-            const fixture = render(html`Hello ${node}`)
-            expect(fixture.innerHTML).to.eq('Hello <div><p>World</p>!</div>')
-            const cloned = fixture.firstElementChild
-            expect(cloned).to.equal(node)
-            expect(toHyperScript(cloned)).to.deep.equal(toHyperScript(node))
-        })
-        test('#7 functions are invoked with store and root', () => {
-            expectHTML(html`Hello ${function (r) {
-                expect(this).to.equal(scope)
-                expect(r.nodeType).to.equal(8) // comment placeholder
-                expect(r.parentNode.nodeType).to.equal(11) // document fragment
-                expect(r.parentNode.parentNode).to.be.null // it's not connected yet
-                return 'World'
-            }}`).to.eq('Hello World')
-        })
-        test('#8 text content & class', () => {
-            const fixture = render(
-                html`<div class=${'greetings'} style="font-weight: ${'bold'}">${'Hello World'}</div>`
-            )
-            expect(fixture.innerText).to.eq('Hello World')
-            const el = fixture.firstElementChild
-            expect(el.className).to.eq('greetings')
-            expect(el.style.fontWeight).to.eq('bold')
-        })
-        test('#9 text content using a read only and a primitive atom', async () => {
-            const hello = atom(get => 'Hello')
-            const world = atom('')
-            const fixture = render(html`
-                <div>${hello} ${world}</div>`)
-            expect(fixture.innerText).to.eq('Hello')
-            set(world, 'World')
-            await nextFrame()
-            expect(fixture.innerText).to.eq('Hello World')
-            fixture.remove()
-        })
-        test('#10 nested content using a read only and a primitive atom', async () => {
-            const hello = atom('')
-            const world = atom(get => get(hello) ? 'World' : '')
-            const fixture = render(html`<div hidden=${true}>:) <em>${hello}</em> <p>${world}</p>! </div>`)
-            const el = fixture.firstElementChild
-            expect(el.innerText).to.eq(':)  ! ')
-            set(hello, 'Hello')
-            set(world, 'World')
-            await nextFrame()
-            expect(el.innerHTML).to.eq(':) <em>Hello</em> <p>World</p>! ')
-            expect(el.hasAttribute('hidden')).to.be.true
-            fixture.remove()
-        })
-        test('#11 attrs', async () => {
-            expectHTML(html`<div class=${'hello'}></div>`).to.eq('<div class="hello"></div>')
-            expectHTML(html`<div class="${'hello'} world"></div>`).to.eq('<div class="hello world"></div>')
-            expectHTML(html`<div class=${atom('hello')}></div>`).to.eq('<div class="hello"></div>')
-            expectHTML(html`<div class="${atom('hello')} world"></div>`).to.eq('<div class="hello world"></div>')
-            expectHTML(html`<svg viewBox="320 240 640 480"/>`).to.eq('<svg viewBox="320 240 640 480"></svg>')
-        })
-        test('#12 spread', async () => {
-            expect(render(html`<p ${(node) => {
-                expect(node.tagName).to.equal('P')
-            }}/>`).innerHTML).to.eq('<p></p>')
-            expect(render(html`<p ${function (node) {
-                expect(this).to.equal(scope)
-                expect(node.tagName).to.equal('P')
-            }}/>`).innerHTML).to.eq('<p></p>')
-            expectHTML(html`<p ${1}/>`).to.eq('<p></p>')
-            expectHTML(html`<p ${''}/>`).to.eq('<p></p>')
-            expectHTML(html`<p ${['']}/>`).to.eq('<p></p>')
-            expectHTML(html`<p ${{class: 'para'}}/>`).to.eq('<p class="para"></p>')
-            expectHTML(html`<p ${atom({class: 'para'})}/>`).to.eq('<p class="para"></p>')
-            expectHTML(
-                html`<div ${{class: 'hello', style: 'color: red; background: yellow'}}>Hello World</div>`
-            ).to.eq('<div class="hello" style="color: red; background: yellow">Hello World</div>')
-        })
-        // test('#13 multi attrs (atom)', async () => {
-        //     const color = atom('red')
-        //     const attrs = atom(get => ({class: 'greetings', style: `color: ${get(color)}; background: yellow`}))
-        //     const fixture = render(html`<div ${attrs}>Hello World</div>`)
-        //     expect(fixture.innerText).to.eq('Hello World')
-        //     const el = fixture.firstElementChild
-        //     expect(el.className).to.eq('greetings')
-        //     expect(el.style.color).to.eq('red')
-        //     set(color, 'green')
-        //     await nextFrame()
-        //     expect(el.style.color).to.eq('green')
-        // })
-        // test('#14 [feat] cant use atoms in attribute values', () => {
-        //     expect(render(html`
-        //         <div class="${atom('between')}"/>`).innerHTML).to.eq(' <div class="between"></div>')
-        //     expect(render(html`
-        //         <div class="before ${atom('between')} after"/>`).innerHTML).to.eq(' <div class="before between after"></div>')
-        // })
-        // test('#15 ant-design icons', async () => {
-        //     const ApiOutlined = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiOutlined.js'))
-        //     expect(
-        //         render(html`<${ApiOutlined} width="1rem" height="1rem"/>`).innerHTML
-        //     ).to.include(
-        //         '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon outlined" width="1rem" height="1rem">'
-        //     )
-        //     const ApiFilled = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiFilled.js'))
-        //     expect(
-        //         render(html`<${ApiFilled} class="extra" width="1rem" height="1rem"/>`).innerHTML
-        //     ).to.include(
-        //         '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon filled extra" width="1rem" height="1rem">'
-        //     )
-        //     const ApiTwoTone = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiTwoTone.js'))
-        //     expect(
-        //         render(html`<${ApiTwoTone(atom('darkred'), atom('red'))} width="1rem" height="1rem"/>`).innerHTML
-        //     ).to.include(
-        //         '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon twotone" width="1rem" height="1rem">'
-        //     )
-        // })
+    setup(() => {
+        testNumber++
+        fixtureNumber = 0
+        scope = molecule()
+        get = scope.get
+        set = scope.set
+        sub = scope.sub
     })
 
-    mocha.run()
+    const render = template => {
+        const fixture = document.getElementById('root').appendChild(document.createElement('div'))
+        fixture.setAttribute('class', 'fixture')
+        fixture.setAttribute('data-test', String(testNumber))
+        fixture.setAttribute('data-fixture', String(fixtureNumber++))
+        fixture.appendChild(template(scope))
+        return fixture
+    }
+    const expectHTML = template => expect(render(template).innerHTML)
+    const expectText = template => expect(render(template).innerText)
+
+    test('#0 Its not a bug its a feature', () => {
+        // expectHTML(html`Hello \n${' '}World`).to.eq('Hello \n World')
+        // expectHTML(html` \n <div>Hello \t World</div> \n `).to.eq(' \n <div>Hello \t World</div> \n ')
+        expectHTML(html`< div></div> < div></div>`).to.eq('&lt; div&gt; &lt; div&gt;')
+    })
+
+    test('#1 text content', () => {
+        expectText(html`Hello World`).to.eq('Hello World')
+        expectHTML(html`Hello World`).to.eq('Hello World')
+        expectHTML(html`${BigInt(1234567890)}`).to.eq('1234567890')
+        expectHTML(html`${0}`).to.eq('0')
+        expectHTML(html`${1}`).to.eq('1')
+        expectHTML(html`${1_000_000_000.000_000_9}`).to.eq('1000000000.000001')
+        expectHTML(html`${true}`).to.eq('')
+        expectHTML(html`${false}`).to.eq('')
+        expectHTML(html`${Symbol()}`).to.eq('<!---->')
+    })
+    test('#2 text content (atoms)', () => {
+        expectHTML(html`${atom('Hello World')}`).to.eq('Hello World')
+        expectHTML(html`${atom(BigInt(1234567890))}`).to.eq('1234567890')
+        expectHTML(html`${atom(0)}`).to.eq('0')
+        expectHTML(html`${atom(1)}`).to.eq('1')
+        expectHTML(html`${atom(1_000_000_000.000_000_9)}`).to.eq('1000000000.000001')
+        expectHTML(html`${atom(true)}`).to.eq('')
+        expectHTML(html`${atom(false)}`).to.eq('')
+        expectHTML(html`${atom(Symbol())}`).to.eq('<!---->')
+        expectHTML(html`${atom(() => 'Hello World')}`).to.eq('Hello World')
+        expectHTML(html`${atom(() => html`Hello World`)}`).to.eq('Hello World')
+    })
+    test('#3 text content (atoms changing)', async () => {
+        let a = atom('Hello World')
+        expectHTML(html`${a}`).to.eq('Hello World')
+        set(a, BigInt(1234567890))
+        await nextFrame()
+        expectHTML(html`${a}`).to.eq('1234567890')
+        set(a, 0)
+        await nextFrame()
+        expectHTML(html`${a}`).to.eq('0')
+        set(a, 1)
+        await nextFrame()
+        expectHTML(html`${a}`).to.eq('1')
+        set(a, 1_000_000_000.000_000_9)
+        await nextFrame()
+        expectHTML(html`${a}`).to.eq('1000000000.000001')
+        set(a, true)
+        await nextFrame()
+        expectHTML(html`${a}`).to.eq('')
+        set(a, false)
+        await nextFrame()
+        expectHTML(html`${a}`).to.eq('')
+        set(a, Symbol())
+        await nextFrame()
+        expectHTML(html`${a}`).to.eq('<!---->')
+        set(a, () => 'Hello World')
+        await nextFrame()
+        expectHTML(html`${a}`).to.eq('Hello World')
+        set(a, html`Hello World`)
+        await nextFrame()
+        expectHTML(html`${a}`).to.eq('Hello World')
+    })
+    test('#4 text fragments', () => {
+        expectHTML(html`Hello ${'World'}`).to.eq('Hello World')
+        expectHTML(html`${'Hello'} ${'World'}`).to.eq('Hello World')
+        expectHTML(html`Hello ${html`World`}!`).to.eq('Hello World!')
+        expectText(html`Hello ${html`World`}!`).to.eq('Hello World!')
+    })
+    test('#5 html content', () => {
+        expectHTML(html`<!--Hello World-->`).to.eq('<!--Hello World-->')
+        expectText(html`<div>Hello World</div>`).to.eq('Hello World')
+        expectHTML(html`<p>Hello World</p>`).to.eq('<p>Hello World</p>')
+        expectHTML(html`Hello <p class=${'what'}>World</p>`).to.eq('Hello <p class="what">World</p>')
+        expectHTML(html`\n\t<div>Hello</div>\n\t<div>World</div>`).to.eq('\n\t<div>Hello</div>\n\t<div>World</div>\n')
+        expectHTML(html`Hello ${document.createComment('World')}`).to.eq('Hello <!--World-->')
+    })
+    test('#6 nodes are inserted (not cloned)', () => {
+        const node = document.createElement('div')
+        node.innerHTML = '<p>World</p>!'
+        const fixture = render(html`Hello ${node}`)
+        expect(fixture.innerHTML).to.eq('Hello <div><p>World</p>!</div>')
+        const cloned = fixture.firstElementChild
+        expect(cloned).to.equal(node)
+        expect(toHyperScript(cloned)).to.deep.equal(toHyperScript(node))
+    })
+    test('#7 functions are invoked with store and root', () => {
+        expectHTML(html`Hello ${function (r) {
+            expect(this).to.equal(scope)
+            expect(r.nodeType).to.equal(8) // comment placeholder
+            expect(r.parentNode.nodeType).to.equal(11) // document fragment
+            expect(r.parentNode.parentNode).to.be.null // it's not connected yet
+            return 'World'
+        }}`).to.eq('Hello World')
+    })
+    test('#8 text content & class', () => {
+        const fixture = render(
+            html`
+                <div class=${'greetings'} style="font-weight: ${'bold'}">${'Hello World'}</div>`
+        )
+        expect(fixture.innerText).to.eq('Hello World')
+        const el = fixture.firstElementChild
+        expect(el.className).to.eq('greetings')
+        expect(el.style.fontWeight).to.eq('bold')
+    })
+    test('#9 text content using a read only and a primitive atom', async () => {
+        const hello = atom(get => 'Hello')
+        const world = atom('')
+        const fixture = render(html`
+            <div>${hello} ${world}</div>`)
+        expect(fixture.innerText).to.eq('Hello')
+        set(world, 'World')
+        await nextFrame()
+        expect(fixture.innerText).to.eq('Hello World')
+        fixture.remove()
+    })
+    test('#10 nested content using a read only and a primitive atom', async () => {
+        const hello = atom('')
+        const world = atom(get => get(hello) ? 'World' : '')
+        const fixture = render(html`
+            <div hidden=${true}>:) <em>${hello}</em>
+                <p>${world}</p>!
+            </div>`)
+        const el = fixture.firstElementChild
+        expect(el.innerText).to.eq(':)  ! ')
+        set(hello, 'Hello')
+        set(world, 'World')
+        await nextFrame()
+        expect(el.innerHTML).to.eq(':) <em>Hello</em> <p>World</p>! ')
+        expect(el.hasAttribute('hidden')).to.be.true
+        fixture.remove()
+    })
+    test('#11 attrs', async () => {
+        expectHTML(html`<div class=${'hello'}></div>`).to.eq('<div class="hello"></div>')
+        expectHTML(html`<div class="${'hello'} world"></div>`).to.eq('<div class="hello world"></div>')
+        expectHTML(html`<div class=${atom('hello')}></div>`).to.eq('<div class="hello"></div>')
+        expectHTML(html`<div class="${atom('hello')} world"></div>`).to.eq('<div class="hello world"></div>')
+        expectHTML(html`<svg viewBox="320 240 640 480"/>`).to.eq('<svg viewBox="320 240 640 480"></svg>')
+    })
+    test('#12 spread', async () => {
+        expect(render(html`<p ${(node) => {
+            expect(node.tagName).to.equal('P')
+        }}/>`).innerHTML).to.eq('<p></p>')
+        expect(render(html`<p ${function (node) {
+            expect(this).to.equal(scope)
+            expect(node.tagName).to.equal('P')
+        }}/>`).innerHTML).to.eq('<p></p>')
+        expectHTML(html`<p ${1}/>`).to.eq('<p></p>')
+        expectHTML(html`<p${''}/>`).to.eq('<p></p>')
+        expectHTML(html`<p ${['']}/>`).to.eq('<p></p>')
+        expectHTML(html`<p ${{class: 'para'}}/>`).to.eq('<p class="para"></p>')
+        expectHTML(html`<p ${atom({class: 'para'})}/>`).to.eq('<p class="para"></p>')
+        expectHTML(
+            html`
+                <div ${{class: 'hello', style: 'color: red; background: yellow'}}>Hello World</div>`
+        ).to.eq('<div class="hello" style="color: red; background: yellow">Hello World</div>')
+    })
+    // test('#13 multi attrs (atom)', async () => {
+    //     const color = atom('red')
+    //     const attrs = atom(get => ({class: 'greetings', style: `color: ${get(color)}; background: yellow`}))
+    //     const fixture = render(html`<div ${attrs}>Hello World</div>`)
+    //     expect(fixture.innerText).to.eq('Hello World')
+    //     const el = fixture.firstElementChild
+    //     expect(el.className).to.eq('greetings')
+    //     expect(el.style.color).to.eq('red')
+    //     set(color, 'green')
+    //     await nextFrame()
+    //     expect(el.style.color).to.eq('green')
+    // })
+    // test('#14 [feat] cant use atoms in attribute values', () => {
+    //     expect(render(html`
+    //         <div class="${atom('between')}"/>`).innerHTML).to.eq(' <div class="between"></div>')
+    //     expect(render(html`
+    //         <div class="before ${atom('between')} after"/>`).innerHTML).to.eq(' <div class="before between after"></div>')
+    // })
+    // test('#15 ant-design icons', async () => {
+    //     const ApiOutlined = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiOutlined.js'))
+    //     expect(
+    //         render(html`<${ApiOutlined} width="1rem" height="1rem"/>`).innerHTML
+    //     ).to.include(
+    //         '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon outlined" width="1rem" height="1rem">'
+    //     )
+    //     const ApiFilled = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiFilled.js'))
+    //     expect(
+    //         render(html`<${ApiFilled} class="extra" width="1rem" height="1rem"/>`).innerHTML
+    //     ).to.include(
+    //         '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon filled extra" width="1rem" height="1rem">'
+    //     )
+    //     const ApiTwoTone = AntIcon(await import('@ant-design/icons-svg/es/asn/ApiTwoTone.js'))
+    //     expect(
+    //         render(html`<${ApiTwoTone(atom('darkred'), atom('red'))} width="1rem" height="1rem"/>`).innerHTML
+    //     ).to.include(
+    //         '<svg viewBox="64 64 896 896" focusable="false" name="api" class="ant-icon twotone" width="1rem" height="1rem">'
+    //     )
+    // })
+
+    console.time('run tests')
+    run().finally(() => {
+        console.timeEnd('run tests')
+    })
+
 </script>
 </body>
 </html>

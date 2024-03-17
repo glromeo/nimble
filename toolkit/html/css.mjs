@@ -1,6 +1,6 @@
-import {Atom, Store} from '../atoms/atoms'
+import { atomTag } from "../atoms/atoms.mjs";
 
-function setProperty(store: Store, style: CSSStyleDeclaration, property: string, value: any, hooks?: Function[]): void {
+function setProperty(store, style, property, value, hooks) {
     switch (typeof value) {
         case 'bigint':
         case 'number':
@@ -14,9 +14,9 @@ function setProperty(store: Store, style: CSSStyleDeclaration, property: string,
             return setProperty(store, style, property, value(store, style, property), hooks)
         default:
             if (value) {
-                let update: FrameRequestCallback | undefined
+                let update
                 if (value.constructor === Array) {
-                    const parts = value.map(function format(part: any, index: number): string {
+                    const parts = value.map(function format(part, index) {
                             switch (typeof part) {
                                 case 'bigint':
                                 case 'number':
@@ -26,7 +26,7 @@ function setProperty(store: Store, style: CSSStyleDeclaration, property: string,
                                     return format(part(store, style, property), index)
                                 default:
                                     if (part && part.atomId) {
-                                        const atom = part as Atom<any>
+                                        const atom = part
                                         if (hooks) {
                                             update = update || function defaultUpdate() {
                                                 style.setProperty(property, parts.join(' '))
@@ -48,8 +48,8 @@ function setProperty(store: Store, style: CSSStyleDeclaration, property: string,
                         }
                     )
                     return style.setProperty(property, parts.join(' '))
-                } else if (value.atomId) {
-                    const atom = value as Atom<any>
+                } else if (value[atomTag]) {
+                    const atom = value
                     if (hooks) {
                         let value = store.get(atom)
                         update = function defaultUpdate() {
@@ -76,7 +76,7 @@ function setProperty(store: Store, style: CSSStyleDeclaration, property: string,
     }
 }
 
-function setStyle(store: Store, style: CSSStyleDeclaration, value: any, hooks?: Function[]): void {
+function setStyle(store, style, value, hooks) {
     switch (typeof value) {
         case 'boolean':
         case 'bigint':
@@ -95,9 +95,9 @@ function setStyle(store: Store, style: CSSStyleDeclaration, value: any, hooks?: 
             return setStyle(store, style, value(store, style), hooks)
         default:
             if (value) {
-                let update: FrameRequestCallback | undefined
-                if (value.atomId) {
-                    const atom = value as Atom<any>
+                let update
+                if (value[atomTag]) {
+                    const atom = value
                     if (hooks) {
                         let value = store.get(atom)
                         update = function defaultUpdate() {
@@ -131,19 +131,19 @@ function setStyle(store: Store, style: CSSStyleDeclaration, value: any, hooks?: 
 const HOLE = '\x01'
 let gId = 0
 
-export function css(statics: TemplateStringsArray, ...values: any[]) {
-    const textContent = statics.join(HOLE)
+export function css(strings) {
+    const textContent = strings.join(HOLE)
     const style = document.createElement('style')
     style.setAttribute('title', 'nimble-css')
     style.setAttribute('group-id', String(++gId))
 
-    const rules: { path: Uint8Array, property?: string, value: Function | Atom<any> }[] = []
-    const path: number[] = []
+    const rules = []
+    const path = []
     let p = 0
-    let property: string | undefined
+    let property
     let index = 0
     let from = 0, selector = ''
-    style.textContent = textContent.replace(/\s+|[\x01{};:]/g, (ch: string, offset: number) => {
+    style.textContent = textContent.replace(/\s+|[\x01{};:]/g, (ch, offset) => {
         switch (ch) {
             case ':':
                 property = textContent.slice(from, offset)
@@ -159,12 +159,12 @@ export function css(statics: TemplateStringsArray, ...values: any[]) {
                 from = offset + 1
                 return ch
             case '}':
-                p = path.pop()! + 1
+                p = path.pop() + 1
                 from = offset + 1
                 selector = ''
                 return ch
             case HOLE:
-                let value = values[index++]
+                let value = arguments[++index]
                 switch (typeof value) {
                     case 'bigint':
                     case 'number':
@@ -189,16 +189,16 @@ export function css(statics: TemplateStringsArray, ...values: any[]) {
         }
     })
 
-    return (store: Store, root: HTMLElement = document.head, defaultHooks?: Function[]) => {
+    return (store, root = document.head, defaultHooks) => {
         root.appendChild(style)
         const hooks = defaultHooks ?? []
         const styleSheet = document.styleSheets[document.styleSheets.length - 1]
         for (const {path, property, value} of rules) {
-            let rule = styleSheet as any
+            let rule = styleSheet
             for (let i = 0; i < path.length; i++) {
                 rule = rule.cssRules[path[i]]
             }
-            const style = rule.style as CSSStyleDeclaration
+            const style = rule.style
             if (property) {
                 setProperty(store, style, property, value, hooks)
             } else {
