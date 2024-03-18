@@ -1,25 +1,24 @@
 import {atom, atomTag} from '../atoms/atoms.mjs'
+import {
+    APPEND_CHILD,
+    APPEND_COMMENT,
+    APPEND_TEXT,
+    BOOL_ATTR,
+    HOLE,
+    HOOK_ATTR,
+    HOOK_COMMENT,
+    HOOK_ELEMENT,
+    HOOK_NODE,
+    HOOK_QUOTE,
+    HOOK_VALUE,
+    PARENT_NODE,
+    parseHTML,
+    SET_ATTR
+} from './parseHTML.mjs'
 
 export const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
 export const XHTML_NAMESPACE_URI = 'http://www.w3.org/1999/xhtml'
 export const PLACEHOLDER_NODE = document.createComment('')
-
-import {
-    HOLE,
-    APPEND_TEXT,
-    APPEND_COMMENT,
-    APPEND_CHILD,
-    BOOL_ATTR,
-    SET_ATTR,
-    PARENT_NODE,
-    HOOK_NODE,
-    HOOK_ELEMENT,
-    HOOK_COMMENT,
-    HOOK_ATTR,
-    HOOK_VALUE,
-    HOOK_QUOTE,
-    parseHTML
-} from './parseHTML.mjs'
 
 const CACHE = new WeakMap()
 
@@ -42,7 +41,7 @@ export function html(strings) {
                 case APPEND_CHILD:
                     tagName = args[a++]
                     node = node.appendChild(
-                        node.namespaceURI !== XHTML_NAMESPACE_URI
+                        node.namespaceURI && node.namespaceURI !== XHTML_NAMESPACE_URI
                             ? document.createElementNS(node.namespaceURI, tagName)
                             : tagName === 'svg'
                                 ? document.createElementNS(SVG_NAMESPACE_URI, tagName)
@@ -74,18 +73,15 @@ export function html(strings) {
                     continue
                 case HOOK_QUOTE: {
                     const name = args[a++]
-                    const value = args[a++]
-                    node.setAttribute(name, value)
-                    const target = node.getAttributeNode(name)
-                    const parts = value.split(HOLE)
-                    hookText(scope, target, 'value', parts, slice.call(vars, v, v += parts.length - 1))
+                    const strings = args[a++].split(HOLE)
+                    hookQuote(scope, node, name, strings, slice.call(vars, v, v += strings.length - 1))
                     continue
                 }
                 case HOOK_COMMENT: {
                     const data = args[a++]
-                    const target = node.appendChild(document.createComment(data))
-                    const parts = data.split(HOLE)
-                    hookText(scope, target, 'data', parts, slice.call(vars, v, v += parts.length - 1))
+                    const comment = node.appendChild(document.createComment(data))
+                    const strings = data.split(HOLE)
+                    hookText(scope, comment, strings, slice.call(vars, v, v += strings.length - 1))
                     continue
                 }
             }
@@ -250,14 +246,11 @@ function hookAttr(scope, node, value) {
 }
 
 function format(value) {
-    switch (typeof value) {
-        case 'bigint':
-        case 'number':
-        case 'string':
-            return value
-        default:
-            return ''
+    const type = typeof value
+    if (type === 'bigint' || type === 'number' || type === 'string') {
+        return value
     }
+    return ''
 }
 
 function hookValue(scope, node, name, value) {
@@ -318,7 +311,7 @@ function hookValue(scope, node, name, value) {
     setAttr(scope, node, name, value)
 }
 
-function hookText(scope, node, field, strings, values) {
+function hookQuote(scope, node, name, strings, values) {
     let pending = 0
     const update = () => {
         let text = strings[0]
@@ -326,7 +319,32 @@ function hookText(scope, node, field, strings, values) {
             text += values[i]
             text += strings[++i]
         }
-        node[field] = text
+        node.setAttribute(name, text)
+        pending = 0
+    }
+    for (let i = 0; i < values.length; ++i) {
+        if (values[i]?.[atomTag]) {
+            scope.bind(values[i], value => {
+                values[i] = value
+                pending ||= requestAnimationFrame(update)
+            })
+            values[i] = format(scope.get(values[i]))
+        } else {
+            values[i] = format(values[i])
+        }
+    }
+    update()
+}
+
+function hookText(scope, node, strings, values) {
+    let pending = 0
+    const update = () => {
+        let text = strings[0]
+        for (let i = 0; i < values.length;) {
+            text += values[i]
+            text += strings[++i]
+        }
+        node.data = text
         pending = 0
     }
     for (let i = 0; i < values.length; ++i) {
