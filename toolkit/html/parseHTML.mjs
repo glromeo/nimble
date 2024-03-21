@@ -89,243 +89,253 @@ export function parseHTML(html) {
 
     while (++end < html.length) {
         const ch = html[end]
-        switch (state) {
-            case TEXT_NODE:
-                if (ch === '<') {
-                    state = TAG_OPEN
-                    continue
-                }
-                if (ch === HOLE) {
-                    appendText(end)
-                    commands.push(HOOK_NODE)
-                    start = end + 1
-                }
+        if (state === TEXT_NODE) {
+            if (ch === '<') {
+                state = TAG_OPEN
                 continue
-            case TAG_OPEN:
-                if (isWhitespace(ch)) {
-                    state = TEXT_NODE
-                    continue
-                }
-                appendText(end - 1)
-                if (ch === HOLE) {
-                    stack.push(tagName)
-                    tagName = null
-                    commands.push(HOOK_ELEMENT)
-                    state = WHITESPACE
-                    continue
-                }
-                if (ch === '!') {
-                    start = end + 1
-                    state = COMMENT
-                    continue
-                }
-                if (ch === '/') {
-                    start = end + 1
-                    state = TAG_CLOSE
-                    continue
-                }
-                if (ch === '>') {
-                    appendSlot()
-                    start = end + 1
-                    state = TEXT_NODE
-                    continue
-                }
-                start = end
-                state = TAG_NAME
+            }
+            if (ch === HOLE) {
+                appendText(end)
+                commands.push(HOOK_NODE)
+                start = end + 1
+            }
+            continue
+        }
+        if (state === TAG_OPEN) {
+            if (isWhitespace(ch)) {
+                state = TEXT_NODE
                 continue
-            case TAG_NAME:
-                if (isWhitespace(ch) || ch === HOLE) {
-                    appendChild()
-                    if (ch === HOLE) {
-                        commands.push(HOOK_ATTR)
-                    }
-                    state = WHITESPACE
-                    continue
-                }
-                if (ch === '/') {
-                    appendChild()
-                    start = end + 1
-                    state = TAG_CLOSE
-                    continue
-                }
-                if (ch === '>') {
-                    appendChild()
-                    if (isVoid()) {
-                        tagName = stack.pop()
-                        commands.push(PARENT_NODE)
-                    }
-                    start = end + 1
-                    state = TEXT_NODE
-                }
+            }
+            appendText(end - 1)
+            if (ch === HOLE) {
+                stack.push(tagName)
+                tagName = null
+                commands.push(HOOK_ELEMENT)
+                state = WHITESPACE
                 continue
-            case COMMENT:
-                if (ch === '>') {
-                    if (html[start] === '-' && html[start + 1] === '-') {
-                        if (html[end - 1] === '-' && html[end - 2] === '-') {
-                            appendComment(start + 2, end - 2)
-                        } else {
-                            continue
-                        }
-                    } else {
-                        appendComment(start, end)
-                    }
-                    start = end + 1
-                    state = TEXT_NODE
-                }
+            }
+            if (ch === '!') {
+                start = end + 1
+                state = COMMENT
                 continue
-            case WHITESPACE:
+            }
+            if (ch === '/') {
+                start = end + 1
+                state = TAG_CLOSE
+                continue
+            }
+            if (ch === '>') {
+                appendSlot()
+                start = end + 1
+                state = TEXT_NODE
+                continue
+            }
+            start = end
+            state = TAG_NAME
+            continue
+        }
+        if (state === TAG_NAME) {
+            if (isWhitespace(ch) || ch === HOLE) {
+                appendChild()
                 if (ch === HOLE) {
                     commands.push(HOOK_ATTR)
-                    continue
                 }
-                if (ch === '/') {
-                    start = end + 1
-                    state = TAG_CLOSE
-                    continue
-                }
-                if (ch === '>') {
-                    if (isVoid()) {
-                        tagName = stack.pop()
-                        commands.push(PARENT_NODE)
-                    }
-                    start = end + 1
-                    state = TEXT_NODE
-                    continue
-                }
-                if (!isWhitespace(ch)) {
-                    start = end
-                    state = ATTR_NAME
-                }
+                state = WHITESPACE
                 continue
-            case ATTR_NAME:
-                if (isWhitespace(ch) || ch === HOLE) {
-                    commands.push(BOOL_ATTR)
-                    args.push(html.slice(start, end))
-                    if (ch === HOLE) {
-                        commands.push(HOOK_ATTR)
-                    }
-                    state = WHITESPACE
-                    continue
-                }
-                if (ch === '=') {
-                    name = html.slice(start, end)
-                    state = ASSIGN
-                    start = end + 1
-                    continue
-                }
-                if (ch === '/') {
-                    commands.push(BOOL_ATTR)
-                    args.push(html.slice(start, end))
-                    start = end + 1
-                    state = TAG_CLOSE
-                    continue
-                }
-                if (ch === '>') {
-                    commands.push(BOOL_ATTR)
-                    args.push(html.slice(start, end))
-                    if (isVoid()) {
-                        tagName = stack.pop()
-                        commands.push(PARENT_NODE)
-                    }
-                    start = end + 1
-                    state = TEXT_NODE
-                }
+            }
+            if (ch === '/') {
+                appendChild()
+                start = end + 1
+                state = TAG_CLOSE
                 continue
-            case ASSIGN:
+            }
+            if (ch === '>') {
+                appendChild()
+                if (isVoid()) {
+                    tagName = stack.pop()
+                    commands.push(PARENT_NODE)
+                }
+                start = end + 1
+                state = TEXT_NODE
+            }
+            continue
+        }
+        if (state === COMMENT) {
+            if (ch === '>') {
+                if (html[start] === '-' && html[start + 1] === '-') {
+                    if (html[end - 1] === '-' && html[end - 2] === '-') {
+                        appendComment(start + 2, end - 2)
+                    } else {
+                        continue
+                    }
+                } else {
+                    appendComment(start, end)
+                }
+                start = end + 1
+                state = TEXT_NODE
+            }
+            continue
+        }
+        if (state === WHITESPACE) {
+            if (ch === HOLE) {
+                commands.push(HOOK_ATTR)
+                continue
+            }
+            if (ch === '/') {
+                start = end + 1
+                state = TAG_CLOSE
+                continue
+            }
+            if (ch === '>') {
+                if (isVoid()) {
+                    tagName = stack.pop()
+                    commands.push(PARENT_NODE)
+                }
+                start = end + 1
+                state = TEXT_NODE
+                continue
+            }
+            if (!isWhitespace(ch)) {
+                start = end
+                state = ATTR_NAME
+            }
+            continue
+        }
+        if (state === ATTR_NAME) {
+            if (isWhitespace(ch) || ch === HOLE) {
+                commands.push(BOOL_ATTR)
+                args.push(html.slice(start, end))
                 if (ch === HOLE) {
+                    commands.push(HOOK_ATTR)
+                }
+                state = WHITESPACE
+                continue
+            }
+            if (ch === '=') {
+                name = html.slice(start, end)
+                state = ASSIGN
+                start = end + 1
+                continue
+            }
+            if (ch === '/') {
+                commands.push(BOOL_ATTR)
+                args.push(html.slice(start, end))
+                start = end + 1
+                state = TAG_CLOSE
+                continue
+            }
+            if (ch === '>') {
+                commands.push(BOOL_ATTR)
+                args.push(html.slice(start, end))
+                if (isVoid()) {
+                    tagName = stack.pop()
+                    commands.push(PARENT_NODE)
+                }
+                start = end + 1
+                state = TEXT_NODE
+            }
+            continue
+        }
+        if (state === ASSIGN) {
+            if (ch === HOLE) {
+                commands.push(HOOK_VALUE)
+                args.push(name)
+                state = WHITESPACE
+                continue
+            }
+            if (ch === '\'' || ch === '"') {
+                quote = ch
+                start = end + 1
+                state = QUOTED_VALUE
+                continue
+            }
+            if (ch === '/') {
+                commands.push(SET_ATTR)
+                args.push(name, html.slice(start, end))
+                start = end + 1
+                state = TAG_CLOSE
+                continue
+            }
+            if (!isWhitespace(ch)) {
+                start = end
+                state = ATTR_VALUE
+            }
+            continue
+        }
+        if (state === QUOTED_VALUE) {
+            if (ch === HOLE) {
+                state = HOLEY_VALUE
+                continue
+            }
+            if (ch === quote) {
+                commands.push(SET_ATTR)
+                args.push(name, html.slice(start, end))
+                quote = null
+                state = WHITESPACE
+                continue
+            }
+            continue
+        }
+        if (state === HOLEY_VALUE) {
+            if (ch === quote) {
+                if (end - start === 1) {
                     commands.push(HOOK_VALUE)
                     args.push(name)
-                    state = WHITESPACE
-                    continue
-                }
-                if (ch === '\'' || ch === '"') {
-                    quote = ch
-                    start = end + 1
-                    state = QUOTED_VALUE
-                    continue
-                }
-                if (ch === '/') {
-                    commands.push(SET_ATTR)
+                } else {
+                    commands.push(HOOK_QUOTE)
                     args.push(name, html.slice(start, end))
-                    start = end + 1
-                    state = TAG_CLOSE
-                    continue
                 }
-                if (!isWhitespace(ch)) {
-                    start = end
-                    state = ATTR_VALUE
-                }
+                quote = null
+                state = WHITESPACE
                 continue
-            case QUOTED_VALUE:
-                if (ch === HOLE) {
-                    state = HOLEY_VALUE
-                    continue
-                }
-                if (ch === quote) {
-                    commands.push(SET_ATTR)
-                    args.push(name, html.slice(start, end))
-                    quote = null
-                    state = WHITESPACE
-                    continue
-                }
-            case HOLEY_VALUE:
-                if (ch === quote) {
-                    if (end - start === 1) {
-                        commands.push(HOOK_VALUE)
-                        args.push(name)
-                    } else {
-                        commands.push(HOOK_QUOTE)
-                        args.push(name, html.slice(start, end))
-                    }
-                    quote = null
-                    state = WHITESPACE
-                    continue
-                }
+            }
+            continue
+        }
+        if (state === ATTR_VALUE) {
+            if (ch === HOLE) {
+                setAttr()
+                commands.push(HOOK_ATTR)
+                state = WHITESPACE
                 continue
-            case ATTR_VALUE:
-                if (ch === HOLE) {
-                    setAttr()
-                    commands.push(HOOK_ATTR)
-                    state = WHITESPACE
-                    continue
-                }
-                if (ch === '/') {
-                    commands.push(SET_ATTR)
-                    args.push(name, html.slice(start, end))
-                    start = end + 1
-                    state = TAG_CLOSE
-                    continue
-                }
-                if (ch === '>') {
-                    commands.push(SET_ATTR)
-                    args.push(name, html.slice(start, end))
-                    start = end + 1
-                    state = TEXT_NODE
-                    continue
-                }
-                if (isWhitespace(ch)) {
-                    commands.push(SET_ATTR)
-                    args.push(name, html.slice(start, end))
-                    state = WHITESPACE
-                }
+            }
+            if (ch === '/') {
+                commands.push(SET_ATTR)
+                args.push(name, html.slice(start, end))
+                start = end + 1
+                state = TAG_CLOSE
                 continue
-            case TAG_CLOSE:
-                if (ch === '>') {
-                    if (end === start || !tagName || tagName === html.slice(start, end).toLowerCase()) {
-                        tagName = stack.pop()
-                        commands.push(PARENT_NODE)
-                    }
-                    start = end + 1
-                    state = TEXT_NODE
-                    continue
+            }
+            if (ch === '>') {
+                commands.push(SET_ATTR)
+                args.push(name, html.slice(start, end))
+                start = end + 1
+                state = TEXT_NODE
+                continue
+            }
+            if (isWhitespace(ch)) {
+                commands.push(SET_ATTR)
+                args.push(name, html.slice(start, end))
+                state = WHITESPACE
+            }
+            continue
+        }
+        if (state === TAG_CLOSE) {
+            if (ch === '>') {
+                if (end === start || !tagName || tagName === html.slice(start, end).toLowerCase()) {
+                    tagName = stack.pop()
+                    commands.push(PARENT_NODE)
                 }
-                if (ch === '/') {
-                    start = end + 1
-                    continue
-                }
-                if (isWhitespace(ch)) {
-                    state = WHITESPACE
-                }
+                start = end + 1
+                state = TEXT_NODE
+                continue
+            }
+            if (ch === '/') {
+                start = end + 1
+                continue
+            }
+            if (isWhitespace(ch)) {
+                state = WHITESPACE
+            }
         }
     }
 

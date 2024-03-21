@@ -1,0 +1,18 @@
+{
+  "name": "@nimble/scripts",
+  "description": "scripts to build and do stuff",
+  "version": "1.0.0",
+  "author": "glromeo@gmail.com",
+  "license": "MIT",
+  "main": "nimble.mjs",
+  "type": "module",
+  "bin": {
+    "nimble": "./nimble.mjs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "esbuild": "^0.20.2"
+  }
+}

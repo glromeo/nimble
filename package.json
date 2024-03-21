@@ -4,6 +4,10 @@
   "license": "MIT",
   "private": true,
   "workspaces": [
+    "docs",
+    "jsx-runtime",
+    "scripts",
+    "testing",
     "toolkit"
   ],
   "devDependencies": {

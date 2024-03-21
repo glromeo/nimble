@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JSX Runtime Spec</title>
+    <script type="importmap">
+        {
+            "imports": {
+                "esbuild-wasm": "../node_modules/esbuild-wasm/esm/browser.js",
+                "@nimble/testing": "../testing/index.mjs",
+                "@nimble/toolkit": "../toolkit/index.mjs",
+                "@nimble/jsx-runtime": "./index.mjs"
+            }
+        }
+    </script>
+    <script src="../node_modules/chai/chai.js"></script>
+    <script type="module">
+        import {initialize, transform} from 'esbuild-wasm'
+
+        const initialized = initialize({
+            wasmURL: '../node_modules/esbuild-wasm/esbuild.wasm'
+        })
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initialized
+            let sn = 0
+            for (const script of document.querySelectorAll('script[type="text/jsx"]')) {
+                const transpiled = document.createElement('script')
+                transpiled.setAttribute('type', 'module')
+                const {code} = await transform(script.textContent.trim(), {
+                    loader: 'jsx',
+                    format: 'esm',
+                    jsx: 'automatic',
+                    jsxFactory: 'jsx',
+                    jsxFragment: 'Fragment',
+                    jsxImportSource: '@nimble',
+                    jsxSideEffects: true,
+                    sourcemap: 'inline',
+                    sourcefile: `script.jsx (${sn++})`
+                })
+                transpiled.textContent = code
+                script.replaceWith(transpiled)
+            }
+        })
+    </script>
+</head>
+<body>
+<div id="fixtures"></div>
+<script type="text/jsx">
+    import {suite, test, renderHTML} from '@nimble/testing'
+    import {atom} from '@nimble/toolkit'
+    const {expect} = chai
+
+    const specs = suite("JSX spec", (before, after) => {
+
+        // before.all(ctx=>{
+        //     console.log("before all", ctx)
+        // })
+        //
+        // before.each(ctx=>{
+        //     console.log("before each", ctx)
+        // })
+        //
+        // after.each(test => {
+        //     console.log("after each", test)
+        // })
+        //
+        // after.all(suite => {
+        //     console.log("after all", suite)
+        // })
+
+        test("fragments", () => {
+            expect(renderHTML(() => <>Hello World</>)).to.eq(`Hello World`)
+            expect(renderHTML(() => <div>Hello World</div>)).to.eq(`<div>Hello World</div>`)
+            expect(renderHTML(() => <div class="message">Hello World</div>)).to.eq(`<div class="message">Hello World</div>`)
+            expect(renderHTML(() => <div class={['alpha','beta','gamma']}>Hello World</div>)).to.eq(`<div class="alpha beta gamma">Hello World</div>`)
+            expect(renderHTML(() => {
+                const beta = atom('beta')
+                return <div class={get => `alpha ${beta} gamma`}>Hello World</div>
+            })).to.eq(`<div class="alpha beta gamma">Hello World</div>`)
+        })
+    })
+
+    specs.run()
+
+</script>
+</body>
+</html>

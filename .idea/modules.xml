@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/@nimble.iml" filepath="$PROJECT_DIR$/.idea/@nimble.iml" />
+      <module fileurl="file://$PROJECT_DIR$/testing.iml" filepath="$PROJECT_DIR$/testing.iml" />
     </modules>
   </component>
 </project>

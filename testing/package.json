@@ -1,0 +1,12 @@
+{
+  "name": "@nimble/testing",
+  "description": "Testing utilities",
+  "version": "1.0.0",
+  "author": "glromeo@gmail.com",
+  "license": "MIT",
+  "main": "index.mjs",
+  "type": "module",
+  "devDependencies": {
+    "esbuild-wasm": "^0.20.2"
+  }
+}

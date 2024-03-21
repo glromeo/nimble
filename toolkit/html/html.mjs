@@ -18,7 +18,7 @@ import {
 
 export const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
 export const XHTML_NAMESPACE_URI = 'http://www.w3.org/1999/xhtml'
-export const PLACEHOLDER_NODE = document.createComment('')
+export const PLACEHOLDER = document.createComment('')
 
 const CACHE = new WeakMap()
 
@@ -31,14 +31,17 @@ export function html(strings) {
         CACHE.set(strings, render = (scope, vars) => {
             const fragment = document.createDocumentFragment()
             let node = fragment, tagName
-            for (let c = 0, a = 0, v = 1; c < commands.length; ++c) switch (commands[c]) {
-                case APPEND_TEXT:
+            for (let c = 0, a = 0, v = 1; c < commands.length; ++c) {
+                const command = commands[c]
+                if (command === APPEND_TEXT) {
                     node.appendChild(document.createTextNode(args[a++]))
                     continue
-                case APPEND_COMMENT:
+                }
+                if (command === APPEND_COMMENT) {
                     node.appendChild(document.createComment(args[a++]))
                     continue
-                case APPEND_CHILD:
+                }
+                if (command === APPEND_CHILD) {
                     tagName = args[a++]
                     node = node.appendChild(
                         node.namespaceURI && node.namespaceURI !== XHTML_NAMESPACE_URI
@@ -48,36 +51,44 @@ export function html(strings) {
                                 : document.createElement(tagName)
                     )
                     continue
-                case PARENT_NODE:
+                }
+                if (command === PARENT_NODE) {
                     node = node.parentNode ?? node
                     continue
-                case BOOL_ATTR:
+                }
+                if (command === BOOL_ATTR) {
                     node.setAttribute(args[a++], '')
                     continue
-                case SET_ATTR:
+                }
+                if (command === SET_ATTR) {
                     node.setAttribute(args[a++], args[a++])
                     continue
-                case HOOK_NODE:
-                    hookNode(scope, node.appendChild(PLACEHOLDER_NODE.cloneNode()), vars[v++])
+                }
+                if (command === HOOK_NODE) {
+                    hookNode(scope, node.appendChild(PLACEHOLDER.cloneNode()), vars[v++])
                     continue
-                case HOOK_ELEMENT:
+                }
+                if (command === HOOK_ELEMENT) {
                     tagName = 'slot'
                     node = node.appendChild(document.createElement(tagName))
                     hookNode(scope, node, vars[v++])
                     continue
-                case HOOK_ATTR:
+                }
+                if (command === HOOK_ATTR) {
                     hookAttr(scope, node, vars[v++])
                     continue
-                case HOOK_VALUE:
+                }
+                if (command === HOOK_VALUE) {
                     hookValue(scope, node, args[a++], vars[v++])
                     continue
-                case HOOK_QUOTE: {
+                }
+                if (command === HOOK_QUOTE) {
                     const name = args[a++]
                     const strings = args[a++].split(HOLE)
                     hookQuote(scope, node, name, strings, slice.call(vars, v, v += strings.length - 1))
                     continue
                 }
-                case HOOK_COMMENT: {
+                if (command === HOOK_COMMENT) {
                     const data = args[a++]
                     const comment = node.appendChild(document.createComment(data))
                     const strings = data.split(HOLE)
@@ -112,7 +123,7 @@ function hookNode(scope, node, value) {
         if (value[Symbol.iterator]) {
             const fragment = document.createDocumentFragment()
             for (const item of value) {
-                hookNode(scope, fragment.appendChild(PLACEHOLDER_NODE.cloneNode()), item)
+                hookNode(scope, fragment.appendChild(PLACEHOLDER.cloneNode()), item)
             }
             node.replaceWith(fragment)
             return
@@ -123,88 +134,94 @@ function hookNode(scope, node, value) {
 
 function updateNode(scope, node, value) {
     if (value === null) {
-        node.replaceWith(node = PLACEHOLDER_NODE.cloneNode())
+        node.replaceWith(node = PLACEHOLDER.cloneNode())
         return node
     }
-    switch (typeof value) {
-        case 'boolean':
-            value = ''
-        case 'bigint':
-        case 'number':
-        case 'string':
-            if (node.nodeType === 3) {
-                node.data = value
-            } else {
-                node.replaceWith(node = document.createTextNode(value))
-            }
-            return node
-        case 'function':
-            value = value.call(scope, node)
-            return value !== undefined ? updateNode(scope, node, value) : node
-        case 'object':
-            if (value[atomTag]) {
-                return updateNode(scope, node, scope.get(value))
-            }
-            if (value[Symbol.iterator]) {
-                if (node.tagName === 'slot') {
-                    // TODO: This is a rudimental diff & replace... a lot of room for improvement here
-                    let childIndex = 0
-                    for (const item of value) {
-                        let childNode = node.childNodes[childIndex++]
-                        if (childNode.$item !== item) {
-                            childNode = updateNode(scope, PLACEHOLDER_NODE.cloneNode(), item)
-                        }
-                        childNode.$item = item
-                    }
-                } else {
-                    const slot = document.createElement('slot')
-                    for (const item of value) {
-                        const childNode = updateNode(scope, slot.appendChild(PLACEHOLDER_NODE.cloneNode()), item)
-                        childNode.$item = item
-                    }
-                    node.replaceWith(slot)
-                }
-                return node
-            }
-            if (value.tag) {
-                const {tag, attrs, children} = value
-                const nsURI = node.parentNode.namespaceURI
-                const el = nsURI
-                    ? document.createElementNS(nsURI, tag)
-                    : tag === 'svg'
-                        ? document.createElementNS(SVG_NAMESPACE_URI, tag)
-                        : document.createElement(tag)
-                if (attrs) for (const [name, value] of Object.entries(attrs)) {
-                    setAttr(scope, el, name, value)
-                }
-                for (const name of node.getAttributeNames()) {
-                    let attribute = node.getAttribute(name)
-                    el.setAttribute(name, attribute)
-                }
-                const className = node.getAttribute('class')
-                if (className) {
-                    el.setAttribute('class', `${attrs.class} ${className}`)
-                }
-                const style = node.getAttribute('style')
-                if (style) {
-                    el.setAttribute('style', `${attrs.style};${style}`)
-                }
-                if (children) {
-                    for (const c of children) {
-                        updateNode(scope, el.appendChild(document.createTextNode('')), c, bind)
-                    }
-                }
-                node.replaceWith(el)
-                return node
-            }
-            if (value instanceof Node) {
-                node.replaceWith(value)
-                return
-            }
-        default:
-            node.replaceWith(node = PLACEHOLDER_NODE.cloneNode())
-            return node
+    const type = typeof value
+    if (type === 'boolean') {
+        value = ''
+        if (node.nodeType === 3) {
+            node.data = value
+        } else {
+            node.replaceWith(node = document.createTextNode(value))
+        }
+        return node
     }
+    if (type === 'bigint' || type === 'number' || type === 'string') {
+        if (node.nodeType === 3) {
+            node.data = value
+        } else {
+            node.replaceWith(node = document.createTextNode(value))
+        }
+        return node
+    }
+    if (type === 'function') {
+        value = value.call(scope, node)
+        return value !== undefined ? updateNode(scope, node, value) : node
+    }
+    if (type === 'object') {
+        if (value[atomTag]) {
+            return updateNode(scope, node, scope.get(value))
+        }
+        if (value[Symbol.iterator]) {
+            if (node.tagName === 'slot') {
+                // TODO: This is a rudimental diff & replace... a lot of room for improvement here
+                let childIndex = 0
+                for (const item of value) {
+                    let childNode = node.childNodes[childIndex++]
+                    if (childNode.$item !== item) {
+                        childNode = updateNode(scope, PLACEHOLDER.cloneNode(), item)
+                    }
+                    childNode.$item = item
+                }
+            } else {
+                const slot = document.createElement('slot')
+                for (const item of value) {
+                    const childNode = updateNode(scope, slot.appendChild(PLACEHOLDER.cloneNode()), item)
+                    childNode.$item = item
+                }
+                node.replaceWith(slot)
+            }
+            return node
+        }
+        if (value.tag) {
+            const {tag, attrs, children} = value
+            const nsURI = node.parentNode.namespaceURI
+            const el = nsURI && nsURI !== XHTML_NAMESPACE_URI
+                ? document.createElementNS(nsURI, tag)
+                : tag === 'svg'
+                    ? document.createElementNS(SVG_NAMESPACE_URI, tag)
+                    : document.createElement(tag)
+            if (attrs) for (const [name, value] of Object.entries(attrs)) {
+                setAttr(scope, el, name, value)
+            }
+            for (const name of node.getAttributeNames()) {
+                let attribute = node.getAttribute(name)
+                el.setAttribute(name, attribute)
+            }
+            const className = node.getAttribute('class')
+            if (className) {
+                el.setAttribute('class', `${attrs.class} ${className}`)
+            }
+            const style = node.getAttribute('style')
+            if (style) {
+                el.setAttribute('style', `${attrs.style};${style}`)
+            }
+            if (children) {
+                for (const c of children) {
+                    updateNode(scope, el.appendChild(document.createTextNode('')), c, bind)
+                }
+            }
+            node.replaceWith(el)
+            return node
+        }
+        if (value instanceof Node) {
+            node.replaceWith(value)
+            return
+        }
+    }
+    node.replaceWith(node = PLACEHOLDER.cloneNode())
+    return node
 }
 
 function hookAttr(scope, node, value) {
@@ -237,8 +254,8 @@ function hookAttr(scope, node, value) {
             const [name, value] = entry
             try {
                 hookValue(scope, node, name, value)
-            } catch(error) {
-                console.error(`Unable to hook attributes on node <${node.tagName}>.`, error.message)
+            } catch (error) {
+                console.warn(`Unable to hook attributes on node <${node.tagName}>.`, error.message)
             }
         }
     }
@@ -393,41 +410,42 @@ function setAttr(scope, node, name, value) {
         node.removeAttribute(name)
         return
     }
-    switch (typeof value) {
-        case 'bigint':
-        case 'number':
-        case 'string':
-            node.setAttribute(name, value)
-            return
-        case 'boolean':
-            if (value) {
-                node.setAttribute(name, '')
-            } else {
-                node.removeAttribute(name)
-            }
-            return
-        case 'function':
-            setAttr(node, name, value(node))
-            return
-        case 'object':
-            if (value[atomTag]) {
-                setAttr(node, name, scope.get(atom))
-                return
-            }
-            if (value[Symbol.iterator]) {
-                const parts = []
-                for (const part of value) {
-                    parts.push(format(part?.[atomTag] ? scope.get(part) : part))
-                }
-                return node.setAttribute(name, parts.join(' '))
-            } else {
-                const parts = []
-                for (const [key, part] of Object.entries(value)) {
-                    parts.push(`${key}:${format(part?.[atomTag] ? scope.get(part) : part)}`)
-                }
-                return node.setAttribute(name, parts.join(';'))
-            }
-        default:
-            return node.removeAttribute(name)
+    const type = typeof value
+    if (type === 'bigint' || type === 'number' || type === 'string') {
+        node.setAttribute(name, value)
+        return
     }
+    if (type === 'boolean') {
+        if (value) {
+            node.setAttribute(name, '')
+        } else {
+            node.removeAttribute(name)
+        }
+        return
+    }
+    if (type === 'function') {
+        setAttr(node, name, value(node))
+        return
+    }
+    if (type === 'object') {
+        if (value[atomTag]) {
+            setAttr(node, name, scope.get(atom))
+            return
+        }
+        const parts = []
+        let joint
+        if (value[Symbol.iterator]) {
+            for (const part of value) {
+                parts.push(format(part?.[atomTag] ? scope.get(part) : part))
+            }
+            joint = ' '
+        } else {
+            for (const [key, part] of Object.entries(value)) {
+                parts.push(`${key}:${format(part?.[atomTag] ? scope.get(part) : part)}`)
+            }
+            joint = ';'
+        }
+        return node.setAttribute(name, parts.join(joint))
+    }
+    return node.removeAttribute(name)
 }
