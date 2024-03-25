@@ -94,4 +94,4 @@
 // `, '#root')
 //
 
-document.getElementById('root').replaceChildren(<><div class="hello" style={{color: 'red'}}>Hello wold!</div></>)
+document.getElementById('root').replaceChildren(<><div class="hello" style={{color: 'red'}}><p>Hello</p> <em>wold!</em></div></>)

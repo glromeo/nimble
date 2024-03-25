@@ -7,10 +7,10 @@ await build({
     outdir: './out',
     outExtension: { '.js': '.mjs' },
     format: 'esm',
-    jsxFactory: 'jsx',
-    jsxFragment: 'Fragment',
+    jsxFactory: 'Array',
+    jsxFragment: 'null',
     jsxImportSource: "@nimble",
-    jsx: 'automatic',
+    jsx: 'transform',
     jsxSideEffects: true,
     bundle: true
 })
