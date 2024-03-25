@@ -1,18 +1,24 @@
-import {molecule} from '@nimble/toolkit'
+export const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
+export const XHTML_NAMESPACE_URI = 'http://www.w3.org/1999/xhtml'
 
-let commands = []
-
-
-export function jsx(tag, props) {
+export function render(scope, node, jsx) {
+    const tag = jsx[0]
+    const attrs = jsx[1]
     if (typeof tag === 'function') {
-        return tag(props)
+        return tag({})
     }
-    const node = document.createElement(tag)
-    for (const name of Object.keys(props)) {
+    node = node.appendChild(
+        node.namespaceURI && node.namespaceURI !== XHTML_NAMESPACE_URI
+            ? document.createElementNS(node.namespaceURI, tag)
+            : tag === 'svg'
+                ? document.createElementNS(SVG_NAMESPACE_URI, tag)
+                : document.createElement(tag)
+    )
+    for (const name of Object.keys(attrs)) {
         const value = props[name]
         const type = typeof value
         if (type === 'string' || type === 'number' || type === 'bigint') {
-            if (name === "children") {
+            if (name === 'children') {
                 node.appendChild(document.createTextNode(value))
             } else {
                 node.setAttribute(name, value)
@@ -54,11 +60,7 @@ export function jsx(tag, props) {
             continue
         }
     }
-    return node
-}
+    for (let i = 2; i < jsx.length; i++) {
 
-export function Fragment({children}) {
-    const fragment = document.createDocumentFragment()
-    fragment.replaceChildren(children)
-    return fragment
+    }
 }

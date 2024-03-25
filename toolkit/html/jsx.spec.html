@@ -2,18 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>JSX Runtime Spec</title>
+    <title>JSX Spec</title>
     <script type="importmap">
         {
             "imports": {
                 "esbuild-wasm": "../node_modules/esbuild-wasm/esm/browser.js",
-                "@nimble/testing": "../testing/index.mjs",
-                "@nimble/toolkit": "../toolkit/index.mjs",
-                "@nimble/jsx-runtime": "./index.mjs"
+                "@nimble/testing": "../testing/index.mjs"
             }
         }
     </script>
-    <script src="../node_modules/chai/chai.js"></script>
+    <script src="../../node_modules/chai/chai.js"></script>
     <script type="module">
         import {initialize, transform} from 'esbuild-wasm'
 
@@ -35,9 +33,8 @@
                     loader: 'jsx',
                     format: 'esm',
                     jsx: 'transform',
-                    jsxFactory: 'jsx',
+                    jsxFactory: 'Array',
                     jsxFragment: 'null',
-                    jsxImportSource: '@nimble',
                     jsxSideEffects: true,
                     sourcemap: 'inline',
                     sourcefile: `script.jsx (${sn++})`
@@ -52,7 +49,7 @@
 <div id="fixtures"></div>
 <script type="text/jsx">
     import {suite, test, renderHTML} from '@nimble/testing'
-    import {atom} from '@nimble/toolkit'
+    import {atom} from 'toolkit/index.mjs'
     const {expect} = chai
 
     const specs = suite("JSX spec", (before, after) => {

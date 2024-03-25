@@ -128,68 +128,73 @@ function setStyle(store, style, value, hooks) {
     }
 }
 
+const CACHE = new WeakMap()
 const HOLE = '\x01'
-let gId = 0
 
 export function css(strings) {
-    const textContent = strings.join(HOLE)
-    const style = document.createElement('style')
-    style.setAttribute('title', 'nimble-css')
-    style.setAttribute('group-id', String(++gId))
+    let render = CACHE.get(strings)
+    if (render === undefined) {
+        const rules = []
+        const path = []
+        let p = 0
+        let property
+        let index = 0
+        let from = 0, selector = ''
+        const textContent = strings.join(HOLE).replace(/\s+|[\x01{};:]/g, (ch, offset) => {
+            switch (ch) {
+                case ':':
+                    property = textContent.slice(from, offset)
+                    return ch
+                case ';':
+                    property = undefined
+                    from = offset + 1
+                    return ch
+                case '{':
+                    path.push(p)
+                    p = 0
+                    selector = textContent.slice(from, offset)
+                    from = offset + 1
+                    return ch
+                case '}':
+                    p = path.pop() + 1
+                    from = offset + 1
+                    selector = ''
+                    return ch
+                case HOLE:
+                    let value = arguments[++index]
+                    switch (typeof value) {
+                        case 'bigint':
+                        case 'number':
+                        case 'string':
+                            return String(value)
+                        case 'boolean':
+                        case 'symbol':
+                            return 'unset'
+                        default:
+                            if (value) {
+                                rules.push({
+                                    path: Uint8Array.from(path),
+                                    property,
+                                    value
+                                })
+                            }
+                            return 'unset'
+                    }
+                default:
+                    from = offset + ch.length
+                    return ' '
+            }
+        })
+        CACHE.set(strings, render = (scope, vars) => {
+            const extraSheet = new CSSStyleSheet();
+            extraSheet.replaceSync(textContent);
+        })
+    }
 
-    const rules = []
-    const path = []
-    let p = 0
-    let property
-    let index = 0
-    let from = 0, selector = ''
-    style.textContent = textContent.replace(/\s+|[\x01{};:]/g, (ch, offset) => {
-        switch (ch) {
-            case ':':
-                property = textContent.slice(from, offset)
-                return ch
-            case ';':
-                property = undefined
-                from = offset + 1
-                return ch
-            case '{':
-                path.push(p)
-                p = 0
-                selector = textContent.slice(from, offset)
-                from = offset + 1
-                return ch
-            case '}':
-                p = path.pop() + 1
-                from = offset + 1
-                selector = ''
-                return ch
-            case HOLE:
-                let value = arguments[++index]
-                switch (typeof value) {
-                    case 'bigint':
-                    case 'number':
-                    case 'string':
-                        return String(value)
-                    case 'boolean':
-                    case 'symbol':
-                        return 'unset'
-                    default:
-                        if (value) {
-                            rules.push({
-                                path: Uint8Array.from(path),
-                                property,
-                                value
-                            })
-                        }
-                        return 'unset'
-                }
-            default:
-                from = offset + ch.length
-                return ' '
-        }
-    })
+    return (store, {adoptedStyleSheets} = document) => {
 
-    return (store, root = document.head, defaultHooks) => {
+        adoptedStyleSheets.push();
+
         root.appendChild(style)
         const hooks = defaultHooks ?? []
         const styleSheet = document.styleSheets[document.styleSheets.length - 1]
