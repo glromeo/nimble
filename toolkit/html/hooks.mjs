@@ -1,33 +1,37 @@
 import {atom, atomTag} from '../atoms/atoms.mjs'
 import {PLACEHOLDER, SVG_NAMESPACE_URI, XHTML_NAMESPACE_URI} from './html.mjs'
 
-export function hookNode(scope, node, value) {
+export function appendNode(scope, parent, value) {
     const type = typeof value
+    if (type === 'string' || type === 'number' || type === 'bigint') {
+        return parent.appendChild(document.createTextNode(value))
+    }
     if (type === 'function') {
-        hookNode(scope, node, value.call(scope, node))
-        return
+        return appendNode(scope, parent, value.call(scope, parent))
     }
     if (type === 'object' && value !== null) {
+        if (value instanceof Node) {
+            return parent.appendChild(value)
+        }
         if (value[atomTag]) {
-            let pending
+            let node = appendNode(scope, parent, scope.get(value)), pending
             const update = () => {
                 node = updateNode(scope, node, scope.get(value))
                 pending = 0
             }
             scope.bind(value, () => pending ||= requestAnimationFrame(update))
-            update()
-            return
+            return node
         }
         if (value[Symbol.iterator]) {
-            const fragment = document.createDocumentFragment()
+            const slot = parent.appendChild(document.createElement('slot'))
+            const $nodes = slot.$nodes = new WeakMap()
             for (const item of value) {
-                hookNode(scope, fragment.appendChild(PLACEHOLDER.cloneNode()), item)
+                $nodes.set(item, appendNode(scope, parent, item))
             }
-            node.replaceWith(fragment)
-            return
+            return slot
         }
     }
-    updateNode(scope, node, value)
+    return parent.appendChild(document.createComment(String(value)))
 }
 
 function updateNode(scope, node, value) {
@@ -91,7 +95,7 @@ function updateNode(scope, node, value) {
                     ? document.createElementNS(SVG_NAMESPACE_URI, tag)
                     : document.createElement(tag)
             if (attrs) for (const [name, value] of Object.entries(attrs)) {
-                setAttr(scope, el, name, value)
+                setAttribute(scope, el, name, value)
             }
             for (const name of node.getAttributeNames()) {
                 let attribute = node.getAttribute(name)
@@ -122,10 +126,10 @@ function updateNode(scope, node, value) {
     return node
 }
 
-export function hookAttr(scope, node, value) {
+export function hookSpread(scope, node, value) {
     const type = typeof value
     if (type === 'function') {
-        hookAttr(scope, node, value.call(scope, node))
+        hookSpread(scope, node, value.call(scope, node))
         return
     }
     if (type === 'object' && value !== null) {
@@ -140,7 +144,7 @@ export function hookAttr(scope, node, value) {
                     }
                 }
                 for (const name of names = Object.keys(value)) {
-                    setAttr(scope, node, name, value[name])
+                    setAttribute(scope, node, name, value[name])
                 }
                 pending = 0
             }
@@ -151,13 +155,12 @@ export function hookAttr(scope, node, value) {
         for (const entry of value.entries?.() ?? Object.entries(value)) {
             const [name, value] = entry
             try {
-                hookValue(scope, node, name, value)
+                createAttribute(scope, node, name, value)
             } catch (error) {
                 console.warn(`Unable to hook attributes on node <${node.tagName}>.`, error.message)
             }
         }
     }
-    setAttr(scope, node, value)
 }
 
 function format(value) {
@@ -168,10 +171,15 @@ function format(value) {
     return ''
 }
 
-export function hookValue(scope, node, name, value) {
+export function createAttribute(scope, node, name, value) {
     const type = typeof value
     if (type === 'function') {
-        hookValue(scope, node, name, value.call(scope, node))
+        if (name[0] === 'o' && name[1] === 'n') {
+            const event = name[2] === ':' ? name.slice(3) : name[2].toLowerCase() + name.slice(3)
+            node.addEventListener(event, value)
+            return
+        }
+        createAttribute(scope, node, name, value.call(scope, node))
         return
     }
     if (type === 'object' && value !== null) {
@@ -179,7 +187,7 @@ export function hookValue(scope, node, name, value) {
             const atom = value
             let pending
             const update = () => {
-                setAttr(scope, node, name, scope.get(atom))
+                setAttribute(scope, node, name, scope.get(atom))
                 pending = 0
             }
             scope.bind(atom, () => pending ||= requestAnimationFrame(update))
@@ -207,26 +215,30 @@ export function hookValue(scope, node, name, value) {
                 }
             }
         } else {
+            const pair = (key, value) => {
+                const text = format(value)
+                return text ? `${key}:${text}` : ''
+            }
             for (const [key, part] of Object.entries(value)) {
                 if (part?.[atomTag]) {
                     const p = parts.length
                     scope.bind(part, v => {
-                        parts[p] = `${key}:${format(v)}`
+                        parts[p] = pair(key, v)
                         pending ||= requestAnimationFrame(update)
                     })
-                    parts.push(`${key}:${format(scope.get(part))}`)
+                    parts.push(pair(key, scope.get(part)))
                 } else {
-                    parts.push(`${key}:${format(part)}`)
+                    parts.push(pair(key, part))
                 }
             }
         }
         update()
         return
     }
-    setAttr(scope, node, name, value)
+    setAttribute(scope, node, name, value)
 }
 
-export function hookQuote(scope, node, name, strings, values) {
+export function holeyAttribute(scope, node, name, strings, values) {
     let pending = 0
     const update = () => {
         let text = strings[0]
@@ -303,7 +315,7 @@ function setHandler(scope, node, event, value, bind) {
     }
 }
 
-function setAttr(scope, node, name, value) {
+function setAttribute(scope, node, name, value) {
     if (value === null) {
         node.removeAttribute(name)
         return
@@ -322,12 +334,12 @@ function setAttr(scope, node, name, value) {
         return
     }
     if (type === 'function') {
-        setAttr(node, name, value(node))
+        setAttribute(node, name, value(node))
         return
     }
     if (type === 'object') {
         if (value[atomTag]) {
-            setAttr(node, name, scope.get(atom))
+            setAttribute(node, name, scope.get(atom))
             return
         }
         const parts = []

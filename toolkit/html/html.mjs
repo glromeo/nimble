@@ -16,10 +16,10 @@ import {
 } from './parseHTML.mjs'
 
 import {
-    hookNode,
-    hookAttr,
-    hookValue,
-    hookQuote,
+    appendNode,
+    hookSpread,
+    createAttribute,
+    holeyAttribute,
     hookText
 } from './hooks.mjs'
 
@@ -72,27 +72,27 @@ export function html(strings) {
                     continue
                 }
                 if (command === HOOK_NODE) {
-                    hookNode(scope, node.appendChild(PLACEHOLDER.cloneNode()), vars[v++])
+                    appendNode(scope, node, vars[v++])
                     continue
                 }
-                if (command === HOOK_ELEMENT) {
-                    tagName = 'slot'
-                    node = node.appendChild(document.createElement(tagName))
-                    hookNode(scope, node, vars[v++])
-                    continue
-                }
+                // if (command === HOOK_ELEMENT) {
+                //     tagName = 'slot'
+                //     node = node.appendChild(document.createElement(tagName))
+                //     appendNode(scope, node, vars[v++])
+                //     continue
+                // }
                 if (command === HOOK_ATTR) {
-                    hookAttr(scope, node, vars[v++])
+                    hookSpread(scope, node, vars[v++])
                     continue
                 }
                 if (command === HOOK_VALUE) {
-                    hookValue(scope, node, args[a++], vars[v++])
+                    createAttribute(scope, node, args[a++], vars[v++])
                     continue
                 }
                 if (command === HOOK_QUOTE) {
                     const name = args[a++]
                     const strings = args[a++].split(HOLE)
-                    hookQuote(scope, node, name, strings, slice.call(vars, v, v += strings.length - 1))
+                    holeyAttribute(scope, node, name, strings, slice.call(vars, v, v += strings.length - 1))
                     continue
                 }
                 if (command === HOOK_COMMENT) {

@@ -1,3 +1,4 @@
+
 const testContext = {}
 
 const testId = () => {
@@ -27,29 +28,48 @@ function simpleHash(text) {
     return hash.toString(16)
 }
 
-function appendFixture(title, index, component) {
+function appendFixture(title, index, node) {
     const fixture = document.getElementById('fixtures').appendChild(document.createElement('div'))
     fixture.setAttribute('class', 'fixture')
     fixture.setAttribute('data-test', String(title))
     fixture.setAttribute('data-fixture', String(index))
-    fixture.appendChild(component())
+    fixture.appendChild(node)
     return fixture
 }
 
-export function renderFixture(component) {
+export function renderFixture(node) {
     const ctx = testContext[testId()]
     const fixtures = ctx.fixtures ?? (ctx.fixtures = [])
-    const fixture = appendFixture(ctx.title, fixtures.length, component)
+    const fixture = appendFixture(ctx.title, fixtures.length, node)
     fixtures.push(fixture)
     return fixture
 }
 
-export function renderHTML(component) {
-    return renderFixture(component).innerHTML
+function expectFixture(node, property) {
+    let actual = "";
+    try {
+        actual = renderFixture(node)[property];
+    } catch (e) {
+        console.error("failed to render fixture", e);
+    }
+    return {
+        equals(expected) {
+            if (actual !== expected) {
+                throw Object.assign(new Error(`${property} didn't match expected snapshot`), {
+                    expected,
+                    actual
+                })
+            }
+        }
+    };
 }
 
-export function renderText(component) {
-    return renderFixture(component).innerText
+export function expectHTML(node) {
+    return expectFixture(node, 'innerHTML');
+}
+
+export function expectText(node) {
+    return expectFixture(node, 'innerText');
 }
 
 export function debugHTML(node) {
@@ -128,24 +148,24 @@ suite.current = suite.root = {
         let passed = 0, failed = 0
         for await (const test of testWalker(this)) {
             Object.defineProperty(test.spec, 'name', {value: test.id})
+            const ctx = testContext[test.id] = Object.create(test)
             try {
-                testContext[test.id] = test
                 if (test.suite.beforeEach) {
-                    for (const fn of test.suite.beforeEach) await fn(test)
+                    for (const fn of test.suite.beforeEach) await fn(ctx)
                 }
-                await test.spec.call(test)
+                await test.spec.call(ctx)
                 passed++
                 test.suite.passed++
                 test.ok = true
             } catch (error) {
-                console.error(`"${test.title}"`, 'failed', error.message, error.stack)
+                console.error(`"${test.title}"`, 'failed', error.stack)
                 console.log(`%cexpected: %c${error.expected}\n%cactual:   %c${error.actual}`, 'font-weight:bold;color:green;', 'color:darkgreen;', 'font-weight:bold;color:red;', 'color:darkred;')
                 failed++
                 test.suite.failed++
                 test.error = error
             } finally {
                 if (test.suite.afterEach) {
-                    for (const fn of test.suite.afterEach) await fn(test)
+                    for (const fn of test.suite.afterEach) await fn(ctx)
                 }
                 testContext[test.id] = undefined
             }

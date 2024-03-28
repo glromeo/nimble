@@ -93,5 +93,5 @@
 //     <h2>quick to understand, think, devise, etc.</h2>
 // `, '#root')
 //
-
-document.getElementById('root').replaceChildren(<><div class="hello" style={{color: 'red'}}><p>Hello</p> <em>wold!</em></div></>)
+const attrs = {alpha:1, beta: "2"}
+document.getElementById('root').replaceChildren(<><div {...attrs} class="hello" style={{color: 'red'}}><p>Hello</p> <em>wold!</em></div></>)
