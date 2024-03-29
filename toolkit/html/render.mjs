@@ -1,14 +1,15 @@
-import {appendNode} from './hooks.mjs'
 import {atomTag} from '../atoms/atoms.mjs'
+import {PLACEHOLDER} from './html.mjs'
 
 export const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
 export const XHTML_NAMESPACE_URI = 'http://www.w3.org/1999/xhtml'
 
-export function render(scope, jsx, nsURI) {
-    const tag = jsx[0]
-    const attrs = jsx[1]
+export function render(scope, input, nsURI) {
+    const parts = Array.isArray(input) ? input : [null, null, input]
+    const tag = parts[0]
+    const attrs = parts[1]
     if (typeof tag === 'function') {
-        return tag({attrs, children: jsx.slice(2)})
+        return tag({attrs, children: parts.slice(2)})
     }
     const node = tag === null
         ? document.createDocumentFragment()
@@ -56,20 +57,135 @@ export function render(scope, jsx, nsURI) {
             }
         }
     }
-    for (let i = 2; i < jsx.length; i++) {
-        const value = jsx[i]
-        const type = typeof value
-        if (type === 'string' || type === 'number' || type === 'bigint') {
-            node.appendChild(document.createTextNode(value))
-            continue
+    for (let i = 2; i < parts.length; i++) {
+        appendNode(scope, node, parts[i])
+    }
+    return node
+}
+
+export function appendNode(scope, parent, value) {
+    const type = typeof value
+    if (type === 'string' || type === 'number' || type === 'bigint') {
+        return parent.appendChild(document.createTextNode(value))
+    }
+    if (type === 'function') {
+        return appendNode(scope, parent, value.call(scope, parent))
+    }
+    if (type === 'object' && value !== null) {
+        if (value instanceof Node) {
+            return parent.appendChild(value)
         }
-        if (type === 'object' && value) {
-            if (value instanceof Node) {
-                node.appendChild(value)
-                continue
+        if (value[atomTag]) {
+            let node = appendNode(scope, parent, scope.get(value))
+            let pending
+            const update = () => {
+                node = updateNode(scope, node, scope.get(value))
+                pending = 0
             }
+            scope.bind(value, () => pending ||= requestAnimationFrame(update))
+            return node
+        }
+        if (value[Symbol.iterator]) {
+            const slot = parent.appendChild(document.createElement('slot'))
+            const $nodes = slot.$nodes = new WeakMap()
+            for (const item of value) {
+                $nodes.set(item, appendNode(scope, parent, item))
+            }
+            return slot
         }
     }
+    return parent.appendChild(document.createTextNode(''))
+}
+
+function updateNode(scope, node, value) {
+    if (value === null) {
+        node.replaceWith(node = PLACEHOLDER.cloneNode())
+        return node
+    }
+    const type = typeof value
+    if (type === 'boolean') {
+        value = ''
+        if (node.nodeType === 3) {
+            node.data = value
+        } else {
+            node.replaceWith(node = document.createTextNode(value))
+        }
+        return node
+    }
+    if (type === 'bigint' || type === 'number' || type === 'string') {
+        if (node.nodeType === 3) {
+            node.data = value
+        } else {
+            node.replaceWith(node = document.createTextNode(value))
+        }
+        return node
+    }
+    if (type === 'function') {
+        value = value.call(scope, node)
+        return value !== undefined ? updateNode(scope, node, value) : node
+    }
+    if (type === 'object') {
+        if (value[atomTag]) {
+            return updateNode(scope, node, scope.get(value))
+        }
+        if (value[Symbol.iterator]) {
+            if (node.tagName === 'slot') {
+                // TODO: This is a rudimental diff & replace... a lot of room for improvement here
+                let childIndex = 0
+                for (const item of value) {
+                    let childNode = node.childNodes[childIndex++]
+                    if (childNode.$item !== item) {
+                        childNode = updateNode(scope, PLACEHOLDER.cloneNode(), item)
+                    }
+                    childNode.$item = item
+                }
+            } else {
+                const slot = document.createElement('slot')
+                for (const item of value) {
+                    const childNode = updateNode(scope, slot.appendChild(PLACEHOLDER.cloneNode()), item)
+                    childNode.$item = item
+                }
+                node.replaceWith(slot)
+            }
+            return node
+        }
+        if (value.tag) {
+            const {tag, attrs, children} = value
+            const nsURI = node.parentNode.namespaceURI
+            const el = nsURI && nsURI !== XHTML_NAMESPACE_URI
+                ? document.createElementNS(nsURI, tag)
+                : tag === 'svg'
+                    ? document.createElementNS(SVG_NAMESPACE_URI, tag)
+                    : document.createElement(tag)
+            if (attrs) for (const [name, value] of Object.entries(attrs)) {
+                setAttribute(scope, el, name, value)
+            }
+            for (const name of node.getAttributeNames()) {
+                let attribute = node.getAttribute(name)
+                el.setAttribute(name, attribute)
+            }
+            const className = node.getAttribute('class')
+            if (className) {
+                el.setAttribute('class', `${attrs.class} ${className}`)
+            }
+            const style = node.getAttribute('style')
+            if (style) {
+                el.setAttribute('style', `${attrs.style};${style}`)
+            }
+            if (children) {
+                for (const c of children) {
+                    updateNode(scope, el.appendChild(document.createTextNode('')), c, bind)
+                }
+            }
+            node.replaceWith(el)
+            return node
+        }
+        if (value instanceof Node) {
+            node.replaceWith(value)
+            return
+        }
+    }
+    node.replaceWith(node = PLACEHOLDER.cloneNode())
     return node
 }
 
