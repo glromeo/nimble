@@ -1,11 +1,18 @@
-import {atomTag} from '../atoms/atoms.mjs'
-import {PLACEHOLDER} from './html.mjs'
+import {Atom, globalScope, Scope} from '../atoms/atoms.mjs'
 
 export const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
 export const XHTML_NAMESPACE_URI = 'http://www.w3.org/1999/xhtml'
+export const PLACEHOLDER = document.createComment('')
 
-export function render(scope, input, nsURI) {
-    const parts = Array.isArray(input) ? input : [null, null, input]
+export function createNode(nsURI, parts) {
+    const scope = this ?? globalScope
+    if (arguments.length < 2) {
+        parts = nsURI
+        nsURI = null
+    }
+    if (!Array.isArray(parts)) {
+        parts = [null, null, parts]
+    }
     const tag = parts[0]
     const attrs = parts[1]
     if (typeof tag === 'function') {
@@ -16,21 +23,21 @@ export function render(scope, input, nsURI) {
         : nsURI && nsURI !== XHTML_NAMESPACE_URI
             ? document.createElementNS(nsURI, tag)
             : tag === 'svg'
-                ? document.createElementNS(SVG_NAMESPACE_URI, tag)
+                ? document.createElementNS(nsURI = SVG_NAMESPACE_URI, tag)
                 : document.createElement(tag)
     if (attrs) {
         for (const name of Object.keys(attrs)) {
             const value = attrs[name]
             if (name === 'class' || name === 'className') {
-                if (value?.[atomTag]) {
-                    hookAttr(scope, writeClassName.bind(node), value)
+                if (value instanceof Atom) {
+                    hookAttr(scope, (nsURI ? writeClass : writeClassName).bind(node), value)
                 } else {
-                    writeClassName.call(node, value)
+                    (nsURI ? writeClass : writeClassName).call(node, value)
                 }
                 continue
             }
             if (name === 'style') {
-                if (value?.[atomTag]) {
+                if (value instanceof Atom) {
                     hookAttr(scope, writeStyle.bind(node), value)
                 } else {
                     writeStyle.call(node, value)
@@ -43,14 +50,14 @@ export function render(scope, input, nsURI) {
                 continue
             }
             if (name === 'ref') {
-                if (value?.[atomTag]) {
+                if (value instanceof Atom) {
                     scope.set(value, node)
                 } else if (typeof value === 'function') {
                     value(node)
                 }
                 continue
             }
-            if (value?.[atomTag]) {
+            if (value instanceof Atom) {
                 hookAttr(scope, writeAttr.bind(node, name), value)
             } else {
                 writeAttr.call(node, name, value)
@@ -58,7 +65,12 @@ export function render(scope, input, nsURI) {
         }
     }
     for (let i = 2; i < parts.length; i++) {
-        appendNode(scope, node, parts[i])
+        const child = parts[i]
+        if (Array.isArray(child)) {
+            node.appendChild(createNode.call(this, nsURI, child))
+        } else {
+            appendNode(scope, node, child)
+        }
     }
     return node
 }
@@ -75,7 +87,7 @@ export function appendNode(scope, parent, value) {
         if (value instanceof Node) {
             return parent.appendChild(value)
         }
-        if (value[atomTag]) {
+        if (value instanceof Atom) {
             let node = appendNode(scope, parent, scope.get(value))
             let pending
             const update = () => {
@@ -125,7 +137,7 @@ function updateNode(scope, node, value) {
         return value !== undefined ? updateNode(scope, node, value) : node
     }
     if (type === 'object') {
-        if (value[atomTag]) {
+        if (value instanceof Atom) {
             return updateNode(scope, node, scope.get(value))
         }
         if (value[Symbol.iterator]) {
@@ -194,6 +206,33 @@ function hookAttr(scope, write, atom) {
     const update = () => pending = write(scope.get(atom))
     scope.bind(atom, () => pending ||= requestAnimationFrame(update))
     update()
+}
+
+function writeClass(value) {
+    const type = typeof value
+    if (type === 'string' || type === 'number' || type === 'bigint') {
+        this.setAttribute('class', value)
+        return
+    }
+    if (value) {
+        if (type === 'object') {
+            const parts = []
+            if (value[Symbol.iterator]) {
+                for (const part of value) {
+                    if (typeof part === 'string') parts.push(part)
+                }
+            } else {
+                for (const [key, part] of Object.entries(value)) {
+                    if (part) parts.push(key)
+                }
+            }
+            this.setAttribute('class', parts.join(' '))
+            return
+        }
+        this.setAttribute('class', String(value))
+    } else {
+        this.setAttribute('class', null)
+    }
 }
 
 function writeClassName(value) {

@@ -17,7 +17,7 @@
 <sample-clock id="1"></sample-clock>
 <sample-clock id="2"></sample-clock>
 <script type="module">
-    import {htmlOld} from './html.old.mjs'
+    import {html} from './html.mjs'
     import {atom, globalScope as store} from '../atoms/atoms.mjs'
 
     customElements.define('sample-clock', class extends HTMLElement {
@@ -26,7 +26,7 @@
         time = atom(get => new Date())
         localTime = atom(get => get(this.time).toLocaleTimeString())
 
-        render = htmlOld`<div>Hello from ${this.name} ${htmlOld`<span>Time is: ${this.localTime}</span>`}</div>`
+        render = html`<div>Hello from ${this.name} ${html`<span>Time is: ${this.localTime}</span>`}</div>`
 
         connectedCallback() {
             const shadowRoot = this.attachShadow({ mode: "open" })

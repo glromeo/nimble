@@ -44,8 +44,8 @@
 
     const nextFrame = async () => await new Promise(resolve => requestAnimationFrame(resolve))
 
-    // test('top level', ({render}) => {
-    //     expect(render(html`Hello World`).innerText).to.eq('Hello World')
+    // test('top level', ({createNode}) => {
+    //     expect(createNode(html`Hello World`).innerText).to.eq('Hello World')
     // })
 
     suite('css', () => {

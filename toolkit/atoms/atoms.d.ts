@@ -3,7 +3,7 @@ export type Atom<V, A extends unknown[] = [V], R = void> = {
     init?: V
     read?: Read<V>
     write?: Write<A, R>
-    on?: (event: 'bind', action: (scope:Molecule) => Function) => Atom<V,A,R>
+    on?: (event: 'bind', action: (scope:Scope) => Function) => Atom<V,A,R>
 }
 
 export type Getter = <V>(atom: Atom<V>) => V
@@ -19,7 +19,7 @@ export type AtomState<V> = {
 
 export function atom<V, A extends unknown[] = [V], R = void>(read: V | Read<V> | void, write?: Write<A, R>): Atom<V, A, R>;
 
-export type Molecule = {
+export type Scope = {
     get: Getter
     set: Setter
     bind: <V>(atom: Atom<V>, callback: () => void) => void

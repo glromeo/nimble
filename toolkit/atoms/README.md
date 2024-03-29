@@ -50,7 +50,7 @@ const p = atom(5) // is an example of primitive
 **p** is an object that's used as a key to look up the value of the atom in a molecule
 
 ```javascript
-const {get, set} = molecule()
+const {get, set} = new Scope()
 const p = atom(9)
 
 console.log(get(p))  // prints 9 
@@ -69,8 +69,8 @@ console.log(scope.get(d))  // prints 10
 To define multiple scopes is as easy as creating as many molecules as needed
 
 ```javascript
-const scope1 = molecule()
-const scope2 = molecule()
+const scope1 = new Scope()
+const scope2 = new Scope()
 const num = atom(9)
 
 scope1.set(num, 5)

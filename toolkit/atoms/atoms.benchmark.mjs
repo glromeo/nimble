@@ -1,7 +1,7 @@
-import {atom, molecule} from './atoms.mjs'
+import {atom, Scope} from './atoms.mjs'
 import { memoryUsage } from 'node:process';
 
-const scope = molecule()
+const scope = new Scope()
 const atoms = []
 
 function prepare(l) {
@@ -28,11 +28,11 @@ function prepare(l) {
         let i = 0
         scope.bind(top, () => {
             total = scope.get(top)
-            if (i >= 100_000) {
+            if (i >= 1_000_000) {
                 resolve()
             }
         })
-        while (i++ < 100_000) {
+        while (i++ < 1_000_000) {
             const a = atoms[(3 * i ) % atoms.length]
             scope.set(a, scope.get(a) + 1)
         }

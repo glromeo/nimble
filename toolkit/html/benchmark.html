@@ -6,7 +6,7 @@
 </head>
 <body>
 <script type="module">
-    import {molecule} from '../atoms/atoms.mjs'
+    import {Scope} from '../atoms/atoms.mjs'
     import {html} from './html.mjs'
     import {html as preactHtml, render} from 'https://unpkg.com/htm/preact/standalone.module.js'
     import {parseHTML} from './parseHTML.mjs'
@@ -39,7 +39,7 @@
         </body>
     `
 
-    const scope = molecule()
+    const scope = new Scope()
 
     // setTimeout(() => requestAnimationFrame(() => {
     //     console.time('parse time')

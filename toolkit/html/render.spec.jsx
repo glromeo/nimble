@@ -1,14 +1,14 @@
 import { suite, test, expectHTML } from '@nimble/testing'
-import { atom, molecule } from "../atoms/atoms.mjs";
-import { render } from "./render.mjs";
+import { atom, Scope } from "../atoms/atoms.mjs";
+import { createNode } from "./render.mjs";
 
 const specs = suite("JSX spec", (before, after) => {
 
     let scope, expect
 
     before.each(() => {
-        scope = molecule()
-        expect = component => expectHTML(render(scope, component(scope)))
+        scope = new Scope()
+        expect = component => expectHTML(createNode.call(scope, component(scope)))
     })
 
     test('simplest nodes', () => {

@@ -1,8 +1,36 @@
-export function molecule() {
+function remove(state, observer) {
+    if (state.observers?.delete(observer) && state.observers.size === 0 && !state.listeners?.size) {
+        state.observers = null
+        if (state.dependencies) {
+            for (const dependency of state.dependencies) remove(dependency, state)
+        }
+    }
+}
 
-    const store = new WeakMap()
+function notify(state, pending) {
+    if (!state.stale) {
+        state.stale = true
+        if (state.listeners) {
+            pending.push(state)
+        }
+        if (state.observers) for (const observer of state.observers) {
+            notify(observer, pending)
+        }
+    }
+}
 
-    function init(atom) {
+export class Scope extends WeakMap {
+
+    constructor() {
+        super()
+        this.bound = new Map()
+        this.get = this.get.bind(this)
+        this.set = this.set.bind(this)
+        this.bind = this.bind.bind(this)
+        this.peek = super.get.bind(this);
+    }
+
+    init(atom) {
         const state = {
             atom,
             value: atom.init,
@@ -13,8 +41,8 @@ export function molecule() {
         if (atom.read) {
             state.dependencies = new Set()
             const getter = (atom) => {
-                const value = get(atom)
-                const dependency = store.get(atom)
+                const value = this.get(atom)
+                const dependency = super.get(atom)
                 state.dependencies.add(dependency)
                 if (dependency.observers) {
                     dependency.observers.add(state)
@@ -55,48 +83,25 @@ export function molecule() {
         return state
     }
 
-    function remove(state, observer) {
-        if (state.observers?.delete(observer) && state.observers.size === 0 && !state.listeners?.size) {
-            state.observers = null
-            if (state.dependencies) {
-                for (const dependency of state.dependencies) remove(dependency, state)
-            }
-        }
-    }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    function get(atom) {
-        let state = store.get(atom)
+    get(atom) {
+        let state = super.get(atom)
         if (state === undefined) {
-            store.set(atom, state = init(atom))
+            super.set(atom, state = this.init(atom))
         }
         return state.stale ? state.refresh() : state.value
     }
 
-    function notify(state, pending) {
-        if (!state.stale) {
-            state.stale = true
-            if (state.listeners) {
-                pending.push(state)
-            }
-            if (state.observers) for (const observer of state.observers) {
-                notify(observer, pending)
-            }
-        }
-    }
-
-    function set(atom, ...args) {
+    set(atom, ...args) {
         if (atom.write) {
-            return atom.write(get, set, ...args)
+            return atom.write(this.get, this.set, ...args)
         } else if (atom.read === undefined) {
             const value = args[0]
             if (value?.then) {
-                return value?.then(value => set(atom, value))
+                return value?.then(value => this.set(atom, value))
             }
-            let state = store.get(atom)
+            let state = super.get(atom)
             if (state === undefined) {
-                store.set(atom, state = init(atom))
+                super.set(atom, state = this.init(atom))
             }
             if (!Object.is(value, state.value)) {
                 state.value = value
@@ -115,90 +120,84 @@ export function molecule() {
         }
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    const bound = new Map()
-
-    function bind(atom, listener) {
-        let state = store.get(atom)
+    bind(atom, listener) {
+        let state = super.get(atom)
         if (!state) {
-            const value = get(atom)
+            const value = this.get(atom)
             if (value?.then) {
-                return value.then(() => mount(store.get(atom), listener))
+                return value.then(() => this.#mount(super.get(atom), listener))
             }
         }
-        return mount(store.get(atom), listener)
+        return this.#mount(super.get(atom), listener)
     }
 
-    function mount(state, listener) {
+    #mount(state, listener) {
         if (state.listeners === null) {
             state.listeners = new Set()
-            bound.set(state, state.atom.onbind?.(get, set))
+            this.bound.set(state, state.atom.onbind?.(this.get, this.set))
         }
         state.listeners.add(listener)
         if (state.dependencies) {
-            for (const dependency of state.dependencies) mount(dependency, state.refresh)
+            for (const dependency of state.dependencies) this.#mount(dependency, state.refresh)
         }
-        return () => unbind(state, listener)
+        return () => this.#unbind(state, listener)
     }
 
-    function unbind(state, listener) {
+    #unbind(state, listener) {
         if (state.listeners?.delete(listener) && !state.listeners.size) {
             if (state.dependencies) {
                 for (const dependency of state.dependencies) {
                     remove(dependency, state)
-                    unbind(dependency, state.refresh)
+                    this.#unbind(dependency, state.refresh)
                 }
             }
             state.listeners = null
-            bound.get(state)?.()
-            return bound.delete(state)
+            this.bound.get(state)?.()
+            return this.bound.delete(state)
         }
     }
 
-    return {
-        peek: store.get.bind(store),
-        get,
-        set,
-        bind,
-        unbind(atom, listener) {
-            let state = store.get(atom)
-            if (state) {
-                if (listener) {
-                    return unbind(state, listener)
-                } else {
-                    if (state.listeners) {
-                        for (const listener of state.listeners) unbind(state, listener)
-                    }
-                    return true
-                }
-            }
-        },
-        dismiss() {
-            if (bound.size) {
-                for (const [state] of bound) {
-                    if (state.listeners) {
-                        for (const listener of state.listeners) unbind(state, listener)
-                    }
+    unbind(atom, listener) {
+        let state = super.get(atom)
+        if (state) {
+            if (listener) {
+                return this.#unbind(state, listener)
+            } else {
+                if (state.listeners) {
+                    for (const listener of state.listeners) this.#unbind(state, listener)
                 }
                 return true
             }
+        }
+    }
+
+    dismiss() {
+        if (this.bound.size) {
+            for (const [state] of this.bound) {
+                if (state.listeners) {
+                    for (const listener of state.listeners) this.#unbind(state, listener)
+                }
+            }
+            return true
         }
     }
 }
 
 let counter = 0
 
-export const atomTag = Symbol('atomTag')
-
-export function atom(read, write) {
-    return {
-        [atomTag]: this ?? `atom<${counter++}>`,
-        [typeof read === 'function' ? 'read' : 'init']: read,
-        write: write
-    }
+export function Atom(name, init, read, write) {
+    this.name = name
+    this[init] = read
+    this.write = write
 }
 
-export const globals = molecule()
+export function atom(read, write) {
+    return new Atom(
+        this ?? `atom<${counter++}>`,
+        typeof read === 'function' ? 'read' : 'init',
+        read,
+        write
+    )
+}
+
+export const globalScope = new Scope()

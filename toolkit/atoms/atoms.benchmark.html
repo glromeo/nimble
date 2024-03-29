@@ -10,11 +10,11 @@
 </div>
 <div id="root"></div>
 <script type="module">
-    import {atom, molecule} from './atoms.mjs'
+    import {atom, Scope} from './atoms.mjs'
 
     setTimeout(() => {
 
-        const scope = molecule()
+        const scope = new Scope()
         const atoms = []
 
         function prepare(l) {

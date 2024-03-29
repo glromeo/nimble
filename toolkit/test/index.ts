@@ -1,4 +1,4 @@
-import {css, htmlOld, defaultStore, molecule, atom, Store} from '@nimble/toolkit'
+import {css, htmlOld, defaultStore, Scope, atom, Store} from '@nimble/toolkit'
 
 const {
     EVENT_RUN_BEGIN,

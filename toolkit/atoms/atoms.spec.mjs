@@ -1,12 +1,12 @@
-import {atom, atomTag, globals, molecule} from './atoms.mjs'
+import {Atom, atom, globalScope, Scope} from './atoms.mjs'
 import {expect} from 'mocha-toolkit'
 
 suite('basics', () => {
 
-    let scope = globals
+    let scope = globalScope
 
     setup(() => {
-        scope = molecule()
+        scope = new Scope()
     })
 
     teardown(() => {
@@ -14,10 +14,11 @@ suite('basics', () => {
     })
 
     test('typeof', () => {
-        expect(atom(0)[atomTag]).to.eq('atom<0>')
-        expect(atom.call('custom tag')[atomTag]).to.eq('custom tag')
+        expect(atom(0).name).to.eq('atom<0>')
+        expect(atom.call('custom tag').name).to.eq('custom tag')
         expect(typeof atom).to.eq('function')
         expect(typeof atom(0)).to.eq('object')
+        expect(atom(0) instanceof Atom).to.be.true
     })
 
     test('primitive', () => {
@@ -83,7 +84,7 @@ suite('basics', () => {
         let a = atom.call('a', get => get(b) + get(e))
         let notifications = []
         let bindings = [c, d, b, e, a].map(k => scope.bind(k, () => {
-            notifications.push([k[atomTag], scope.get(k)])
+            notifications.push([k.name, scope.get(k)])
         }))
         scope.set(d, 1)
         expect(notifications.length).to.eq(3)
@@ -101,7 +102,7 @@ suite('basics', () => {
         let a = atom.call('a', get => get(b) + get(e))
         let notifications = [];
         [c, d, b, e, a].map(k => scope.bind(k, () => {
-            notifications.push([k[atomTag], scope.get(k)])
+            notifications.push([k.name, scope.get(k)])
         }))
         scope.set(c, 1)
         scope.set(d, 1)
@@ -135,7 +136,7 @@ suite('basics', () => {
         let notifications = []
         let effect
         scope.bind(a, effect = () => {
-            notifications.push([a[atomTag], scope.get(a)])
+            notifications.push([a.name, scope.get(a)])
         })
 
         expect(trace.length).to.eq(2)
