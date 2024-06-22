@@ -4,10 +4,9 @@ const NOTIFIED = 1 << 1
 const OUTDATED = 1 << 2
 const HAS_ERROR = 1 << 4
 
-let count = 0
 let context = null
 let pending = null
-let unlinking = null
+let recycling = null
 
 export const signal = init => new Signal(init)
 
@@ -32,7 +31,7 @@ export const batch = callback => {
     try {
         return callback()
     } finally {
-        if (!(context = parent)) commit()
+        (context = parent) || commit()
     }
 }
 
@@ -52,8 +51,18 @@ const link = (target, source) => {
         t = t.nextSource
         if (t.sourceNode === source) return
     }
+    if (recycling) {
+        let recycled = recycling.node
+        recycling = recycling.next
+        recycled.version = source.version
+        recycled.sourceNode = source
+        recycled.nextSource = null
+        recycled.targetNode = target
+        recycled.nextTarget = source.nextTarget
+        t.nextSource = source.nextTarget = recycled
+        return
+    }
     t.nextSource = source.nextTarget = {
-        link: `target: ${target.name} source: ${source.name}`,
         version: source.version,
         sourceNode: source,
         nextSource: null,
@@ -62,17 +71,22 @@ const link = (target, source) => {
     }
 }
 
-const unlink = target => {
+const unlink = (target, force) => {
     let s = target
     while ((s = s.nextSource)) {
         let sn = s.sourceNode
         while (sn.nextTarget) {
             if (sn.nextTarget.targetNode === target) {
-                if (!(sn.nextTarget = sn.nextTarget.nextTarget)) {
-                    unlinking = {
-                        node: sn,
-                        next: unlinking
+                if (force) {
+                    if (!(sn.nextTarget = sn.nextTarget.nextTarget)) {
+                        unlink(sn, force)
                     }
+                } else {
+                    recycling = {
+                        node: sn.nextTarget,
+                        next: recycling
+                    }
+                    sn.nextTarget = sn.nextTarget.nextTarget
                 }
                 break
             }
@@ -85,40 +99,38 @@ const unlink = target => {
 const commit = () => {
     if (pending) {
         context = BATCH
+        let effect
         try {
-            while (pending) {
-                const effect = pending.effect
+            do {
+                effect = pending.effect
                 pending = pending.next
                 effect.refresh()
-            }
+            } while (pending)
         } catch (err) {
-            while (pending) {
-                const effect = pending.effect
+            while (pending) try {
+                effect = pending.effect
                 pending = pending.next
-                try {
-                    effect.refresh()
-                } catch (ignored) {
-                }
+                effect.refresh()
+            } catch (ignored) {
             }
             throw err
         } finally {
             context = null
         }
     }
-    while (unlinking) {
-        if (!unlinking.node.nextTarget) {
-            unlink(unlinking.node)
+    while (recycling) {
+        if (!recycling.node.nextTarget) {
+            unlink(recycling.node, true)
         }
-        unlinking = unlinking.next
+        recycling = recycling.next
     }
 }
 
 export class Signal {
 
     constructor(init) {
-        this.name = `signal#${count++}`
         this.version = 0
-        this.value = init
+        this.cache = init
         this.nextTarget = null
     }
 
@@ -127,24 +139,24 @@ export class Signal {
         return this
     }
 
-    get val() {
+    get value() {
         if (context?.notify) {
             link(context, this)
         }
-        return this.value
+        return this.cache
     }
 
-    set val(value) {
-        if (!Object.is(this.value, value)) {
+    set value(value) {
+        if (!Object.is(this.cache, value)) {
             ++this.version
-            this.value = value
+            this.cache = value
             this.notify()
-            if (!context) commit()
+            context || commit()
         }
     }
 
     get peek() {
-        return this.value
+        return this.cache
     }
 
     notify() {
@@ -161,7 +173,7 @@ export class Signal {
 
     sub(fn) {
         return effect(() => {
-            const value = this.val
+            const value = this.value
             const parent = context
             context = null
             try {
@@ -173,15 +185,15 @@ export class Signal {
     }
 
     toString() {
-        return this.value + ''
+        return this.cache + ''
     }
 
     toJSON() {
-        return this.value
+        return this.cache
     }
 
     valueOf() {
-        return this.value
+        return this.cache
     }
 }
 
@@ -210,7 +222,7 @@ export class Computed extends Signal {
         this.nextSource = null
     }
 
-    get val() {
+    get value() {
         if (context?.notify) {
             link(context, this)
         }
@@ -218,12 +230,12 @@ export class Computed extends Signal {
             this.refresh()
         }
         if (this.state & HAS_ERROR) {
-            throw this.value
+            throw this.cache
         }
-        return this.value
+        return this.cache
     }
 
-    set val(v) {
+    set value(v) {
         throw new Error('Cannot write to a computed signal')
     }
 
@@ -232,9 +244,9 @@ export class Computed extends Signal {
             this.refresh()
         }
         if (this.state & HAS_ERROR) {
-            throw this.value
+            throw this.cache
         }
-        return this.value
+        return this.cache
     }
 
     refresh() {
@@ -246,21 +258,21 @@ export class Computed extends Signal {
         context = this
         try {
             this.state |= RUNNING
-            unlink(this)
-            let value = this.value
-            this.value = this.callback()
+            unlink(this, false)
+            let value = this.cache
+            this.cache = this.callback()
             this.state &= ~HAS_ERROR
             if (this.state & OUTDATED) {
                 this.state &= ~OUTDATED
             } else {
-                if (!Object.is(value, this.value)) {
+                if (!Object.is(value, this.cache)) {
                     ++this.version
                     return true
                 }
             }
         } catch (err) {
             this.state |= HAS_ERROR
-            this.value = err
+            this.cache = err
             return true
         } finally {
             context = parent
@@ -269,15 +281,15 @@ export class Computed extends Signal {
     }
 
     toString() {
-        return this.value + ''
+        return this.cache + ''
     }
 
     toJSON() {
-        return this.value
+        return this.cache
     }
 
     valueOf() {
-        return this.value
+        return this.cache
     }
 }
 
@@ -288,7 +300,6 @@ export class Effect {
     constructor(callback) {
         this.state = 0
         this.callback = callback
-        this.name = `effect#${Effect.count++}`
         this.cleanup = undefined
         this.nextSource = null
         this.nextTarget = null
@@ -321,10 +332,10 @@ export class Effect {
         context = this
         try {
             this.state |= RUNNING
-            unlink(this)
+            unlink(this, false)
             this.cleanup = this.callback()
         } finally {
-            if (!(context = parent)) commit()
+            (context = parent) || commit()
             this.state &= ~RUNNING
         }
     }
@@ -339,12 +350,12 @@ export class Effect {
     dispose() {
         if (this.callback) {
             this.callback = null
-            unlink(this)
+            unlink(this, true)
             pending = {
                 effect: this,
                 next: pending
             }
-            if (!context) commit()
+            context || commit()
         }
     }
 }

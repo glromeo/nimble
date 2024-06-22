@@ -5,7 +5,7 @@ describe('signal', () => {
     it('should return value', () => {
         const v = [1, 2]
         const s = signal(v)
-        expect(s.val).to.equal(v)
+        expect(s.value).to.equal(v)
     })
 
     it('should inherit from Signal', () => {
@@ -43,13 +43,13 @@ describe('signal', () => {
     it('should notify other listeners of changes after one listener is disposed', () => {
         const s = signal(0)
         const spy1 = sinon.spy(() => {
-            s.val
+            s.value
         })
         const spy2 = sinon.spy(() => {
-            s.val
+            s.value
         })
         const spy3 = sinon.spy(() => {
-            s.val
+            s.value
         })
 
         effect(spy1)
@@ -62,7 +62,7 @@ describe('signal', () => {
 
         dispose()
 
-        s.val = 1
+        s.value = 1
         expect(spy1).to.be.calledTwice
         expect(spy2).to.be.calledOnce
         expect(spy3).to.be.calledTwice
@@ -76,7 +76,7 @@ describe('signal', () => {
 
         it('should get the updated value after a value change', () => {
             const s = signal(1)
-            s.val = 2
+            s.value = 2
             expect(s.peek).equal(2)
         })
 
@@ -89,7 +89,7 @@ describe('signal', () => {
             effect(spy)
             expect(spy).to.be.calledOnce
 
-            s.val = 2
+            s.value = 2
             expect(spy).to.be.calledOnce
         })
 
@@ -100,11 +100,11 @@ describe('signal', () => {
             })
             const d = computed(spy)
 
-            d.val
+            d.value
             expect(spy).to.be.calledOnce
 
-            s.val = 2
-            d.val
+            s.value = 2
+            d.value
             expect(spy).to.be.calledOnce
         })
     })
@@ -124,7 +124,7 @@ describe('signal', () => {
 
             a.sub(spy)
 
-            a.val = 2
+            a.value = 2
             expect(spy).to.be.calledWith(2)
         })
 
@@ -136,7 +136,7 @@ describe('signal', () => {
             dispose()
             spy.resetHistory()
 
-            a.val = 2
+            a.value = 2
             expect(spy).not.to.be.called
         })
 
@@ -146,13 +146,13 @@ describe('signal', () => {
             const b = signal(0)
 
             a.sub(() => {
-                b.val
+                b.value
                 spy()
             })
             expect(spy).to.be.calledOnce
             spy.resetHistory()
 
-            b.val++
+            b.value++
             expect(spy).not.to.be.called
         })
 
@@ -163,14 +163,14 @@ describe('signal', () => {
 
             effect(() => {
                 a.sub(() => {
-                    b.val
+                    b.value
                 })
                 spy()
             })
             expect(spy).to.be.calledOnce
             spy.resetHistory()
 
-            b.val++
+            b.value++
             expect(spy).not.to.be.called
         })
     })
@@ -180,7 +180,7 @@ describe('effect()', () => {
     it('should run the callback immediately', () => {
         const s = signal(123)
         const spy = sinon.spy(() => {
-            s.val
+            s.value
         })
         effect(spy)
         expect(spy).to.be.called
@@ -189,12 +189,12 @@ describe('effect()', () => {
     it('should subscribe to signals', () => {
         const s = signal(123)
         const spy = sinon.spy(() => {
-            s.val
+            s.value
         })
         effect(spy)
         spy.resetHistory()
 
-        s.val = 42
+        s.value = 42
         expect(spy).to.be.called
     })
 
@@ -202,14 +202,14 @@ describe('effect()', () => {
         const a = signal('a')
         const b = signal('b')
         const spy = sinon.spy(() => {
-            a.val
-            b.val
+            a.value
+            b.value
         })
         effect(spy)
         spy.resetHistory()
 
-        a.val = 'aa'
-        b.val = 'bb'
+        a.value = 'aa'
+        b.value = 'bb'
         expect(spy).to.be.calledTwice
     })
 
@@ -217,7 +217,7 @@ describe('effect()', () => {
         const a = signal('a')
         const b = signal('b')
         const spy = sinon.spy(() => {
-            a.val + ' ' + b.val
+            a.value + ' ' + b.value
         })
         const dispose = effect(spy)
         spy.resetHistory()
@@ -225,21 +225,21 @@ describe('effect()', () => {
         dispose()
         expect(spy).not.to.be.called
 
-        a.val = 'aa'
-        b.val = 'bb'
+        a.value = 'aa'
+        b.value = 'bb'
         expect(spy).not.to.be.called
     })
 
     it('should unsubscribe from signal', () => {
         const s = signal(123)
         const spy = sinon.spy(() => {
-            s.val
+            s.value
         })
         const unsub = effect(spy)
         spy.resetHistory()
 
         unsub()
-        s.val = 42
+        s.value = 42
         expect(spy).not.to.be.called
     })
 
@@ -249,35 +249,35 @@ describe('effect()', () => {
         const cond = signal(true)
 
         const spy = sinon.spy(() => {
-            cond.val ? a.val : b.val
+            cond.value ? a.value : b.value
         })
 
         effect(spy)
         expect(spy).to.be.calledOnce
 
-        b.val = 'bb'
+        b.value = 'bb'
         expect(spy).to.be.calledOnce
 
-        cond.val = false
+        cond.value = false
         expect(spy).to.be.calledTwice
 
         spy.resetHistory()
 
-        a.val = 'aaa'
+        a.value = 'aaa'
         expect(spy).not.to.be.called
     })
 
     it('should batch writes', () => {
         const a = signal('a')
         const spy = sinon.spy(() => {
-            a.val
+            a.value
         })
         effect(spy)
         spy.resetHistory()
 
         effect(() => {
-            a.val = 'aa'
-            a.val = 'aaa'
+            a.value = 'aa'
+            a.value = 'aaa'
         })
 
         expect(spy).to.be.calledOnce
@@ -288,13 +288,13 @@ describe('effect()', () => {
         const spy = sinon.spy()
 
         effect(() => {
-            a.val
+            a.value
             return spy
         })
         expect(spy).not.to.be.called
-        a.val = 1
+        a.value = 1
         expect(spy).to.be.calledOnce
-        a.val = 2
+        a.value = 2
         expect(spy).to.be.calledTwice
     })
 
@@ -305,19 +305,19 @@ describe('effect()', () => {
         const a = signal(spy1)
 
         effect(() => {
-            return a.val
+            return a.value
         })
 
         expect(spy1).not.to.be.called
         expect(spy2).not.to.be.called
         expect(spy3).not.to.be.called
 
-        a.val = spy2
+        a.value = spy2
         expect(spy1).to.be.calledOnce
         expect(spy2).not.to.be.called
         expect(spy3).not.to.be.called
 
-        a.val = spy3
+        a.value = spy3
         expect(spy1).to.be.calledOnce
         expect(spy2).to.be.calledOnce
         expect(spy3).not.to.be.called
@@ -337,17 +337,17 @@ describe('effect()', () => {
     it('should not recompute if the effect has been notified about changes, but no direct dependency has actually changed', () => {
         const s = signal(0)
         const c = computed(() => {
-            s.val
+            s.value
             return 0
         })
         const spy = sinon.spy(() => {
-            c.val
+            c.value
         })
         effect(spy)
         expect(spy).to.be.calledOnce
         spy.resetHistory()
 
-        s.val = 1
+        s.value = 1
         expect(spy).not.to.be.called
     })
 
@@ -356,19 +356,19 @@ describe('effect()', () => {
         const a = signal(0).as('a')
         const b = signal(0).as('b')
         const c = computed(() => {
-            b.val
+            b.value
             spy()
         }).as('c')
         effect(() => {
-            if (a.val === 0) {
-                c.val
+            if (a.value === 0) {
+                c.value
             }
         })
         expect(spy).to.be.calledOnce
 
         batch(() => {
-            b.val = 1
-            a.val = 1
+            b.value = 1
+            a.value = 1
         })
         expect(spy).to.be.calledOnce
     })
@@ -378,31 +378,31 @@ describe('effect()', () => {
         const b = signal(1).as('b')
         const c = signal(1).as('c')
 
-        const spy = sinon.spy(() => c.val)
+        const spy = sinon.spy(() => c.value)
         const d = computed(spy).as('d')
 
         effect(() => {
-            if (a.val > 0) {
-                b.val
-                d.val
+            if (a.value > 0) {
+                b.value
+                d.value
             } else {
-                b.val
+                b.value
             }
         })
         spy.resetHistory()
 
         batch(() => {
-            a.val = 2
-            b.val = 2
-            c.val = 2
+            a.value = 2
+            b.value = 2
+            c.value = 2
         })
         expect(spy).to.be.calledOnce
         spy.resetHistory()
 
         batch(() => {
-            a.val = -1
-            b.val = -1
-            c.val = -1
+            a.value = -1
+            b.value = -1
+            c.value = -1
         })
         expect(spy).not.to.be.called
         spy.resetHistory()
@@ -411,8 +411,8 @@ describe('effect()', () => {
     it('should recompute if a dependency changes during computation after becoming a dependency', () => {
         const a = signal(0)
         const spy = sinon.spy(() => {
-            if (a.val === 0) {
-                a.val++
+            if (a.value === 0) {
+                a.value++
             }
         })
         effect(spy)
@@ -426,23 +426,23 @@ describe('effect()', () => {
         const spy = sinon.spy()
 
         effect(() => {
-            b.val
-            c.val
-            spy(b.val + c.val)
+            b.value
+            c.value
+            spy(b.value + c.value)
         })
 
         effect(() => {
-            a.val
+            a.value
             return () => {
-                b.val = 'x'
-                c.val = 'y'
+                b.value = 'x'
+                c.value = 'y'
             }
         })
 
         expect(spy).to.be.calledOnce
         spy.resetHistory()
 
-        a.val = 1
+        a.value = 1
         expect(spy).to.be.calledOnce
         expect(spy).to.be.calledWith('xy')
     })
@@ -452,15 +452,15 @@ describe('effect()', () => {
         const spy = sinon.spy()
 
         effect(() => {
-            spy(a.val)
+            spy(a.value)
             return () => {
-                a.val = 2
+                a.value = 2
             }
         })
         expect(spy).to.be.calledOnce
         spy.resetHistory()
 
-        a.val = 1
+        a.value = 1
         expect(spy).to.be.calledOnce
         expect(spy).to.be.calledWith(2)
     })
@@ -470,15 +470,15 @@ describe('effect()', () => {
         const spy = sinon.spy()
 
         const dispose = effect(() => {
-            if (a.val > 0) {
+            if (a.value > 0) {
                 dispose()
                 return spy
             }
         })
         expect(spy).not.to.be.called
-        a.val = 1
+        a.value = 1
         expect(spy).to.be.calledOnce
-        a.val = 2
+        a.value = 2
         expect(spy).to.be.calledOnce
     })
 
@@ -487,27 +487,27 @@ describe('effect()', () => {
         const spy = sinon.spy()
 
         const dispose = effect(() => {
-            a.val
+            a.value
             spy()
             return () => {
                 dispose()
             }
         })
         expect(spy).to.be.calledOnce
-        a.val = 1
+        a.value = 1
         expect(spy).to.be.calledOnce
     })
 
     it('should not subscribe to anything if first run throws', () => {
         const s = signal(0)
         const spy = sinon.spy(() => {
-            s.val
+            s.value
             throw new Error('test')
         })
         expect(() => effect(spy)).to.throw('test')
         expect(spy).to.be.calledOnce
 
-        s.val++
+        s.value++
         expect(spy).to.be.calledOnce
     })
 
@@ -516,16 +516,16 @@ describe('effect()', () => {
         const spy = sinon.spy()
 
         effect(() => {
-            if (a.val === 0) {
+            if (a.value === 0) {
                 return spy
             } else {
                 throw new Error('hello')
             }
         })
         expect(spy).not.to.be.called
-        expect(() => (a.val = 1)).to.throw('hello')
+        expect(() => (a.value = 1)).to.throw('hello')
         expect(spy).to.be.calledOnce
-        a.val = 0
+        a.value = 0
         expect(spy).to.be.calledOnce
     })
 
@@ -534,7 +534,7 @@ describe('effect()', () => {
         const spy = sinon.spy()
 
         effect(() => {
-            if (a.val === 0) {
+            if (a.value === 0) {
                 return () => {
                     throw new Error('hello')
                 }
@@ -543,9 +543,9 @@ describe('effect()', () => {
             }
         })
         expect(spy).not.to.be.called
-        expect(() => a.val++).to.throw('hello')
+        expect(() => a.value++).to.throw('hello')
         expect(spy).not.to.be.called
-        a.val++
+        a.value++
         expect(spy).not.to.be.called
     })
 
@@ -554,28 +554,28 @@ describe('effect()', () => {
         const a = signal(0)
         const b = signal(0)
         const c = computed(() => {
-            if (a.val === 0) {
+            if (a.value === 0) {
                 effect(() => {
                     return () => {
-                        b.val
+                        b.value
                     }
                 })
             }
-            return a.val
+            return a.value
         })
 
         effect(() => {
             spy()
-            c.val
+            c.value
         })
         expect(spy).to.be.calledOnce
         spy.resetHistory()
 
-        a.val = 1
+        a.value = 1
         expect(spy).to.be.calledOnce
         spy.resetHistory()
 
-        b.val = 1
+        b.value = 1
         expect(spy).not.to.be.called
     })
 
@@ -589,8 +589,8 @@ describe('effect()', () => {
                 if (i++ > 200) {
                     throw new Error('test failed')
                 }
-                a.val
-                a.val = NaN
+                a.value
+                a.value = NaN
             })
 
         expect(fn).not.to.throw()
@@ -602,8 +602,8 @@ describe('effect()', () => {
         let i = 0
 
         const c = computed(() => {
-            a.val
-            a.val = NaN
+            a.value
+            a.value = NaN
             return NaN
         })
 
@@ -613,7 +613,7 @@ describe('effect()', () => {
                 if (i++ > 200) {
                     throw new Error('test failed')
                 }
-                c.val
+                c.value
             })
 
         expect(fn).to.not.throw()
@@ -630,28 +630,28 @@ describe('effect()', () => {
         const a = signal(0)
         const spy = sinon.spy()
         const dispose = effect(() => {
-            if (a.val === 1) {
+            if (a.value === 1) {
                 dispose()
                 spy()
             }
         })
         expect(spy).not.to.be.called
-        a.val = 1
+        a.value = 1
         expect(spy).to.be.calledOnce
-        a.val = 2
+        a.value = 2
         expect(spy).to.be.calledOnce
     })
 
     it('should not run if it\'s first been triggered and then disposed in a batch', () => {
         const a = signal(0)
         const spy = sinon.spy(() => {
-            a.val
+            a.value
         })
         const dispose = effect(spy)
         spy.resetHistory()
 
         batch(() => {
-            a.val = 1
+            a.value = 1
             dispose()
         })
 
@@ -661,15 +661,15 @@ describe('effect()', () => {
     it('should not run if it\'s been triggered, disposed and then triggered again in a batch', () => {
         const a = signal(0)
         const spy = sinon.spy(() => {
-            a.val
+            a.value
         })
         const dispose = effect(spy)
         spy.resetHistory()
 
         batch(() => {
-            a.val = 1
+            a.value = 1
             dispose()
-            a.val = 2
+            a.value = 2
         })
 
         expect(spy).not.to.be.called
@@ -680,10 +680,10 @@ describe('effect()', () => {
         const childSignal = signal(0)
 
         const parentEffect = sinon.spy(() => {
-            parentSignal.val
+            parentSignal.value
         })
         const childEffect = sinon.spy(() => {
-            childSignal.val
+            childSignal.value
         })
 
         effect(() => {
@@ -694,12 +694,12 @@ describe('effect()', () => {
         expect(parentEffect).to.be.calledOnce
         expect(childEffect).to.be.calledOnce
 
-        childSignal.val = 1
+        childSignal.value = 1
 
         expect(parentEffect).to.be.calledOnce
         expect(childEffect).to.be.calledTwice
 
-        parentSignal.val = 1
+        parentSignal.value = 1
 
         expect(parentEffect).to.be.calledTwice
         expect(childEffect).to.be.calledThrice
@@ -712,8 +712,8 @@ describe('computed()', () => {
         const a = signal('a')
         const b = signal('b')
 
-        const c = computed(() => a.val + b.val)
-        expect(c.val).to.equal('ab')
+        const c = computed(() => a.value + b.value)
+        expect(c.value).to.equal('ab')
     })
 
     it('should inherit from Signal', () => {
@@ -724,50 +724,50 @@ describe('computed()', () => {
         const a = signal('a')
         const b = signal('b')
 
-        const c = computed(() => a.val + b.val)
-        expect(c.val).to.equal('ab')
+        const c = computed(() => a.value + b.value)
+        expect(c.value).to.equal('ab')
 
-        a.val = 'aa'
-        expect(c.val).to.equal('aab')
+        a.value = 'aa'
+        expect(c.value).to.equal('aab')
     })
 
     it('should be lazily computed on demand', () => {
         const a = signal('a')
         const b = signal('b')
-        const spy = sinon.spy(() => a.val + b.val)
+        const spy = sinon.spy(() => a.value + b.value)
         const c = computed(spy)
         expect(spy).to.not.be.called
-        c.val
+        c.value
         expect(spy).to.be.calledOnce
-        a.val = 'x'
-        b.val = 'y'
+        a.value = 'x'
+        b.value = 'y'
         expect(spy).to.be.calledOnce
-        c.val
+        c.value
         expect(spy).to.be.calledTwice
     })
 
     it('should be computed only when a dependency has changed at some point', () => {
         const a = signal('a')
         const spy = sinon.spy(() => {
-            return a.val
+            return a.value
         })
         const c = computed(spy)
-        c.val
+        c.value
         expect(spy).to.be.calledOnce
-        a.val = 'a'
-        c.val
+        a.value = 'a'
+        c.value
         expect(spy).to.be.calledOnce
     })
 
     it('should recompute if a dependency changes during computation after becoming a dependency', () => {
         const a = signal(0)
         const spy = sinon.spy(() => {
-            a.val++
+            a.value++
         })
         const c = computed(spy)
-        c.val
+        c.value
         expect(spy).to.be.calledOnce
-        c.val
+        c.value
         expect(spy).to.be.calledTwice
     })
 
@@ -777,52 +777,52 @@ describe('computed()', () => {
             if (++i > 200) {
                 throw new Error('test failed')
             }
-            return a.val
+            return a.value
         })
-        expect(() => a.val).not.to.throw()
-        expect(a.val).to.be.undefined
+        expect(() => a.value).not.to.throw()
+        expect(a.value).to.be.undefined
     })
 
     it('should detect deep dependency cycles', () => {
-        const a = computed(() => b.val)
-        const b = computed(() => c.val)
-        const c = computed(() => d.val)
+        const a = computed(() => b.value)
+        const b = computed(() => c.value)
+        const c = computed(() => d.value)
         let i = 0
         const d = computed(() => {
             if (++i > 200) {
                 throw new Error('test failed')
             }
-            return a.val
+            return a.value
         })
-        expect(() => a.val).not.to.throw()
-        expect(a.val).to.be.undefined
+        expect(() => a.value).not.to.throw()
+        expect(a.value).to.be.undefined
     })
 
     it('should not allow a computed signal to become a direct dependency of itself', () => {
         const spy = sinon.spy(() => {
             try {
-                a.val
+                a.value
             } catch {
                 // pass
             }
         })
         const a = computed(spy)
-        a.val
-        expect(() => effect(() => a.val)).to.not.throw()
+        a.value
+        expect(() => effect(() => a.value)).to.not.throw()
     })
 
     it('should store thrown errors and recompute only after a dependency changes', () => {
         const a = signal(0)
         const spy = sinon.spy(() => {
-            a.val
+            a.value
             throw new Error()
         })
         const c = computed(spy)
-        expect(() => c.val).to.throw()
-        expect(() => c.val).to.throw()
+        expect(() => c.value).to.throw()
+        expect(() => c.value).to.throw()
         expect(spy).to.be.calledOnce
-        a.val = 1
-        expect(() => c.val).to.throw()
+        a.value = 1
+        expect(() => c.value).to.throw()
         expect(spy).to.be.calledTwice
     })
 
@@ -830,28 +830,28 @@ describe('computed()', () => {
         const a = signal(0)
         const spy = sinon.spy()
         const c = computed(() => {
-            a.val
+            a.value
             spy()
             throw undefined
         })
 
         try {
-            c.val
+            c.value
             expect.fail()
         } catch (err) {
             expect(err).to.be.undefined
         }
         try {
-            c.val
+            c.value
             expect.fail()
         } catch (err) {
             expect(err).to.be.undefined
         }
         expect(spy).to.be.calledOnce
 
-        a.val = 1
+        a.value = 1
         try {
-            c.val
+            c.value
             expect.fail()
         } catch (err) {
             expect(err).to.be.undefined
@@ -865,25 +865,25 @@ describe('computed()', () => {
         const cond = signal(true)
 
         const spy = sinon.spy(() => {
-            return cond.val ? a.val : b.val
+            return cond.value ? a.value : b.value
         })
 
         const c = computed(spy)
-        expect(c.val).to.equal('a')
+        expect(c.value).to.equal('a')
         expect(spy).to.be.calledOnce
 
-        b.val = 'bb'
-        expect(c.val).to.equal('a')
+        b.value = 'bb'
+        expect(c.value).to.equal('a')
         expect(spy).to.be.calledOnce
 
-        cond.val = false
-        expect(c.val).to.equal('bb')
+        cond.value = false
+        expect(c.value).to.equal('bb')
         expect(spy).to.be.calledTwice
 
         spy.resetHistory()
 
-        a.val = 'aaa'
-        expect(c.val).to.equal('bb')
+        a.value = 'aaa'
+        expect(c.value).to.equal('bb')
         expect(spy).not.to.be.called
     })
 
@@ -892,72 +892,72 @@ describe('computed()', () => {
         const spy = sinon.spy(() => undefined)
         const c = computed(spy)
 
-        expect(c.val).to.be.undefined
-        a.val = 1
-        expect(c.val).to.be.undefined
+        expect(c.value).to.be.undefined
+        a.value = 1
+        expect(c.value).to.be.undefined
         expect(spy).to.be.calledOnce
     })
 
     it('should not leak errors raised by dependencies', () => {
         const a = signal(0)
         const b = computed(() => {
-            a.val
+            a.value
             throw new Error('error')
         })
         const c = computed(() => {
             try {
-                b.val
+                b.value
             } catch {
                 return 'ok'
             }
         })
-        expect(c.val).to.equal('ok')
-        a.val = 1
-        expect(c.val).to.equal('ok')
+        expect(c.value).to.equal('ok')
+        a.value = 1
+        expect(c.value).to.equal('ok')
     })
 
     it('should propagate notifications even right after first subscription', () => {
         const a = signal(0)
-        const b = computed(() => a.val)
-        const c = computed(() => b.val)
-        c.val
+        const b = computed(() => a.value)
+        const c = computed(() => b.value)
+        c.value
 
         const spy = sinon.spy(() => {
-            c.val
+            c.value
         })
 
         effect(spy)
         expect(spy).to.be.calledOnce
         spy.resetHistory()
 
-        a.val = 1
+        a.value = 1
         expect(spy).to.be.calledOnce
     })
 
     it('should get marked as outdated right after first subscription', () => {
         const s = signal(0)
-        const c = computed(() => s.val)
-        c.val
+        const c = computed(() => s.value)
+        c.value
 
-        s.val = 1
+        s.value = 1
         effect(() => {
-            c.val
+            c.value
         })
-        expect(c.val).to.equal(1)
+        expect(c.value).to.equal(1)
     })
 
     it('should propagate notification to other listeners after one listener is disposed', () => {
         const s = signal(0)
-        const c = computed(() => s.val)
+        const c = computed(() => s.value)
 
         const spy1 = sinon.spy(() => {
-            c.val
+            c.value
         })
         const spy2 = sinon.spy(() => {
-            c.val
+            c.value
         })
         const spy3 = sinon.spy(() => {
-            c.val
+            c.value
         })
 
         effect(spy1)
@@ -970,7 +970,7 @@ describe('computed()', () => {
 
         dispose()
 
-        s.val = 1
+        s.value = 1
         expect(spy1).to.be.calledTwice
         expect(spy2).to.be.calledOnce
         expect(spy3).to.be.calledTwice
@@ -981,32 +981,32 @@ describe('computed()', () => {
         const b = signal(1)
         const c = signal(1)
 
-        const spy = sinon.spy(() => c.val)
+        const spy = sinon.spy(() => c.value)
         const d = computed(spy)
 
         const e = computed(() => {
-            if (a.val > 0) {
-                b.val
-                d.val
+            if (a.value > 0) {
+                b.value
+                d.value
             } else {
-                b.val
+                b.value
             }
         })
 
-        e.val
+        e.value
         spy.resetHistory()
 
-        a.val = 2
-        b.val = 2
-        c.val = 2
-        e.val
+        a.value = 2
+        b.value = 2
+        c.value = 2
+        e.value
         expect(spy).to.be.calledOnce
         spy.resetHistory()
 
-        a.val = -1
-        b.val = -1
-        c.val = -1
-        e.val
+        a.value = -1
+        b.value = -1
+        c.value = -1
+        e.value
         expect(spy).not.to.be.called
         spy.resetHistory()
     })
@@ -1016,29 +1016,29 @@ describe('computed()', () => {
         const a = signal(0)
         const b = signal(0)
         const c = computed(() => {
-            b.val
+            b.value
             spy()
         })
         const d = computed(() => {
-            if (a.val === 0) {
-                c.val
+            if (a.value === 0) {
+                c.value
             }
         })
-        d.val
+        d.value
         expect(spy).to.be.calledOnce
 
         batch(() => {
-            b.val = 1
-            a.val = 1
+            b.value = 1
+            a.value = 1
         })
-        d.val
+        d.value
         expect(spy).to.be.calledOnce
     })
 
     describe('.peek', () => {
         it('should get value', () => {
             const s = signal(1)
-            const c = computed(() => s.val)
+            const c = computed(() => s.value)
             expect(c.peek).equal(1)
         })
 
@@ -1053,16 +1053,16 @@ describe('computed()', () => {
             const c = computed(() => {
                 throw Error('test')
             })
-            expect(() => c.val).to.throw('test')
+            expect(() => c.value).to.throw('test')
             expect(() => c.peek).to.throw('test')
         })
 
         it('should refresh value if stale', () => {
             const a = signal(1)
-            const b = computed(() => a.val)
+            const b = computed(() => a.value)
             expect(b.peek).to.equal(1)
 
-            a.val = 2
+            a.value = 2
             expect(b.peek).to.equal(2)
         })
 
@@ -1079,9 +1079,9 @@ describe('computed()', () => {
         })
 
         it('should detect deep dependency cycles', () => {
-            const a = computed(() => b.val)
-            const b = computed(() => c.val)
-            const c = computed(() => d.val)
+            const a = computed(() => b.value)
+            const b = computed(() => c.value)
+            const c = computed(() => d.value)
             let i = 0
             const d = computed(() => {
                 if (++i > 200) {
@@ -1095,7 +1095,7 @@ describe('computed()', () => {
 
         it('should not make surrounding effect depend on the computed', () => {
             const s = signal(1)
-            const c = computed(() => s.val)
+            const c = computed(() => s.value)
             const spy = sinon.spy(() => {
                 c.peek
             })
@@ -1103,30 +1103,30 @@ describe('computed()', () => {
             effect(spy)
             expect(spy).to.be.calledOnce
 
-            s.val = 2
+            s.value = 2
             expect(spy).to.be.calledOnce
         })
 
         it('should not make surrounding computed depend on the computed', () => {
             const s = signal(1)
-            const c = computed(() => s.val)
+            const c = computed(() => s.value)
 
             const spy = sinon.spy(() => {
                 c.peek
             })
 
             const d = computed(spy)
-            d.val
+            d.value
             expect(spy).to.be.calledOnce
 
-            s.val = 2
-            d.val
+            s.value = 2
+            d.value
             expect(spy).to.be.calledOnce
         })
 
         it('should not make surrounding effect depend on the peeked computed\'s dependencies', () => {
             const a = signal(1)
-            const b = computed(() => a.val)
+            const b = computed(() => a.value)
             const spy = sinon.spy()
             effect(() => {
                 spy()
@@ -1135,24 +1135,24 @@ describe('computed()', () => {
             expect(spy).to.be.calledOnce
             spy.resetHistory()
 
-            a.val = 1
+            a.value = 1
             expect(spy).not.to.be.called
         })
 
         it('should not make surrounding computed depend on peeked computed\'s dependencies', () => {
             const a = signal(1)
-            const b = computed(() => a.val)
+            const b = computed(() => a.value)
             const spy = sinon.spy()
             const d = computed(() => {
                 spy()
                 b.peek
             })
-            d.val
+            d.value
             expect(spy).to.be.calledOnce
             spy.resetHistory()
 
-            a.val = 1
-            d.val
+            a.value = 1
+            d.value
             expect(spy).not.to.be.called
         })
     })
@@ -1166,7 +1166,7 @@ describe('computed()', () => {
 
         it('should be garbage collectable if nothing is listening to its changes', async () => {
             const s = signal(0)
-            const ref = new WeakRef(computed(() => s.val))
+            const ref = new WeakRef(computed(() => s.value))
 
             gc()
             await new Promise(resolve => setTimeout(resolve, 0))
@@ -1181,10 +1181,10 @@ describe('computed()', () => {
             let dispose
 
             (function () {
-                const c = computed(() => s.val)
+                const c = computed(() => s.value)
                 ref = new WeakRef(c)
                 dispose = effect(() => {
-                    c.val
+                    c.value
                 })
             })()
 
@@ -1203,17 +1203,17 @@ describe('computed()', () => {
 
             const compute = sinon.spy(() => {
                 // debugger;
-                return a.val + b.val
+                return a.value + b.value
             })
             const c = computed(compute)
 
-            expect(c.val).to.equal('ab')
+            expect(c.value).to.equal('ab')
             expect(compute).to.have.been.calledOnce
             compute.resetHistory()
 
-            a.val = 'aa'
-            b.val = 'bb'
-            c.val
+            a.value = 'aa'
+            b.value = 'bb'
+            c.value
             expect(compute).to.have.been.calledOnce
         })
 
@@ -1227,19 +1227,19 @@ describe('computed()', () => {
             //     D
             const a = signal(2)
 
-            const b = computed(() => a.val - 1)
-            const c = computed(() => a.val + b.val)
+            const b = computed(() => a.value - 1)
+            const c = computed(() => a.value + b.value)
 
-            const compute = sinon.spy(() => 'd: ' + c.val)
+            const compute = sinon.spy(() => 'd: ' + c.value)
             const d = computed(compute)
 
             // Trigger read
-            expect(d.val).to.equal('d: 3')
+            expect(d.value).to.equal('d: 3')
             expect(compute).to.have.been.calledOnce
             compute.resetHistory()
 
-            a.val = 4
-            d.val
+            a.value = 4
+            d.value
             expect(compute).to.have.been.calledOnce
         })
 
@@ -1252,17 +1252,17 @@ describe('computed()', () => {
             //   \   /
             //     D
             const a = signal('a')
-            const b = computed(() => a.val)
-            const c = computed(() => a.val)
+            const b = computed(() => a.value)
+            const c = computed(() => a.value)
 
-            const spy = sinon.spy(() => b.val + ' ' + c.val)
+            const spy = sinon.spy(() => b.value + ' ' + c.value)
             const d = computed(spy)
 
-            expect(d.val).to.equal('a a')
+            expect(d.value).to.equal('a a')
             expect(spy).to.be.calledOnce
 
-            a.val = 'aa'
-            expect(d.val).to.equal('aa aa')
+            a.value = 'aa'
+            expect(d.value).to.equal('aa aa')
             expect(spy).to.be.calledTwice
         })
 
@@ -1276,19 +1276,19 @@ describe('computed()', () => {
             //     |
             //     E
             const a = signal('a')
-            const b = computed(() => a.val)
-            const c = computed(() => a.val)
+            const b = computed(() => a.value)
+            const c = computed(() => a.value)
 
-            const d = computed(() => b.val + ' ' + c.val)
+            const d = computed(() => b.value + ' ' + c.value)
 
-            const spy = sinon.spy(() => d.val)
+            const spy = sinon.spy(() => d.value)
             const e = computed(spy)
 
-            expect(e.val).to.equal('a a')
+            expect(e.value).to.equal('a a')
             expect(spy).to.be.calledOnce
 
-            a.val = 'aa'
-            expect(e.val).to.equal('aa aa')
+            a.value = 'aa'
+            expect(e.value).to.equal('aa aa')
             expect(spy).to.be.calledTwice
         })
 
@@ -1297,18 +1297,18 @@ describe('computed()', () => {
             // A->B->C
             const a = signal('a')
             const b = computed(() => {
-                a.val
+                a.value
                 return 'foo'
             })
 
-            const spy = sinon.spy(() => b.val)
+            const spy = sinon.spy(() => b.value)
             const c = computed(spy)
 
-            expect(c.val).to.equal('foo')
+            expect(c.value).to.equal('foo')
             expect(spy).to.be.calledOnce
 
-            a.val = 'aa'
-            expect(c.val).to.equal('foo')
+            a.value = 'aa'
+            expect(c.value).to.equal('foo')
             expect(spy).to.be.calledOnce
         })
 
@@ -1325,53 +1325,53 @@ describe('computed()', () => {
             //  F     G
             const a = signal('a').as('A')
 
-            const b = computed(() => a.val).as('B')
-            const c = computed(() => a.val).as('C')
+            const b = computed(() => a.value).as('B')
+            const c = computed(() => a.value).as('C')
 
-            const d = computed(() => c.val).as('D')
+            const d = computed(() => c.value).as('D')
 
-            const eSpy = sinon.spy(() => b.val + ' ' + d.val)
+            const eSpy = sinon.spy(() => b.value + ' ' + d.value)
             const e = computed(eSpy).as('E')
 
-            const fSpy = sinon.spy(() => e.val)
+            const fSpy = sinon.spy(() => e.value)
             const f = computed(fSpy).as('F')
-            const gSpy = sinon.spy(() => e.val)
+            const gSpy = sinon.spy(() => e.value)
             const g = computed(gSpy).as('G')
 
-            expect(f.val).to.equal('a a')
+            expect(f.value).to.equal('a a')
             expect(fSpy).to.be.calledOnce
 
-            expect(g.val).to.equal('a a')
+            expect(g.value).to.equal('a a')
             expect(gSpy).to.be.calledOnce
 
             eSpy.resetHistory()
             fSpy.resetHistory()
             gSpy.resetHistory()
 
-            a.val = 'b'
+            a.value = 'b'
 
-            expect(e.val).to.equal('b b')
+            expect(e.value).to.equal('b b')
             expect(eSpy).to.be.calledOnce
 
-            expect(f.val).to.equal('b b')
+            expect(f.value).to.equal('b b')
             expect(fSpy).to.be.calledOnce
 
-            expect(g.val).to.equal('b b')
+            expect(g.value).to.equal('b b')
             expect(gSpy).to.be.calledOnce
 
             eSpy.resetHistory()
             fSpy.resetHistory()
             gSpy.resetHistory()
 
-            a.val = 'c'
+            a.value = 'c'
 
-            expect(e.val).to.equal('c c')
+            expect(e.value).to.equal('c c')
             expect(eSpy).to.be.calledOnce
 
-            expect(f.val).to.equal('c c')
+            expect(f.value).to.equal('c c')
             expect(fSpy).to.be.calledOnce
 
-            expect(g.val).to.equal('c c')
+            expect(g.value).to.equal('c c')
             expect(gSpy).to.be.calledOnce
 
             // top to bottom
@@ -1386,15 +1386,15 @@ describe('computed()', () => {
             // *B     C <- we don't listen to C
             const a = signal('a')
 
-            const b = computed(() => a.val)
-            const spy = sinon.spy(() => a.val)
+            const b = computed(() => a.value)
+            const spy = sinon.spy(() => a.value)
             computed(spy)
 
-            expect(b.val).to.equal('a')
+            expect(b.value).to.equal('a')
             expect(spy).not.to.be.called
 
-            a.val = 'aa'
-            expect(b.val).to.equal('aa')
+            a.value = 'aa'
+            expect(b.value).to.equal('aa')
             expect(spy).not.to.be.called
         })
 
@@ -1408,31 +1408,31 @@ describe('computed()', () => {
             //  |
             // *C
             const a = signal('a')
-            const spyB = sinon.spy(() => a.val)
+            const spyB = sinon.spy(() => a.value)
             const b = computed(spyB)
 
-            const spyC = sinon.spy(() => b.val)
+            const spyC = sinon.spy(() => b.value)
             const c = computed(spyC)
 
-            const d = computed(() => a.val)
+            const d = computed(() => a.value)
 
             let result = ''
             const unsub = effect(() => {
-                result = c.val
+                result = c.value
             })
 
             expect(result).to.equal('a')
-            expect(d.val).to.equal('a')
+            expect(d.value).to.equal('a')
 
             spyB.resetHistory()
             spyC.resetHistory()
             unsub()
 
-            a.val = 'aa'
+            a.value = 'aa'
 
             expect(spyB).not.to.be.called
             expect(spyC).not.to.be.called
-            expect(d.val).to.equal('aa')
+            expect(d.value).to.equal('aa')
         })
 
         it('should ensure subs update even if one dep unmarks it', () => {
@@ -1446,18 +1446,18 @@ describe('computed()', () => {
             //   \   /
             //     D
             const a = signal('a')
-            const b = computed(() => a.val)
+            const b = computed(() => a.value)
             const c = computed(() => {
-                a.val
+                a.value
                 return 'c'
             })
-            const spy = sinon.spy(() => b.val + ' ' + c.val)
+            const spy = sinon.spy(() => b.value + ' ' + c.value)
             const d = computed(spy)
-            expect(d.val).to.equal('a c')
+            expect(d.value).to.equal('a c')
             spy.resetHistory()
 
-            a.val = 'aa'
-            d.val
+            a.value = 'aa'
+            d.value
             expect(spy).to.returned('aa c')
         })
 
@@ -1471,22 +1471,22 @@ describe('computed()', () => {
             //   \ | /
             //     E
             const a = signal('a')
-            const b = computed(() => a.val)
+            const b = computed(() => a.value)
             const c = computed(() => {
-                a.val
+                a.value
                 return 'c'
             })
             const d = computed(() => {
-                a.val
+                a.value
                 return 'd'
             })
-            const spy = sinon.spy(() => b.val + ' ' + c.val + ' ' + d.val)
+            const spy = sinon.spy(() => b.value + ' ' + c.value + ' ' + d.value)
             const e = computed(spy)
-            expect(e.val).to.equal('a c d')
+            expect(e.value).to.equal('a c d')
             spy.resetHistory()
 
-            a.val = 'aa'
-            e.val
+            a.value = 'aa'
+            e.value
             expect(spy).to.returned('aa c d')
         })
     })
@@ -1494,8 +1494,8 @@ describe('computed()', () => {
     describe('error handling', () => {
         it('should throw when writing to computeds', () => {
             const a = signal('a')
-            const b = computed(() => a.val)
-            const fn = () => (b.val = 'aa')
+            const b = computed(() => a.value)
+            const fn = () => (b.value = 'aa')
             expect(fn).to.throw(/Cannot write to a computed signal/)
         })
 
@@ -1504,40 +1504,40 @@ describe('computed()', () => {
             const b = computed(() => {
                 throw new Error('fail')
             })
-            const c = computed(() => a.val)
-            expect(() => b.val).to.throw('fail')
+            const c = computed(() => a.value)
+            expect(() => b.value).to.throw('fail')
 
-            a.val = 1
-            expect(c.val).to.equal(1)
+            a.value = 1
+            expect(c.value).to.equal(1)
         })
 
         it('should keep graph consistent on errors in computeds', () => {
             const a = signal(0)
             const b = computed(() => {
-                if (a.val === 1) throw new Error('fail')
-                return a.val
+                if (a.value === 1) throw new Error('fail')
+                return a.value
             })
-            const c = computed(() => b.val)
-            expect(c.val).to.equal(0)
+            const c = computed(() => b.value)
+            expect(c.value).to.equal(0)
 
-            a.val = 1
-            expect(() => b.val).to.throw('fail')
+            a.value = 1
+            expect(() => b.value).to.throw('fail')
 
-            a.val = 2
-            expect(c.val).to.equal(2)
+            a.value = 2
+            expect(c.value).to.equal(2)
         })
 
         it('should support lazy branches', () => {
             const a = signal(0)
-            const b = computed(() => a.val)
-            const c = computed(() => (a.val > 0 ? a.val : b.val))
+            const b = computed(() => a.value)
+            const c = computed(() => (a.value > 0 ? a.value : b.value))
 
-            expect(c.val).to.equal(0)
-            a.val = 1
-            expect(c.val).to.equal(1)
+            expect(c.value).to.equal(0)
+            a.value = 1
+            expect(c.value).to.equal(1)
 
-            a.val = 0
-            expect(c.val).to.equal(0)
+            a.value = 0
+            expect(c.value).to.equal(0)
         })
 
         it('should not update a sub if all deps unmark it', () => {
@@ -1550,19 +1550,19 @@ describe('computed()', () => {
             //     D
             const a = signal('a')
             const b = computed(() => {
-                a.val
+                a.value
                 return 'b'
             })
             const c = computed(() => {
-                a.val
+                a.value
                 return 'c'
             })
-            const spy = sinon.spy(() => b.val + ' ' + c.val)
+            const spy = sinon.spy(() => b.value + ' ' + c.value)
             const d = computed(spy)
-            expect(d.val).to.equal('b c')
+            expect(d.value).to.equal('b c')
             spy.resetHistory()
 
-            a.val = 'aa'
+            a.value = 'aa'
             expect(spy).not.to.be.called
         })
     })
@@ -1596,14 +1596,14 @@ describe('batch/transaction', () => {
         const a = signal('a')
         const b = signal('b')
         const spy = sinon.spy(() => {
-            a.val + ' ' + b.val
+            a.value + ' ' + b.value
         })
         effect(spy)
         spy.resetHistory()
 
         batch(() => {
-            a.val = 'aa'
-            b.val = 'bb'
+            a.value = 'aa'
+            b.value = 'bb'
         })
 
         expect(spy).to.be.calledOnce
@@ -1613,18 +1613,18 @@ describe('batch/transaction', () => {
         const a = signal('a')
         const b = signal('b')
         const spy = sinon.spy(() => {
-            a.val + ', ' + b.val
+            a.value + ', ' + b.value
         })
         effect(spy)
         spy.resetHistory()
 
         batch(() => {
             batch(() => {
-                a.val += ' inner'
-                b.val += ' inner'
+                a.value += ' inner'
+                b.value += ' inner'
             })
-            a.val += ' outer'
-            b.val += ' outer'
+            a.value += ' outer'
+            b.value += ' outer'
         })
 
         // If the inner batch() would have flushed the update
@@ -1637,8 +1637,8 @@ describe('batch/transaction', () => {
 
         let result = ''
         batch(() => {
-            a.val = 'aa'
-            result = a.val
+            a.value = 'aa'
+            result = a.value
         })
 
         expect(result).to.equal('aa')
@@ -1647,15 +1647,15 @@ describe('batch/transaction', () => {
     it('should read computed signals with updated source signals', () => {
         // A->B->C->D->E
         const a = signal('a')
-        const b = computed(() => a.val)
+        const b = computed(() => a.value)
 
-        const spyC = sinon.spy(() => b.val)
+        const spyC = sinon.spy(() => b.value)
         const c = computed(spyC)
 
-        const spyD = sinon.spy(() => c.val)
+        const spyD = sinon.spy(() => c.value)
         const d = computed(spyD)
 
-        const spyE = sinon.spy(() => d.val)
+        const spyE = sinon.spy(() => d.value)
         const e = computed(spyE)
 
         spyC.resetHistory()
@@ -1664,8 +1664,8 @@ describe('batch/transaction', () => {
 
         let result = ''
         batch(() => {
-            a.val = 'aa'
-            result = c.val
+            a.value = 'aa'
+            result = c.value
 
             // Since "D" isn't accessed during batching, we should not
             // update it, only after batching has completed
@@ -1673,8 +1673,8 @@ describe('batch/transaction', () => {
         })
 
         expect(result).to.equal('aa')
-        expect(d.val).to.equal('aa')
-        expect(e.val).to.equal('aa')
+        expect(d.value).to.equal('aa')
+        expect(e.value).to.equal('aa')
         expect(spyC).to.be.calledOnce
         expect(spyD).to.be.calledOnce
         expect(spyE).to.be.calledOnce
@@ -1687,36 +1687,36 @@ describe('batch/transaction', () => {
         const a = signal('a').as('A')
         const b = signal('b').as('B')
         const c = signal('c').as('C')
-        const d = computed(() => a.val + ' ' + b.val + ' ' + c.val).as('D')
+        const d = computed(() => a.value + ' ' + b.value + ' ' + c.value).as('D')
 
         let result
         effect(() => {
-            result = d.val
+            result = d.value
         })
 
         batch(() => {
-            a.val = 'aa'
-            b.val = 'bb'
+            a.value = 'aa'
+            b.value = 'bb'
         })
-        c.val = 'cc'
+        c.value = 'cc'
         expect(result).to.equal('aa bb cc')
     })
 
-    it('should not lead to stale signals with .val in batch', () => {
+    it('should not lead to stale signals with .value in batch', () => {
         const invokes = []
         const counter = signal(0)
-        const double = computed(() => counter.val * 2)
-        const triple = computed(() => counter.val * 3)
+        const double = computed(() => counter.value * 2)
+        const triple = computed(() => counter.value * 3)
 
         effect(() => {
-            invokes.push([double.val, triple.val])
+            invokes.push([double.value, triple.value])
         })
 
         expect(invokes).to.deep.equal([[0, 0]])
 
         batch(() => {
-            counter.val = 1
-            expect(double.val).to.equal(2)
+            counter.value = 1
+            expect(double.value).to.equal(2)
         })
 
         expect(invokes[1]).to.deep.equal([2, 3])
@@ -1725,17 +1725,17 @@ describe('batch/transaction', () => {
     it('should not lead to stale signals with state in batch', () => {
         const invokes = []
         const counter = signal(0)
-        const double = computed(() => counter.val * 2)
-        const triple = computed(() => counter.val * 3)
+        const double = computed(() => counter.value * 2)
+        const triple = computed(() => counter.value * 3)
 
         effect(() => {
-            invokes.push([double.val, triple.val])
+            invokes.push([double.value, triple.value])
         })
 
         expect(invokes).to.deep.equal([[0, 0]])
 
         batch(() => {
-            counter.val = 1
+            counter.value = 1
             expect(double.peek).to.equal(2)
         })
 
@@ -1746,10 +1746,10 @@ describe('batch/transaction', () => {
         const a = signal(0)
         const b = signal(1)
         const spy1 = sinon.spy(() => {
-            a.val
+            a.value
         })
         const spy2 = sinon.spy(() => {
-            b.val
+            b.value
         })
         effect(spy1)
         effect(spy2)
@@ -1758,8 +1758,8 @@ describe('batch/transaction', () => {
 
         expect(() =>
             batch(() => {
-                a.val++
-                b.val++
+                a.value++
+                b.value++
                 throw Error('hello')
             })
         ).to.throw('hello')
@@ -1771,25 +1771,25 @@ describe('batch/transaction', () => {
     it('should run pending effects even if some effects throw', () => {
         const a = signal(0)
         const spy1 = sinon.spy(() => {
-            a.val
+            a.value
         })
         const spy2 = sinon.spy(() => {
-            a.val
+            a.value
         })
         effect(() => {
-            if (a.val === 1) {
+            if (a.value === 1) {
                 throw new Error('hello')
             }
         })
         effect(spy1)
         effect(() => {
-            if (a.val === 1) {
+            if (a.value === 1) {
                 throw new Error('hello')
             }
         })
         effect(spy2)
         effect(() => {
-            if (a.val === 1) {
+            if (a.value === 1) {
                 throw new Error('hello')
             }
         })
@@ -1798,7 +1798,7 @@ describe('batch/transaction', () => {
 
         expect(() =>
             batch(() => {
-                a.val++
+                a.value++
             })
         ).to.throw('hello')
 
@@ -1822,19 +1822,19 @@ describe('untracked', () => {
         const a = signal(1)
         const b = signal(2)
         const spy = sinon.spy(() => {
-            a.val + b.val
+            a.value + b.value
         })
         effect(() => untracked(spy))
         expect(spy).to.be.calledOnce
 
-        a.val = 10
-        b.val = 20
+        a.value = 10
+        b.value = 20
         expect(spy).to.be.calledOnce
     })
 
     it('should block tracking even when run inside effect run inside untracked', () => {
         const s = signal(1)
-        const spy = sinon.spy(() => s.val)
+        const spy = sinon.spy(() => s.value)
 
         untracked(() =>
             effect(() => {
@@ -1843,7 +1843,7 @@ describe('untracked', () => {
         )
         expect(spy).to.be.calledOnce
 
-        s.val = 2
+        s.value = 2
         expect(spy).to.be.calledOnce
     })
 
@@ -1852,16 +1852,16 @@ describe('untracked', () => {
         const aChangedTime = signal(0)
 
         const dispose = effect(() => {
-            a.val
+            a.value
             untracked(() => {
-                aChangedTime.val = aChangedTime.val + 1
+                aChangedTime.value = aChangedTime.value + 1
             })
         })
 
-        expect(() => (a.val = 2)).not.to.throw()
-        expect(aChangedTime.val).to.equal(2)
-        a.val = 3
-        expect(aChangedTime.val).to.equal(3)
+        expect(() => (a.value = 2)).not.to.throw()
+        expect(aChangedTime.value).to.equal(2)
+        a.value = 3
+        expect(aChangedTime.value).to.equal(3)
 
         dispose()
     })
@@ -1869,16 +1869,16 @@ describe('untracked', () => {
     it('should block tracking inside computed signals', () => {
         const a = signal(1)
         const b = signal(2)
-        const spy = sinon.spy(() => a.val + b.val)
+        const spy = sinon.spy(() => a.value + b.value)
         const c = computed(() => untracked(spy))
 
         expect(spy).to.not.be.called
-        expect(c.val).to.equal(3)
-        a.val = 10
-        c.val
-        b.val = 20
-        c.val
+        expect(c.value).to.equal(3)
+        a.value = 10
+        c.value
+        b.value = 20
+        c.value
         expect(spy).to.be.calledOnce
-        expect(c.val).to.equal(3)
+        expect(c.value).to.equal(3)
     })
 })

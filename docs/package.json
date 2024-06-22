@@ -9,7 +9,6 @@
     "build": "nimble"
   },
   "dependencies": {
-    "@nimble/jsx-runtime": "1.0.0",
     "@nimble/scripts": "1.0.0"
   }
 }
