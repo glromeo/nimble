@@ -52,8 +52,8 @@ const link = (target, source) => {
         if (t.sourceNode === source) return
     }
     if (recycling) {
-        let recycled = recycling.node
-        recycling = recycling.next
+        let recycled = recycling
+        recycling = recycled.nextRecycle
         recycled.version = source.version
         recycled.sourceNode = source
         recycled.nextSource = null
@@ -74,23 +74,19 @@ const link = (target, source) => {
 const unlink = (target, force) => {
     let s = target
     while ((s = s.nextSource)) {
-        let sn = s.sourceNode
-        while (sn.nextTarget) {
-            if (sn.nextTarget.targetNode === target) {
+        for (let sn = s.sourceNode, nt = sn.nextTarget; nt; nt = (sn = nt).nextTarget) {
+            if (nt.targetNode === target) {
                 if (force) {
-                    if (!(sn.nextTarget = sn.nextTarget.nextTarget)) {
+                    if (!(sn.nextTarget = nt.nextTarget)) {
                         unlink(sn, force)
                     }
                 } else {
-                    recycling = {
-                        node: sn.nextTarget,
-                        next: recycling
-                    }
-                    sn.nextTarget = sn.nextTarget.nextTarget
+                    nt.nextRecycle = recycling
+                    recycling = nt
+                    sn.nextTarget = nt.nextTarget
                 }
                 break
             }
-            sn = sn.nextTarget
         }
     }
     target.nextSource = null
@@ -102,14 +98,16 @@ const commit = () => {
         let effect
         try {
             do {
-                effect = pending.effect
-                pending = pending.next
+                effect = pending
+                pending = effect.nextNotify
+                effect.nextNotify = null
                 effect.refresh()
             } while (pending)
         } catch (err) {
             while (pending) try {
-                effect = pending.effect
-                pending = pending.next
+                effect = pending
+                pending = effect.nextNotify
+                effect.nextNotify = null
                 effect.refresh()
             } catch (ignored) {
             }
@@ -119,10 +117,10 @@ const commit = () => {
         }
     }
     while (recycling) {
-        if (!recycling.node.nextTarget) {
-            unlink(recycling.node, true)
+        if (!recycling.nextTarget) {
+            unlink(recycling, true)
         }
-        recycling = recycling.next
+        recycling = recycling.nextRecycle
     }
 }
 
@@ -227,6 +225,7 @@ export class Computed extends Signal {
         this.callback = callback
         this.state = OUTDATED
         this.nextSource = null
+        this.nextRecycle = null
     }
 
     get() {
@@ -307,6 +306,7 @@ export class Effect {
         this.callback = callback
         this.cleanup = undefined
         this.nextSource = null
+        this.nextNotify = null
     }
 
     init() {
@@ -356,20 +356,15 @@ export class Effect {
     }
 
     notify() {
-        pending = {
-            effect: this,
-            next: pending
-        }
+        this.nextNotify = pending
+        pending = this
     }
 
     dispose() {
         if (this.callback) {
             this.callback = null
             unlink(this, true)
-            pending = {
-                effect: this,
-                next: pending
-            }
+            this.notify()
             context || commit()
         }
     }
