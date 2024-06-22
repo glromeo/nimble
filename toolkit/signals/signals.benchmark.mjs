@@ -7,7 +7,7 @@ function prepare(l) {
     if (l < 16) {
         const lh = prepare(l + 1)
         const rh = prepare(l + 1)
-        return computed(() => lh.value + rh.value)
+        return computed(() => lh.get() + rh.get())
     } else {
         const a = signal(0)
         signals.push(a)
@@ -20,12 +20,12 @@ function prepare(l) {
 
     const top = prepare(0)
 
-    let total = top.value
+    let total = top.get()
     await new Promise((resolve) => {
 
         let i = 0
         let dispose = effect(() => {
-            total = top.value
+            total = top.get()
             if (i >= 1_000_000) {
                 resolve()
                 dispose()
@@ -33,7 +33,7 @@ function prepare(l) {
         })
         while (i++ < 1_000_000) {
             const a = signals[(3 * i) % signals.length]
-            a.value += 1
+            a.set(a.get() + 1)
         }
     })
 

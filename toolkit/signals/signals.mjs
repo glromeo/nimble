@@ -130,7 +130,7 @@ export class Signal {
 
     constructor(init) {
         this.version = 0
-        this.cache = init
+        this.value = init
         this.nextTarget = null
     }
 
@@ -139,24 +139,24 @@ export class Signal {
         return this
     }
 
-    get value() {
+    get() {
         if (context?.notify) {
             link(context, this)
         }
-        return this.cache
+        return this.value
     }
 
-    set value(value) {
-        if (!Object.is(this.cache, value)) {
+    set(value) {
+        if (!Object.is(this.value, value)) {
             ++this.version
-            this.cache = value
+            this.value = value
             this.notify()
             context || commit()
         }
     }
 
-    get peek() {
-        return this.cache
+    peek() {
+        return this.value
     }
 
     notify() {
@@ -173,7 +173,7 @@ export class Signal {
 
     sub(fn) {
         return effect(() => {
-            const value = this.value
+            const value = this.get()
             const parent = context
             context = null
             try {
@@ -185,15 +185,15 @@ export class Signal {
     }
 
     toString() {
-        return this.cache + ''
+        return this.value + ''
     }
 
     toJSON() {
-        return this.cache
+        return this.value
     }
 
     valueOf() {
-        return this.cache
+        return this.value
     }
 }
 
@@ -222,7 +222,7 @@ export class Computed extends Signal {
         this.nextSource = null
     }
 
-    get value() {
+    get() {
         if (context?.notify) {
             link(context, this)
         }
@@ -230,23 +230,23 @@ export class Computed extends Signal {
             this.refresh()
         }
         if (this.state & HAS_ERROR) {
-            throw this.cache
+            throw this.value
         }
-        return this.cache
+        return this.value
     }
 
-    set value(v) {
+    set(v) {
         throw new Error('Cannot write to a computed signal')
     }
 
-    get peek() {
+    peek() {
         if (this.state & (NOTIFIED | OUTDATED)) {
             this.refresh()
         }
         if (this.state & HAS_ERROR) {
-            throw this.cache
+            throw this.value
         }
-        return this.cache
+        return this.value
     }
 
     refresh() {
@@ -259,20 +259,20 @@ export class Computed extends Signal {
         try {
             this.state |= RUNNING
             unlink(this, false)
-            let value = this.cache
-            this.cache = this.callback()
+            let value = this.value
+            this.value = this.callback()
             this.state &= ~HAS_ERROR
             if (this.state & OUTDATED) {
                 this.state &= ~OUTDATED
             } else {
-                if (!Object.is(value, this.cache)) {
+                if (!Object.is(value, this.value)) {
                     ++this.version
                     return true
                 }
             }
         } catch (err) {
             this.state |= HAS_ERROR
-            this.cache = err
+            this.value = err
             return true
         } finally {
             context = parent
@@ -281,15 +281,15 @@ export class Computed extends Signal {
     }
 
     toString() {
-        return this.cache + ''
+        return this.value + ''
     }
 
     toJSON() {
-        return this.cache
+        return this.value
     }
 
     valueOf() {
-        return this.cache
+        return this.value
     }
 }
 
