@@ -7,6 +7,7 @@ const HAS_ERROR = 1 << 4
 let count = 0
 let context = null
 let pending = null
+let unlinking = null
 
 export const signal = init => new Signal(init)
 
@@ -31,8 +32,7 @@ export const batch = callback => {
     try {
         return callback()
     } finally {
-        context = parent
-        commit()
+        if (!(context = parent)) commit()
     }
 }
 
@@ -63,23 +63,27 @@ const link = (target, source) => {
 }
 
 const unlink = target => {
-    let s = target.nextSource
-    while (s) {
-        let t = s.sourceNode
-        while (t.nextTarget) {
-            if (t.nextTarget.targetNode === target) {
-                t.nextTarget = t.nextTarget.nextTarget
+    let s = target
+    while ((s = s.nextSource)) {
+        let sn = s.sourceNode
+        while (sn.nextTarget) {
+            if (sn.nextTarget.targetNode === target) {
+                if (!(sn.nextTarget = sn.nextTarget.nextTarget)) {
+                    unlinking = {
+                        node: sn,
+                        next: unlinking
+                    }
+                }
                 break
             }
-            t = t.nextTarget
+            sn = sn.nextTarget
         }
-        s = s.nextSource
     }
     target.nextSource = null
 }
 
 const commit = () => {
-    if (pending && !context) {
+    if (pending) {
         context = BATCH
         try {
             while (pending) {
@@ -100,6 +104,12 @@ const commit = () => {
         } finally {
             context = null
         }
+    }
+    while (unlinking) {
+        if (!unlinking.node.nextTarget) {
+            unlink(unlinking.node)
+        }
+        unlinking = unlinking.next
     }
 }
 
@@ -126,10 +136,10 @@ export class Signal {
 
     set val(value) {
         if (!Object.is(this.value, value)) {
-            ++this.version;
-            this.value = value;
-            this.notify();
-            commit();
+            ++this.version
+            this.value = value
+            this.notify()
+            if (!context) commit()
         }
     }
 
@@ -204,7 +214,7 @@ export class Computed extends Signal {
         if (context?.notify) {
             link(context, this)
         }
-        if (this.state & (NOTIFIED|OUTDATED)) {
+        if (this.state & (NOTIFIED | OUTDATED)) {
             this.refresh()
         }
         if (this.state & HAS_ERROR) {
@@ -218,7 +228,7 @@ export class Computed extends Signal {
     }
 
     get peek() {
-        if (this.state & (NOTIFIED|OUTDATED)) {
+        if (this.state & (NOTIFIED | OUTDATED)) {
             this.refresh()
         }
         if (this.state & HAS_ERROR) {
@@ -314,8 +324,7 @@ export class Effect {
             unlink(this)
             this.cleanup = this.callback()
         } finally {
-            context = parent
-            commit()
+            if (!(context = parent)) commit()
             this.state &= ~RUNNING
         }
     }
@@ -335,7 +344,7 @@ export class Effect {
                 effect: this,
                 next: pending
             }
-            commit()
+            if (!context) commit()
         }
     }
 }
