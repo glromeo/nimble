@@ -15,7 +15,7 @@ export const computed = callback => new Computed(callback)
 export const effect = callback => {
     const e = new Effect(callback)
     try {
-        e.refresh(true)
+        e.init()
     } catch (err) {
         e.dispose()
         throw err
@@ -137,6 +137,13 @@ export class Signal {
     as(name) {
         this.name = name
         return this
+    }
+
+    is(value) {
+        if (context?.notify) {
+            link(context, this)
+        }
+        return Object.is(this.value, value)
     }
 
     get() {
@@ -295,22 +302,30 @@ export class Computed extends Signal {
 
 export class Effect {
 
-    static count = 0
-
     constructor(callback) {
         this.state = 0
         this.callback = callback
         this.cleanup = undefined
         this.nextSource = null
-        this.nextTarget = null
     }
 
-    as(name) {
-        this.name = name
-        return this
+    init() {
+        if (this.callback === null) {
+            return false
+        }
+        const parent = context
+        context = this
+        try {
+            this.state |= RUNNING
+            unlink(this, false)
+            this.cleanup = this.callback()
+        } finally {
+            (context = parent) || commit()
+            this.state &= ~RUNNING
+        }
     }
 
-    refresh(force) {
+    refresh() {
         this.state &= ~NOTIFIED
         if (this.cleanup) {
             const parent = context
@@ -325,7 +340,7 @@ export class Effect {
                 context = parent
             }
         }
-        if (this.callback === null || this.state & RUNNING && !isOutdated(this.nextSource) || !(force || findChanged(this))) {
+        if (this.callback === null || this.state & RUNNING && !isOutdated(this.nextSource) || !findChanged(this)) {
             return false
         }
         const parent = context
