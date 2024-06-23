@@ -53,7 +53,7 @@ const link = (target, source) => {
     }
     if (recycling) {
         let recycled = recycling
-        recycling = recycled.nextRecycle
+        recycling = recycled.nextTarget
         recycled.version = source.version
         recycled.sourceNode = source
         recycled.nextSource = null
@@ -81,9 +81,9 @@ const unlink = (target, force) => {
                         unlink(sn, force)
                     }
                 } else {
-                    nt.nextRecycle = recycling
-                    recycling = nt
                     sn.nextTarget = nt.nextTarget
+                    nt.nextTarget = recycling
+                    recycling = nt
                 }
                 break
             }
@@ -99,15 +99,15 @@ const commit = () => {
         try {
             do {
                 effect = pending
-                pending = effect.nextNotify
-                effect.nextNotify = null
+                pending = effect.nextTarget
+                effect.nextTarget = null
                 effect.refresh()
             } while (pending)
         } catch (err) {
             while (pending) try {
                 effect = pending
-                pending = effect.nextNotify
-                effect.nextNotify = null
+                pending = effect.nextTarget
+                effect.nextTarget = null
                 effect.refresh()
             } catch (ignored) {
             }
@@ -120,7 +120,7 @@ const commit = () => {
         if (!recycling.nextTarget) {
             unlink(recycling, true)
         }
-        recycling = recycling.nextRecycle
+        recycling = recycling.nextTarget
     }
 }
 
@@ -225,7 +225,6 @@ export class Computed extends Signal {
         this.callback = callback
         this.state = OUTDATED
         this.nextSource = null
-        this.nextRecycle = null
     }
 
     get() {
@@ -306,7 +305,7 @@ export class Effect {
         this.callback = callback
         this.cleanup = undefined
         this.nextSource = null
-        this.nextNotify = null
+        this.nextTarget = null
     }
 
     init() {
@@ -356,7 +355,7 @@ export class Effect {
     }
 
     notify() {
-        this.nextNotify = pending
+        this.nextTarget = pending
         pending = this
     }
 
