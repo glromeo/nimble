@@ -1,4 +1,6 @@
 # Project exclude paths
+/build/
+/**/build/
 /node_modules/
 /**/node_modules/
 /toolkit/**/*.js

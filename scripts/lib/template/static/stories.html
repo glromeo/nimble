@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>{{it.title}} Stories</title>
+        <meta charset="utf-8" />
+        <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <meta name="color-scheme" content="light dark"/>
+        <link rel="stylesheet" type="text/css" href="styles.css">
+        <link rel="stylesheet" href="stories.css" />
+        <link rel="stylesheet" href="story.css" />
+        <script type="text/javascript" src="pace.js"></script>
+    </head>
+    <body>
+        <script type="text/javascript">
+            function fetchStories() {
+                return fetch("./stories.json").then((response) => response.json());
+            }
+            window.stories = fetchStories();
+            const socket = new WebSocket(`ws://${location.host}/live-reload`);
+            socket.onmessage = (event) => {
+                switch (event.data) {
+                    case "hello":
+                        console.log("live reload is active");
+                        return;
+                    case "reload":
+                        console.log("reloading...");
+                        window.stories = fetchStories();
+                        window.postMessage("reload");
+                        return;
+                }
+            };
+        </script>
+        <script type="module" src="stories.js"></script>
+    </body>
+</html>

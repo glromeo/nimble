@@ -1,153 +1,151 @@
-import {Atom, globalScope} from '../atoms/atoms.mjs'
+import {RenderEffect, Signal} from "../signals/signals.mjs";
 
 function setProperty(style, property, value) {
-    const type = typeof value
-    if (type === 'function') {
-        return setProperty.call(this, style, property, value(this, style, property))
+    const type = typeof value;
+    if (type === "function") {
+        return setProperty(style, property, value(style, property));
     }
-    if (type === 'object') {
-        if (value instanceof Atom) {
-            return setProperty.call(this, style, property, this.get(value))
+    if (type === "object") {
+        if (value instanceof Signal) {
+            return setProperty(style, property, value.peek());
         }
         if (value[Symbol.iterator]) {
-            const parts = []
+            const parts = [];
             for (let item of value) {
-                if (item instanceof Atom) {
-                    item = this.get(item)
+                if (item instanceof Signal) {
+                    item = item.peek();
                 }
-                const type = typeof item
-                if (type === 'bigint' || type === 'number' || type === 'string') {
-                    parts.push(item)
+                const type = typeof item;
+                if (type === "bigint" || type === "number" || type === "string") {
+                    parts.push(item);
                 }
             }
-            return style.setProperty(property, parts.join(' '))
+            return style.setProperty(property, parts.join(" "));
         }
-        return style.setProperty(property, 'auto')
+        return style.setProperty(property, "auto");
     }
-    if (type === 'bigint' || type === 'number' || type === 'string') {
-        return style.setProperty(property, String(value))
+    if (type === "bigint" || type === "number" || type === "string") {
+        return style.setProperty(property, String(value));
     }
-    return style.removeProperty(property)
+    return style.removeProperty(property);
 }
 
 function setStyle(style, value) {
-    const type = typeof value
-    if (type === 'function') {
-        return setStyle.call(this, value.call(this, style))
+    const type = typeof value;
+    if (type === "function") {
+        return setStyle(value(style));
     }
-    if (type === 'string') {
-        for (const entry of value.split(';')) {
-            const [property, value] = entry.split(':')
-            style.setProperty(property.trim(), value.trim())
+    if (type === "string") {
+        for (const entry of value.split(";")) {
+            const [property, value] = entry.split(":");
+            style.setProperty(property.trim(), value.trim());
         }
-        return
+        return;
     }
-    if (type === 'object') {
-        if (value instanceof Atom) {
-            return setStyle.call(this, style, this.get(atom))
+    if (type === "object") {
+        if (value instanceof Signal) {
+            return setStyle(style, value.peek());
         }
         if (value) {
-            const entries = Object.entries(value)
+            const entries = Object.entries(value);
             for (const [property, value] of entries) {
-                setProperty.call(this, style, property, value)
+                setProperty(style, property, value);
             }
-            return
+            return;
         }
     }
     for (const property of style) {
-        style.removeProperty(property)
+        style.removeProperty(property);
     }
 }
 
-const HOLE = '\x01'
+const HOLE = "\x01";
 
 export function css(strings) {
-    let text = strings.join(HOLE)
-    const rules = []
-    const path = []
-    let p = 0
-    let property
-    let index = 0
-    let from = 0, selector = ''
+    let text = strings.join(HOLE);
+    const rules = [];
+    const path = [];
+    let p = 0;
+    let property;
+    let index = 0;
+    let from = 0, selector = "";
     text = text.replace(/\s+|[\x01{};:]/g, (ch, offset) => {
         switch (ch) {
-            case ':':
-                property = text.slice(from, offset)
-                return ch
-            case ';':
-                property = undefined
-                from = offset + 1
-                return ch
-            case '{':
-                path.push(p)
-                p = 0
-                selector = text.slice(from, offset)
-                from = offset + 1
-                return ch
-            case '}':
-                p = path.pop() + 1
-                from = offset + 1
-                selector = ''
-                return ch
+            case ":":
+                property = text.slice(from, offset);
+                return ch;
+            case ";":
+                property = undefined;
+                from = offset + 1;
+                return ch;
+            case "{":
+                path.push(p);
+                p = 0;
+                selector = text.slice(from, offset);
+                from = offset + 1;
+                return ch;
+            case "}":
+                p = path.pop() + 1;
+                from = offset + 1;
+                selector = "";
+                return ch;
             case HOLE:
-                let value = arguments[++index]
+                let value = arguments[++index];
                 switch (typeof value) {
-                    case 'bigint':
-                    case 'number':
-                    case 'string':
-                        return String(value)
-                    case 'boolean':
-                    case 'symbol':
-                        return 'unset'
+                    case "bigint":
+                    case "number":
+                    case "string":
+                        return String(value);
+                    case "boolean":
+                    case "symbol":
+                        return "unset";
                     default:
                         if (value) {
                             rules.push({
                                 path: Uint8Array.from(path),
                                 property,
                                 value
-                            })
+                            });
                         }
-                        return 'unset'
+                        return "unset";
                 }
             default:
-                from = offset + ch.length
-                return ' '
+                from = offset + ch.length;
+                return " ";
         }
-    })
-    return scope => {
-        const styleSheet = new CSSStyleSheet();
-        styleSheet.replaceSync(text);
-        for (const {path, property, value} of rules) {
-            let rule = styleSheet
-            for (let i = 0; i < path.length; i++) {
-                rule = rule.cssRules[path[i]]
-            }
-            const style = rule.style
+    });
+    const styleSheet = new CSSStyleSheet();
+    styleSheet.replaceSync(text);
+    for (const {path, property, value} of rules) {
+        let rule = styleSheet;
+        for (let i = 0; i < path.length; i++) {
+            rule = rule.cssRules[path[i]];
+        }
+        const style = rule.style;
+        if (value instanceof Signal) {
+            styleSheet.nextEffect = new StyleSheetEffect(value,
+                property ? setProperty.bind(styleSheet, style, property) : setStyle.bind(styleSheet, style),
+                styleSheet.nextEffect
+            );
+        } else {
             if (property) {
-                if (value instanceof Atom) {
-                    bindAtom(scope, setProperty.bind(scope, style, property), value)
-                } else {
-                    setProperty.call(scope, style, property, value)
-                }
+                setProperty(style, property, value);
             } else {
-                if (value instanceof Atom) {
-                    bindAtom(scope, setStyle.bind(scope, style), value)
-                } else {
-                    setStyle(scope, style, value)
-                }
+                setStyle(style, value);
             }
         }
-        return styleSheet
     }
+    return styleSheet;
 }
 
-function bindAtom(scope, write, atom) {
-    let pending
-    const update = () => pending = write(scope.get(atom))
-    scope.bind(atom, () => pending ||= requestAnimationFrame(update))
-    update()
+export function adoptStyle(styleSheet) {
+    document.adoptedStyleSheets.push(styleSheet);
 }
 
-export function styleSheet(css) {
-    return css(this ?? globalScope)
+class StyleSheetEffect extends RenderEffect {
+    constructor(signal, refresh, nextEffect) {
+        super(signal, nextEffect);
+        this.refresh = refresh;
+        this.refresh(this.track());
+    }
 }

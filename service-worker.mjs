@@ -1,9 +1,9 @@
-import { initialize, transform } from "./node_modules/esbuild-wasm/esm/browser.js";
+import {initialize, transform} from "./node_modules/esbuild-wasm/esm/browser.js";
 
 const initialized = initialize({
     wasmURL: `./node_modules/esbuild-wasm/esbuild.wasm`,
     worker: false
-})
+});
 
 self.addEventListener("install", (event) => {
     self.skipWaiting();
@@ -20,14 +20,13 @@ self.addEventListener("fetch", (event) => {
                 return response;
             }
             try {
-                const source = await response.text()
-                await initialized
+                const source = await response.text();
+                await initialized;
                 const {code} = await transform(source, {
                     loader: "jsx",
                     format: "esm",
-                    jsx: "transform",
-                    jsxFactory: "Array",
-                    jsxFragment: "null",
+                    jsx: "automatic",
+                    jsxImportSource: "nimble",
                     jsxSideEffects: true,
                     sourcemap: true
                 });
@@ -35,14 +34,14 @@ self.addEventListener("fetch", (event) => {
                     status: 200,
                     headers: {
                         ...response.headers,
-                        "Content-Type": "application/javascript; charset=UTF-8",
-                    },
+                        "Content-Type": "application/javascript; charset=UTF-8"
+                    }
                 });
             } catch (error) {
                 console.error("error transpiling", error);
-                return new Response('Transpile error', {
+                return new Response("Transpile error", {
                     status: 408,
-                    headers: {'Content-Type': 'text/plain'},
+                    headers: {"Content-Type": "text/plain"}
                 });
             }
         }));

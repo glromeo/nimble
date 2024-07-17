@@ -6,10 +6,10 @@
 </head>
 <body>
 <script type="module">
-    import {Scope} from '../atoms/atoms.mjs'
-    import {html} from './html.mjs'
-    import {html as preactHtml, render} from 'https://unpkg.com/htm/preact/standalone.module.js'
-    import {parseHTML} from './parseHTML.mjs'
+    import {Scope} from "../atoms/atoms.mjs";
+    import {html} from "./html.mjs";
+    import {html as preactHtml, render} from "https://unpkg.com/htm/preact/standalone.module.js";
+    import {parseHTML} from "./parseHTML.mjs";
 
     const fixture = (a, b, c) => `
         <body>
@@ -37,9 +37,9 @@
                 </section>
             </div>
         </body>
-    `
+    `;
 
-    const scope = new Scope()
+    const scope = new Scope();
 
     // setTimeout(() => requestAnimationFrame(() => {
     //     console.time('parse time')
@@ -53,7 +53,7 @@
     // }), 0)
 
     setTimeout(() => requestAnimationFrame(() => {
-        console.time('preact render time')
+        console.time("preact render time");
         for (let i = 0; i < 3; i++) try {
             render(preactHtml`
                 <body line="${Math.random() * 1000}">
@@ -87,16 +87,16 @@
                 ${`${i}`}
                 ${`${i}`}
                 </body>
-            `, document.createDocumentFragment())
+            `, document.createDocumentFragment());
         } catch (error) {
-            console.error(error)
-            i = Number.MAX_SAFE_INTEGER
+            console.error(error);
+            i = Number.MAX_SAFE_INTEGER;
         }
-        console.timeEnd('preact render time')
-    }), 1000)
+        console.timeEnd("preact render time");
+    }), 1000);
 
     setTimeout(() => requestAnimationFrame(() => {
-        console.time('html render time')
+        console.time("html render time");
         for (let i = 0; i < 3; i++) try {
             html`
             <body line="${Math.random() * 1000}">
@@ -127,13 +127,13 @@
             ${`${i}`}
             ${`${i}`}
             </body>
-        `(scope)
+        `(scope);
         } catch (error) {
-            console.error(error)
-            i = Number.MAX_SAFE_INTEGER
+            console.error(error);
+            i = Number.MAX_SAFE_INTEGER;
         }
-        console.timeEnd('html render time')
-    }), 2000)
+        console.timeEnd("html render time");
+    }), 2000);
 
 </script>
 </body>

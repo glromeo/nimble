@@ -6,7 +6,7 @@
   "license": "MIT",
   "main": "index.html",
   "scripts": {
-    "build": "nimble"
+    "build": "nimble build --watch"
   },
   "dependencies": {
     "@nimble/scripts": "1.0.0"

@@ -5,9 +5,12 @@
   "private": true,
   "workspaces": [
     "docs",
+    "sample",
     "scripts",
+    "stories",
     "testing",
-    "toolkit"
+    "toolkit",
+    "my-1st"
   ],
   "devDependencies": {
     "ts-node": "^10.9.2",

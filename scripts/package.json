@@ -4,15 +4,37 @@
   "version": "1.0.0",
   "author": "glromeo@gmail.com",
   "license": "MIT",
-  "main": "nimble.mjs",
-  "type": "module",
+  "main": "lib/index.cjs",
+  "type": "commonjs",
   "bin": {
-    "nimble": "./nimble.mjs"
+    "nimble": "bin/cli.cjs"
   },
+  "files": [
+    "bin",
+    "lib",
+    "config.cjs"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "esbuild": "^0.20.2"
+    "@babel/generator": "^7.24.6",
+    "@babel/parser": "^7.24.7",
+    "@babel/template": "^7.24.7",
+    "@babel/traverse": "^7.24.7",
+    "@babel/types": "^7.24.7",
+    "chokidar": "^3.6.0",
+    "compression": "^1.7.4",
+    "deepmerge": "^4.3.1",
+    "esbuild": "^0.21.5",
+    "esbuild-sass-plugin":  "^3.3.0",
+    "express": "^4.19.2",
+    "papaparse": "^5.4.1",
+    "squirrelly": "^9.0.0",
+    "ws": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "mocha-toolkit": "^1.0.7"
   }
 }
