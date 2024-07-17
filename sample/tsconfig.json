@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": false,
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "downlevelIteration": true,
+    "noEmit": true,
+    "sourceMap": true,
+    "jsx": "preserve",
+    "jsxImportSource": "nimble",
+    "rootDir": "..",
+    "baseUrl": ".",
+    "paths": {
+      "nimble": [
+        "../node_modules/@nimble/toolkit"
+      ],
+      "nimble/*": [
+        "../node_modules/@nimble/toolkit/*"
+      ],
+      "@nimble/toolkit": [
+        "../node_modules/@nimble/toolkit"
+      ],
+      "@nimble/toolkit/*": [
+        "../node_modules/@nimble/toolkit/*"
+      ]
+    }
+  },
+  "include": [
+    "./src"
+  ]
+}

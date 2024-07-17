@@ -1,0 +1,20 @@
+{
+  "name": "@nimble/stories",
+  "version": "1.0.0",
+  "license": "MIT",
+  "config": {
+    "baseUrl": "http://localhost:3000/stories"
+  },
+  "scripts": {
+    "build": "nimble build --release",
+    "start": "nimble start --watch --debug"
+  },
+  "dependencies": {
+    "@nimble/toolkit": "^1.0.0",
+    "fast-glob": "^3.3.2",
+    "jquery": "^3.7.1"
+  },
+  "devDependencies": {
+    "@nimble/scripts": "^1.0.0"
+  }
+}

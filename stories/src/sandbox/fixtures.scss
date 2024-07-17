@@ -1,0 +1,53 @@
+@import "~@atx/toolkit/sass/variables";
+
+.fixtures {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin: 25px 20px 25px 25px;
+    border: 2px solid var(--line-color-1);
+    overflow-y: scroll;
+
+    & .fixture{
+        display: grid;
+        padding: 24px;
+
+        &:hover {
+            background-color: $grid__background-color--hover;
+        }
+    }
+}
+
+.graph-paper {
+    background-color: var(--bg-color);
+    background-image: linear-gradient(var(--line-color-1) 1.5px, transparent 1.5px),
+        linear-gradient(90deg, var(--line-color-1) 1.5px, transparent 1.5px),
+        linear-gradient(var(--line-color-2) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line-color-2) 1px, transparent 1px);
+    background-position: -1.5px -1.5px, -1.5px -1.5px, -1px -1px, -1px -1px;
+    background-size: 25px 25px, 25px 25px, 5px 5px, 5px 5px;
+}
+
+.failed-story {
+    max-width: 600px;
+    max-height: 800px;
+    display: flex;
+    flex-direction: column;
+    padding: 0.25rem;
+    border-radius: 0.5rem;
+    border: 2px solid $form-element__border-color--error;
+    background-color: $form-element__background-color--error;
+    & > :nth-child(1) {
+        padding: 0.5rem;
+        font-size: 1rem;
+        font-weight: bold;
+        border-bottom: 1px solid $form-element__border-color--error;
+    }
+    & > :nth-child(2) {
+        padding: 0.5rem;
+        font-size: 0.8rem;
+        flex-grow: 1;
+        min-height: 0;
+    }
+}

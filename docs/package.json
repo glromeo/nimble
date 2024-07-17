@@ -1,0 +1,14 @@
+{
+  "name": "@nimble/docs",
+  "description": "Documentation (...and demo)",
+  "version": "1.0.0",
+  "author": "glromeo@gmail.com",
+  "license": "MIT",
+  "main": "index.html",
+  "scripts": {
+    "build": "nimble build --watch"
+  },
+  "dependencies": {
+    "@nimble/scripts": "1.0.0"
+  }
+}
