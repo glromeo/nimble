@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>HTML Test Runner</title>
+    <script type="importmap">
+        {
+            "imports": {
+                "@nimble/testing": "/@nimble/testing/index.mjs",
+                "@nimble/toolkit/": "/@nimble/toolkit/",
+                "nimble/jsx-runtime": "/@nimble/toolkit/jsx-runtime.js",
+                "chai": "/@nimble/node_modules/chai/chai.js",
+                "chai-dom": "/@nimble/node_modules/chai-dom/chai-dom.js",
+                "sinon": "/@nimble/node_modules/sinon/pkg/sinon-esm.js",
+                "sinon-chai": "/@nimble/node_modules/sinon-chai/lib/sinon-chai.js"
+            }
+        }
+    </script>
+    <script type="text/javascript" src="/@nimble/node_modules/sourcemapped-stacktrace/dist/sourcemapped-stacktrace.js"></script>
+    <script type="module" src="/@nimble/testing/index.mjs"></script>
+    <script type="module">
+        try {
+            const registration = await navigator.serviceWorker.register("/@nimble/service-worker.mjs", {
+                scope: "/@nimble/",
+                type: "module"
+            });
+            if (!registration.active) {
+                requestAnimationFrame(() => location.reload());
+            }
+        } catch (error) {
+            console.error("service worker registration failed", error);
+        }
+    </script>
+</head>
+<body>
+<div id="fixtures"></div>
+<script type="module" src="./jsx.spec.tsx"></script>
+</body>
+</html>

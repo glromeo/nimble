@@ -1,4 +1,5 @@
 import {initialize, transform} from "./node_modules/esbuild-wasm/esm/browser.js";
+import transpiler from "./plugin/esbuild-jsx-plugin/dist/transpiler.mjs";
 
 const initialized = initialize({
     wasmURL: `./node_modules/esbuild-wasm/esbuild.wasm`,
@@ -13,22 +14,40 @@ self.addEventListener("activate", (event) => {
     event.waitUntil(clients.claim());
 });
 
+function transpile(source, sourcefile) {
+    const {code, map} = transpiler(source, {
+        minified: false,
+        sourceMaps: true,
+        sourceFileName: sourcefile
+    });
+    return `${code}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,${btoa(JSON.stringify(map))}`;
+}
+
+const cache = new Map();
+
 self.addEventListener("fetch", (event) => {
-    if (event.request.url.endsWith(".jsx")) {
+    let url = event.request.url;
+    let cached = cache.get(url);
+    if (cached) {
+        event.respondWith(cached);
+        return;
+    }
+    if (url.endsWith(".ts") || url.endsWith(".tsx") || url.endsWith(".jsx")) {
         event.respondWith(fetch(event.request).then(async response => {
             if (!response.ok) {
                 return response;
             }
             try {
                 const source = await response.text();
+                const transpiled = transpile(source, url);
                 await initialized;
-                const {code} = await transform(source, {
-                    loader: "jsx",
+                const {code} = await transform(transpiled, {
+                    loader: url[url.lastIndexOf(".") + 1].toLowerCase() === "j" ? "js" : "ts",
                     format: "esm",
-                    jsx: "automatic",
-                    jsxImportSource: "nimble",
-                    jsxSideEffects: true,
-                    sourcemap: true
+                    sourcemap: "inline",
+                    define: {
+                        "process.env.NODE_ENV": JSON.stringify({})
+                    }
                 });
                 return new Response(code, {
                     status: 200,

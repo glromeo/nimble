@@ -1,5 +1,5 @@
 import {Atom, atom, globalScope, Scope} from "./atoms.mjs";
-import {expect} from "mocha-toolkit";
+import {expect} from "chai";
 
 suite("basics", () => {
 

@@ -29,7 +29,7 @@
             </style>
         `);
     }
-    if (searchParams.get("live") > 0) {
+    if (searchParams.has("live-reload") > 0) {
         const socket = new WebSocket(`ws://${location.host}/server`);
         socket.onmessage = (event) => {
             switch (event.data) {

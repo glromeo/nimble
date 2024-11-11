@@ -7,26 +7,31 @@
       "esnext"
     ],
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
     "downlevelIteration": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    "jsx": "react-jsx",
-    "jsxImportSource": "@nimble/toolkit",
+    "jsx": "preserve",
+    "jsxFactory": "jsx",
+    "jsxFragmentFactory": "Fragment",
+    "jsxImportSource": "nimble",
     "module": "ESNext",
     "moduleResolution": "node",
+    "noImplicitAny": false,
     "noEmit": true,
     "noFallthroughCasesInSwitch": false,
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
+    "strictNullChecks": false,
     "rootDir": ".",
     "baseUrl": ".",
     "paths": {
-      "@nimble/toolkit": ["."],
-      "@nimble/toolkit/*": ["./*"]
+      "nimble": ["."],
+      "nimble/*": ["./*"]
     }
   }
 }

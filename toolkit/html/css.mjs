@@ -144,8 +144,7 @@ export function adoptStyle(styleSheet) {
 
 class StyleSheetEffect extends RenderEffect {
     constructor(signal, refresh, nextEffect) {
-        super(signal, nextEffect);
-        this.refresh = refresh;
-        this.refresh(this.track());
+        super(signal, refresh);
+        this.nextUpdate = nextEffect;
     }
 }

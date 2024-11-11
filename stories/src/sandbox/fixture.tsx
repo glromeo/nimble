@@ -42,6 +42,8 @@ import { StoryContext, useStoryContext } from "./context";
 //     }
 // }
 
+import "nimble/directives/resizable";
+
 export function Fixture({
     story,
     title,
@@ -49,10 +51,8 @@ export function Fixture({
     children
 }: { story: string; title: string; edge: boolean; children: ReactNode }) {
     return (
-        <div class="fixture" data-fixture={title} style="position: relative">
+        <div class="fixture" data-fixture={title} style="position: relative" is:resizable="bottom right">
             <StoryContext.Provider value={useStoryContext(story, title)}>{children}</StoryContext.Provider>
-            <AtxColumnResizer placement="right" edge={true} />
-            <AtxRowResizer placement="bottom" edge={edge} />
         </div>
     );
 }

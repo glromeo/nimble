@@ -4,7 +4,9 @@
   "license": "MIT",
   "private": true,
   "workspaces": [
+    "apps/event-planner",
     "docs",
+    "plugin/esbuild-jsx-plugin",
     "sample",
     "scripts",
     "stories",
@@ -13,7 +15,9 @@
     "my-1st"
   ],
   "devDependencies": {
+    "@types/node": "^22.7.5",
+    "benchmark": "^2.1.4",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.6.3"
   }
 }

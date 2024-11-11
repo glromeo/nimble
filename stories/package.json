@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "license": "MIT",
   "config": {
-    "baseUrl": "http://localhost:3000/stories"
+    "baseUrl": "http://localhost:4000/stories"
   },
   "scripts": {
     "build": "nimble build --release",

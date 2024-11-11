@@ -13,6 +13,8 @@ function configureBuild({environment}) {
         }
     } = require("../config.cjs");
 
+    const {jsxPlugin} = require("esbuild-jsx-plugin");
+
     return {
         entryPoints: [
             ...entryPoints,
@@ -25,9 +27,7 @@ function configureBuild({environment}) {
             ".js": ".mjs"
         },
         format: "esm",
-        jsxImportSource: "nimble",
-        jsx: "automatic",
-        jsxSideEffects: true,
+        jsx: "preserve",
         alias: {
             ...alias,
             "nimble/jsx-runtime": "@nimble/toolkit/jsx-runtime.js"
@@ -44,9 +44,9 @@ function configureBuild({environment}) {
         plugins: [
             ...plugins,
             require("./plugins/build-logging.cjs").plugin,
-            require("./plugins/jsx-transpiler.cjs").plugin,
             require("./plugins/copy-assets.cjs").plugin,
-            require("./plugins/live-reload.cjs").plugin
+            require("./plugins/live-reload.cjs").plugin,
+            jsxPlugin(),
         ]
     };
 }

@@ -3,10 +3,12 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/@nimble.iml" filepath="$PROJECT_DIR$/.idea/@nimble.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../dom-expressions-main/dom-expressions-main.iml" filepath="$PROJECT_DIR$/../dom-expressions-main/dom-expressions-main.iml" />
       <module fileurl="file://$PROJECT_DIR$/scripts/scripts.iml" filepath="$PROJECT_DIR$/scripts/scripts.iml" />
       <module fileurl="file://$PROJECT_DIR$/stories/stories.iml" filepath="$PROJECT_DIR$/stories/stories.iml" />
       <module fileurl="file://$PROJECT_DIR$/testing.iml" filepath="$PROJECT_DIR$/testing.iml" />
       <module fileurl="file://$PROJECT_DIR$/toolkit/toolkit.iml" filepath="$PROJECT_DIR$/toolkit/toolkit.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../udomdiff/udomdiff.iml" filepath="$PROJECT_DIR$/../udomdiff/udomdiff.iml" />
     </modules>
   </component>
 </project>

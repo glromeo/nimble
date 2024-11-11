@@ -7,6 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="color-scheme" content="light dark"/>
     <link rel="stylesheet" type="text/css" href="styles.css">
+    <link rel="stylesheet" type="text/css" href="index.css">
     <script type="text/javascript" src="pace.js"></script>
 </head>
 <body>
@@ -28,8 +29,8 @@
             </style>
         `);
     }
-    if (searchParams.get("live") > 0) {
-        const socket = new WebSocket(`ws://${location.host}/server`);
+    if (searchParams.has("live-reload") > 0) {
+        const socket = new WebSocket(`ws://${location.host}/live-reload`);
         socket.onmessage = (event) => {
             switch (event.data) {
                 case "hello":

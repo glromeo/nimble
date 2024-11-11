@@ -1,5 +1,1 @@
-import {createNode} from "./jsx/jsx.mjs";
-
-export const jsx = createNode
-export const jsxs = createNode
-export {Fragment} from "./jsx/jsx.mjs";
+export {jsx, jsx as jsxs, svg, xhtml, Fragment} from "./jsx/jsx.mjs";

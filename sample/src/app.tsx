@@ -1,7 +1,6 @@
-import {adoptStyle, css} from "@nimble/toolkit";
+import {adoptStyle, css, signal, computed} from "nimble";
 
-import "@nimble/toolkit/directives/resizable";
-import {signal} from "nimble/signals";
+import "nimble/directives/resizable";
 
 adoptStyle(css`
     .app {
@@ -15,11 +14,13 @@ adoptStyle(css`
     }
 `);
 
+const beta = signal('beta');
+
 export const App = () => {
     return (
-        <div class={$`alpha ${beta} gamma`}>
-            <h1 class={[signal("c1"),"2"]}>LEFT</h1>
-            <div resizable="vertical horizontal">
+        <div class={computed(() => `alpha ${beta} gamma`)}>
+            <h1 class={signal(["c1","2"])} resizable="bottom right">LEFT</h1>
+            <div resizable="bottom right" on:resized={e => console.log("resized", e)} style="min-height: 30px;">
                 <h1>Hello World!</h1>
             </div>
             <h1>RIGHT</h1>

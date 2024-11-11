@@ -1,0 +1,14 @@
+{
+  "name": "@nimble/event-planner",
+  "description": "...",
+  "version": "1.0.0",
+  "author": "glromeo@gmail.com",
+  "license": "MIT",
+  "main": "static/index.html",
+  "scripts": {
+    "start": "nimble start"
+  },
+  "dependencies": {
+    "@nimble/scripts": "1.0.0"
+  }
+}

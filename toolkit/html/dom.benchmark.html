@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>DOM Benchmarks</title>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="color-scheme" content="light dark"/>
+</head>
+<body>
+<div id="root" style="display: none"></div>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/platform/1.3.6/platform.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/benchmark/2.1.4/benchmark.min.js"></script>
+<script type="text/javascript">
+
+    let array = Array(10);
+    (new Benchmark.Suite)
+        .add("map", () => {
+            let map = new Map(Array(100).fill(0).map((_,index)=> [index, document.createElement('div')]));
+            let value = Array(100).fill(0).map((_, i)=>i).reverse();
+
+            const fragment = document.createDocumentFragment();
+            let lastNode = node;
+            let nextNode = node.firstNode ?? lastNode;
+            let previousNode = nextNode.previousSibling
+            main: for (const item of value) {
+                while (nextNode !== lastNode) {
+                    if (nextNode.sourceValue === item) {
+                        nextNode = nextNode.nextSibling
+                        continue main;
+                    } else {
+                        (nextNode = nextNode.nextSibling).previousSibling.remove();
+                    }
+                }
+                fragment.appendChild(document.createElement("div")).sourceValue = item;
+            }
+        })
+        .add("FRAGMENT", () => {
+            let node = document.createDocumentFragment();
+            Array(100).fill(0).forEach((_,index)=> {
+                node.appendChild(document.createElement("div")).sourceValue = index;
+            });
+            let value = Array(100).fill(0).map((_, i)=>i).reverse();
+
+            const fragment = document.createDocumentFragment();
+            let lastNode = node;
+            let nextNode = node.firstNode ?? lastNode;
+            let previousNode = nextNode.previousSibling
+            main: for (const item of value) {
+                while (nextNode !== lastNode) {
+                    if (nextNode.sourceValue === item) {
+                        nextNode = nextNode.nextSibling
+                        continue main;
+                    } else {
+                        (nextNode = nextNode.nextSibling).previousSibling.remove();
+                    }
+                }
+                fragment.appendChild(document.createElement("div")).sourceValue = item;
+            }
+        })
+        // .add("for loop", () => {
+        //     for (let i = 0; i < array.length; i++) {
+        //         array[i] = array[i]+1;
+        //     }
+        // })
+        // .add("map", () => {
+        //     array = array.map(v => v+1)
+        // })
+        // .add("while loop", () => {
+        //     let i = array.length;
+        //     while (--i >= 0) {
+        //         array[i] = array[i]+1;
+        //     }
+        // })
+        // .add("parent appendChild", () => {
+        //     const parent = document.createElement("div");
+        //     for (let i = 0; i < 5; i++) {
+        //         let node = document.createElement("p");
+        //         node.innerText = i;
+        //         parent.appendChild(node);
+        //     }
+        // })
+        // .add("fragment appendChild", () => {
+        //     const fragment = document.createDocumentFragment();
+        //     for (let i = 0; i < 5; i++) {
+        //         let node = document.createElement("p");
+        //         node.innerText = i;
+        //         fragment.appendChild(node);
+        //     }
+        //     const parent = document.createElement("div");
+        //     parent.appendChild(fragment);
+        // })
+        // .add("append array", () => {
+        //     const nodes = [];
+        //     for (let i = 0; i < 5; i++) {
+        //         let node = document.createElement("p");
+        //         node.innerText = i;
+        //         nodes.push(node);
+        //     }
+        //     const parent = document.createElement("div");
+        //     parent.append(...nodes);
+        // })
+        .on("cycle", function (event) {
+            console.log(String(event.target));
+        })
+        .on("complete", function () {
+            console.log("Fastest is " + this.filter("fastest").map("name"));
+        })
+        .run({
+            setup() {
+                array.fill(0);
+            },
+            "async": true
+        });
+</script>
+</body>
+</html>

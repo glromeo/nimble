@@ -1,92 +1,90 @@
-import { Navigator } from "./navigator";
-import { StoryParameters } from "./tabs/story-parameters";
-import { Jasmine } from "./tabs/jasmine";
-import { useSettings } from "../hooks/settings";
-import { IFrame } from "./iframe";
-import {JSX} from "@nimble/toolkit";
-import {Signal} from "@nimble/toolkit/signals/signals";
+import {Navigator} from "./navigator";
+import {computed, effect, JSX, signal, Signal, storedSignal} from "@nimble/toolkit";
 
 import "./stories.scss";
 
-const tabIndexAtom = atom<number | null>(null);
-const tabAtom = atom(
-    (get) => get(tabIndexAtom) ?? parseInt(localStorage.getItem("atx-stories.details-tab") ?? "0"),
-    (get, set, value: number) => {
-        localStorage.setItem("atx-stories.details-tab", String(value));
-        set(tabIndexAtom, value);
+const settings = storedSignal("stories.settings", {
+    tabIndex: 0 as number | null,
+    navigator: {
+        width: 200
     }
-);
+});
 
-export function Stories({ stories }: { stories: Signal<Record<string, string[]>> }):JSX.Element {
-    const ref = useRef(null);
-    const [story, setStory] = useState(() => location.hash.slice(2));
-    const [titles, setTitles] = useState<string[]>(() => {
-        const fixture = new URLSearchParams(location.search).get("fixture");
-        return fixture ? [fixture] : stories[story] ?? [];
+const tabIndex = signal<number | null>(settings.value.tabIndex);
+const navigatorWidth = signal<number>(settings.value.navigator.width);
+
+effect(() => {
+    settings.set({
+        tabIndex: tabIndex.value,
+        navigator: {
+            width: navigatorWidth.value
+        }
+    });
+});
+
+export function Stories(props: { stories: Record<string, string[]> }): JSX.Element {
+
+    const $story = signal(location.hash.slice(2));
+
+    const $fixture = signal(new URLSearchParams(location.search).get("fixture"));
+
+    const $titles = computed(() => {
+        const fixture = $fixture.value;
+        if (fixture) {
+            return [fixture || "default"];
+        } else {
+            const {stories} = props;
+            return stories && stories[$story.value] || [];
+        }
     });
 
-    useEffect(() => {
+    const $focused = signal($titles.value);
+
+    effect(() => {
         const url = new URL(location.href);
-        if (story) {
-            url.hash = `#/${story}`;
+        if ($story) {
+            url.hash = `#/${$story.value}`;
         }
-        if (titles.length === 1) {
-            url.searchParams.set("fixture", titles[0]);
+        const focused = $focused.value;
+        if (focused.length === 1) {
+            url.searchParams.set("fixture", focused[0]!);
         }
         history.replaceState({}, "", url);
-    }, [story, titles]);
-
-    const [settings, updateSettings] = useSettings();
+    });
 
     return (
-        <div class="stories" ref={ref}>
-            <NavigatorPane>
+        <div class="stories">
+            <div class="navigator-pane"
+                 style={`min-width: 200px, width: ${navigatorWidth.value}px`}
+                 is:resizable="right"
+                 on:resized={e => {
+                     const div = e.currentTarget as HTMLDivElement;
+                     navigatorWidth.set(div.getBoundingClientRect().width);
+                 }}>
                 <Navigator
-                    stories={stories}
-                    selected={story}
                     defaultOpen={true}
-                    titles={titles}
-                    onSelect={(selected) => {
-                        setStory(selected);
-                        if (selected !== story) {
-                            setTitles(stories[selected]);
-                        } else {
-                            setTitles([]);
-                        }
-                    }}
-                    onFocus={setTitles}
+                    $stories={$stories}
+                    $selected={$story}
+                    $titles={$titles}
+                    $focused={$focused}
                 />
-            </NavigatorPane>
-            <div class="flex-column flex-grow">
-                <IFrame story={story} titles={titles} />
-                <AtxResizablePane
-                    class="details"
-                    resizer="top"
-                    style={{ height: settings.layout.bottom ?? 300 }}
-                    onResize={({ height }) => {
-                        updateSettings({ layout: { bottom: height } }, false);
-                    }}
-                >
-                    <AtxTabbedPane state={useAtom(tabAtom)}>
-                        <StoryParameters tab-title="Parameters" story={story} titles={titles} />
-                        <Jasmine tab-title="Tests" story={story} />
-                    </AtxTabbedPane>
-                </AtxResizablePane>
             </div>
-        </div>
-    );
-}
-
-function NavigatorPane({ children }: { children: ReactNode }) {
-    const [{ layout }, updateSettings] = useSettings();
-    return (
-        <div class="navigator-pane" style={{ width: layout.left ?? 200 }}>
-            {children}
-            <AtxColumnResizer
-                placement="right"
-                minWidth={200}
-                onResize={(width) => updateSettings({ layout: { left: width } }, false)}
-            />
+            <div class="flex-column flex-grow">
+                {/*<IFrame story={story} titles={titles}/>*/}
+                {/*<div*/}
+                {/*    class="details"*/}
+                {/*    resizable="top"*/}
+                {/*    style={{height: settings.layout.bottom ?? 300}}*/}
+                {/*    on:resized={({height}) => {*/}
+                {/*        updateSettings({layout: {bottom: height}}, false);*/}
+                {/*    }}*/}
+                {/*>*/}
+                {/*    <AtxTabbedPane state={activeTab}>*/}
+                {/*        <StoryParameters tab-title="Parameters" story={story} titles={titles}/>*/}
+                {/*        <Jasmine tab-title="Tests" story={story}/>*/}
+                {/*    </AtxTabbedPane>*/}
+                {/*</div>*/}
+            </div>
         </div>
     );
 }

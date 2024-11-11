@@ -9,6 +9,10 @@
       <excludeFolder url="file://$MODULE_DIR$/sample/build" />
       <excludeFolder url="file://$MODULE_DIR$/stories/build" />
       <excludeFolder url="file://$MODULE_DIR$/docs/build" />
+      <excludeFolder url="file://$MODULE_DIR$/.idea" />
+      <excludeFolder url="file://$MODULE_DIR$/attic" />
+      <excludeFolder url="file://$MODULE_DIR$/plugin/esbuild-jsx-plugin/coverage" />
+      <excludeFolder url="file://$MODULE_DIR$/plugin/esbuild-jsx-plugin/dist" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

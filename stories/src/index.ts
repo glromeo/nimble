@@ -121,6 +121,6 @@ export function mock<T extends object>(proxy: T, handler: ProxyHandler<T>) {
 
 declare global {
     interface Window {
-        stories: Promise<string[]>;
+        stories: Promise<Record<string, string[]>>;
     }
 }

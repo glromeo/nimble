@@ -1,5 +1,9 @@
 import {batch, computed, effect, Signal, signal, untracked} from "./signals.mjs";
-import {expect, sinon} from "mocha-toolkit";
+import {expect, use} from "chai";
+import sinon from "sinon";
+import sinonChai from "sinon-chai";
+
+use(sinonChai);
 
 describe("signal", () => {
     it("should return value", () => {
@@ -708,6 +712,7 @@ describe("effect()", () => {
 });
 
 describe("computed()", () => {
+
     it("should return value", () => {
         const a = signal("a");
         const b = signal("b");
@@ -1154,6 +1159,18 @@ describe("computed()", () => {
             a.set(1);
             d.get();
             expect(spy).not.to.be.called;
+        });
+
+        it("should trigger effects", () => {
+            const a = signal(0);
+            const spy = sinon.spy(() => a.get());
+            effect(spy);
+            expect(spy).to.be.calledOnce;
+            computed(()=>{
+                return a.set(a.get() + 1);
+            }).peek();
+            expect(a.value).to.eq(1);
+            expect(spy).to.be.calledTwice;
         });
     });
 
@@ -1818,6 +1835,19 @@ describe("batch/transaction", () => {
 });
 
 describe("untracked", () => {
+
+    it("should prevent effects", () => {
+        const a = signal(0);
+        const spy = sinon.spy(() => a.get());
+        effect(spy);
+        expect(spy).to.be.calledOnce;
+        untracked(()=>{
+            a.set(a.get() + 1);
+        });
+        expect(a.value).to.eq(1);
+        expect(spy).to.be.calledOnce;
+    });
+
     it("should block tracking inside effects", () => {
         const a = signal(1);
         const b = signal(2);

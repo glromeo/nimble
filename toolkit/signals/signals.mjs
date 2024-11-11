@@ -4,10 +4,22 @@ export const NOTIFIED = 1 << 1;
 export const UPDATING = 1 << 2;
 export const ERROR = 1 << 3;
 export const STALE = NOTIFIED | UNDEFINED;
+export const UPDATED = ~(UPDATING | UNDEFINED);
 
 let context = null;
 let pending = null;
 let recycling = null;
+
+export function currentContext() {
+    return context;
+}
+
+export function contextScope() {
+    if (context === BATCH) {
+        return null;
+    }
+    return context.scope ??= new Map();
+}
 
 export const signal = init => new Signal(init);
 
@@ -16,7 +28,7 @@ export const computed = callback => new Computed(callback);
 export function effect(callback) {
     const e = new Effect(callback);
     try {
-        e.update(true);
+        e.update();
     } catch (err) {
         e.dispose();
         throw err;
@@ -32,13 +44,13 @@ export function batch(callback) {
     try {
         return callback();
     } finally {
-        (context = parent) || commit();
+        if ((context = parent) === null) commit();
     }
 }
 
 export function untracked(callback) {
     const parent = context;
-    context = null;
+    context = BATCH;
     try {
         return callback();
     } finally {
@@ -46,13 +58,13 @@ export function untracked(callback) {
     }
 }
 
-export function tracked(callback) {
+export function tracked(ctx, callback) {
     const parent = context;
-    context = this;
+    context = ctx;
     try {
-        return callback();
+        return callback.call(ctx);
     } finally {
-        context = parent;
+        if ((context = parent) === null) commit();
     }
 }
 
@@ -137,7 +149,7 @@ export class Signal {
 
     constructor(init) {
         this.version = 0;
-        this.value = init;
+        this.__value__ = init;
         this.nextTarget = null;
     }
 
@@ -146,46 +158,48 @@ export class Signal {
         return this;
     }
 
-    is(value) {
-        if (context && context !== BATCH) {
-            link(context, this);
-        }
-        return Object.is(this.value, value);
-    }
-
     get() {
         if (context && context !== BATCH) {
             link(context, this);
         }
-        return this.value;
+        return this.__value__;
     }
 
     set(value) {
-        if (!Object.is(this.value, value)) {
+        if (!Object.is(this.__value__, value)) {
             ++this.version;
-            this.value = value;
+            this.__value__ = value;
             this.notify();
-            context || commit();
+            if (context === null) commit();
         }
     }
 
     peek() {
-        return this.value;
+        return this.__value__;
     }
 
-    notify() {
+    get isLinked() {
+        return true;
+    }
+
+    is(value) {
+        return Object.is(this.__value__, value);
+    }
+
+    notify(state = NOTIFIED) {
         let t = this.nextTarget;
         while (t) {
             let n = t.targetNode;
             if (!(n.state & NOTIFIED)) {
-                n.state |= NOTIFIED;
-                n.notify();
+                n.state |= state;
+                n.notify(state);
             }
             t = t.nextTarget;
         }
     }
 
     sub(fn) {
+        // TODO: refactor this to use Subscriber
         return effect(() => {
             const value = this.get();
             const parent = context;
@@ -199,17 +213,24 @@ export class Signal {
     }
 
     toString() {
-        return this.value + "";
+        return this.__value__ + "";
     }
 
     toJSON() {
-        return this.value;
+        return this.__value__;
     }
 
     valueOf() {
-        return this.value;
+        return this.__value__;
     }
 }
+
+Object.defineProperty(Signal.prototype, "value", {
+    enumerable: true,
+    configurable: false,
+    get: Signal.prototype.get,
+    set: Signal.prototype.set
+});
 
 export const findChanged = target => {
     let s = target.nextSource;
@@ -223,7 +244,7 @@ export const findChanged = target => {
 };
 
 const isOutdated = source => {
-    return !source || source.version < source.sourceNode;
+    return !source || source.version < source.sourceNode.version;
 };
 
 export class Computed extends Signal {
@@ -235,6 +256,38 @@ export class Computed extends Signal {
         this.nextSource = null;
     }
 
+    reset(callback) {
+        this.callback = callback;
+        this.state = UNDEFINED;
+        return this.peek();
+    }
+
+    rewire(callback) {
+        this.callback = typeof callback === "function" ? callback : () => callback;
+        this.state = UNDEFINED;
+        unlink(this, true);
+        this.notify(this.state = STALE);
+    }
+
+    is(value) {
+        try {
+            return Object.is(this.peek(), value);
+        } catch (e) {
+            return undefined;
+        }
+    }
+
+    get value() {
+        if (context && context !== BATCH) {
+            link(context, this);
+        }
+        return this.peek();
+    }
+
+    set value(value) {
+        throw new Error("Cannot write to a computed signal");
+    }
+
     get() {
         if (context && context !== BATCH) {
             link(context, this);
@@ -242,7 +295,7 @@ export class Computed extends Signal {
         return this.peek();
     }
 
-    set(v) {
+    set() {
         throw new Error("Cannot write to a computed signal");
     }
 
@@ -251,14 +304,18 @@ export class Computed extends Signal {
             this.update();
         }
         if (this.state & ERROR) {
-            throw this.value;
+            throw this.__value__;
         }
-        return this.value;
+        return this.__value__;
+    }
+
+    get isLinked() {
+        return this.nextSource !== null;
     }
 
     update() {
         this.state &= ~NOTIFIED;
-        if (this.state & UPDATING || this.nextSource && !findChanged(this)) {
+        if (this.state & UPDATING || this.nextSource && !(this.state & UNDEFINED || findChanged(this))) {
             return false;
         }
         const parent = context;
@@ -266,50 +323,50 @@ export class Computed extends Signal {
         try {
             this.state |= UPDATING;
             unlink(this, false);
-            let value = this.value;
-            this.value = this.callback();
+            let value = this.__value__;
+            this.__value__ = this.callback();
             this.state &= ~ERROR;
             if (this.state & UNDEFINED) {
                 this.state &= ~UNDEFINED;
-            } else if (!Object.is(value, this.value)) {
+            } else if (!Object.is(value, this.__value__)) {
                 ++this.version;
                 return true;
             }
             return false;
         } catch (err) {
             this.state |= ERROR;
-            this.value = err;
+            this.__value__ = err;
             return true;
         } finally {
-            context = parent;
-            this.state &= ~UPDATING;
+            if ((context = parent) === null) commit();
+            this.state &= UPDATED;
         }
     }
 
     toString() {
-        return this.value + "";
+        return this.__value__ + "";
     }
 
     toJSON() {
-        return this.value;
+        return this.__value__;
     }
 
     valueOf() {
-        return this.value;
+        return this.__value__;
     }
 }
 
 export class Effect {
 
     constructor(callback) {
-        this.state = 0;
+        this.state = UNDEFINED;
         this.callback = callback;
         this.cleanup = undefined;
         this.nextSource = null;
         this.nextTarget = null;
     }
 
-    update(force) {
+    update() {
         this.state &= ~NOTIFIED;
         if (this.cleanup) {
             const parent = context;
@@ -324,7 +381,7 @@ export class Effect {
                 context = parent;
             }
         }
-        if (!this.callback || this.state & UPDATING && !isOutdated(this.nextSource) || !(force || findChanged(this))) {
+        if (!this.callback || this.state & UPDATING && !isOutdated(this.nextSource) || !(this.state & UNDEFINED || findChanged(this))) {
             return;
         }
         const parent = context;
@@ -334,8 +391,8 @@ export class Effect {
             unlink(this, false);
             this.cleanup = this.callback();
         } finally {
-            (context = parent) || commit();
-            this.state &= ~UPDATING;
+            if ((context = parent) === null) commit();
+            this.state &= UPDATED;
         }
     }
 
@@ -349,63 +406,52 @@ export class Effect {
             this.callback = null;
             unlink(this, true);
             this.notify();
-            context || commit();
+            if (context === null) commit();
         }
     }
 }
 
-let nextUpdate;
+export class Subscriber {
 
-const flushUpdates = batch.bind(this, () => {
-    const parent = context;
-    context = null;
-    try {
-        while (nextUpdate) {
-            nextUpdate.refresh(nextUpdate.signal.peek());
-            nextUpdate.state &= ~UPDATING;
-            nextUpdate = nextUpdate.nextUpdate;
-        }
-    } finally {
-        (context = parent) || commit();
-    }
-});
-
-export class RenderEffect {
-
-    constructor(signal, nextEffect) {
+    constructor(signal) {
         this.state = 0;
         this.signal = signal;
         this.nextSource = null;
         this.nextTarget = null;
-        this.nextUpdate = null;
-        this.nextEffect = nextEffect;
+        link(this, signal);
     }
 
-    track(signal = this.signal) {
-        const parent = context;
-        context = this;
-        try {
-            this.nextSource = null;
-            return signal.get();
-        } finally {
-            (context = parent) || commit();
+    rewire(source) {
+        const value = this.signal.peek();
+        if (typeof source === "function") {
+            if (this.signal.rewire) {
+                this.signal.rewire(source);
+            } else {
+                unlink(this, false);
+                link(this, this.signal = computed(source));
+            }
+        } else {
+            unlink(this, false);
+            link(this, this.signal = signal);
         }
-    }
-
-    refresh() {
+        if (!Object.is(value, this.signal.peek())) {
+            this.state |= UNDEFINED;
+            this.update();
+        }
     }
 
     update() {
         this.state &= ~NOTIFIED;
-        if (!this.signal || this.state & UPDATING || !findChanged(this)) {
+        if (this.signal && !(this.state & UPDATING) && (this.state & UNDEFINED || findChanged(this))) {
+            this.state |= UPDATING;
+            return true;
+        } else {
             return false;
         }
-        this.state |= UPDATING;
-        if (!(this.nextUpdate = nextUpdate)) {
-            requestAnimationFrame(flushUpdates);
-        }
-        nextUpdate = this;
-        return true;
+    }
+
+    done() {
+        this.state &= UPDATED;
     }
 
     notify() {
@@ -414,13 +460,9 @@ export class RenderEffect {
     }
 
     dispose() {
-        let nextEffect = this;
-        do {
-            if (nextEffect.signal) {
-                nextEffect.signal = null;
-                unlink(nextEffect, true);
-            }
-            nextEffect = nextEffect.nextEffect;
-        } while (nextEffect);
+        if (this.signal) {
+            this.signal = null;
+            unlink(this, true);
+        }
     }
 }

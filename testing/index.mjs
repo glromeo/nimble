@@ -1,7 +1,82 @@
-const testContext = {};
+import {assert, Assertion, expect, use} from "chai";
+import sinonChai from "sinon-chai";
+import "./chai-dom.mjs";
 
-export const expect = chai.expect;
-export const assert = chai.assert;
+export {expect, assert} from "chai";
+
+use(sinonChai);
+
+export const vsync = () => new Promise(requestAnimationFrame);
+
+function outerHTML(node) {
+    switch (node.nodeType) {
+        case Node.TEXT_NODE:
+            return node.data;
+        case Node.COMMENT_NODE:
+            return `<!--${node.data}-->`;
+        case Node.ELEMENT_NODE:
+            const tag = node.tagName.toLowerCase();
+            let attrs = "";
+            for (const {name, value} of node.attributes) {
+                attrs += ` ${name}="${value}"`;
+            }
+            return `<${tag}${attrs}>${node.innerHTML}</${tag}>`;
+        case Node.DOCUMENT_FRAGMENT_NODE:
+            if (node.placeholder) {
+                let nodes = node.__nodes__ ?? []
+                return `${nodes instanceof Array ? nodes.map(outerHTML).join("") : outerHTML(nodes)}<!---->`;
+            } else {
+                return [...node.childNodes].map(outerHTML).join();
+            }
+        default:
+            return String(node);
+    }
+}
+
+export function debugHTML(node) {
+    switch (node.nodeType) {
+        case Node.ELEMENT_NODE: {
+            let text = `<${node.tagName}`;
+            if (node.attributes) for (const {name, value} of node.attributes) {
+                text += ` [${name}]=[${value}]`;
+            }
+            if (node.childNodes.length) {
+                text += ">";
+                text += debugHTML(node);
+                text += `</${node.tagName}>`;
+            } else {
+                text += "/>";
+            }
+            return text;
+        }
+        case Node.COMMENT_NODE:
+            return `<!${node.data}>`;
+        case Node.TEXT_NODE:
+            return `[#${node.data}]`;
+        default:
+            return String(node);
+    }
+}
+
+function trimHTML(text) {
+    return text.split("\n").map(line => line.trim()).filter(Boolean).join("\n");
+}
+
+for (const method of ["eq", "equal", "equals", "eql"]) {
+    Assertion.overwriteMethod(method, fn => function () {
+        if (typeof arguments[0] === "string" && this._obj instanceof Node) {
+            this._obj = outerHTML(this._obj);
+            arguments[0] = trimHTML(arguments[0]);
+        }
+        if (typeof this._obj === "string" && arguments[0] instanceof Node) {
+            arguments[0] = outerHTML(arguments[0]);
+            this._obj = trimHTML(this._obj);
+        }
+        fn.apply(this, arguments);
+    });
+}
+
+const testContext = {};
 
 const testId = () => {
     const prepareStackTrace = Error.prepareStackTrace;
@@ -47,49 +122,10 @@ export function renderFixture(node) {
         fixtures.push(fixture);
         return fixture;
     } catch (e) {
-        console.error(e)
+        console.error(e);
         assert.fail("failed to render fixture");
     }
 }
-
-chai.Assertion.addChainableMethod("html", function (expected) {
-    new chai.Assertion(renderFixture(this._obj).innerHTML).to.be.equal(expected);
-}, function () {
-    this._obj = renderFixture(this._obj).innerHTML;
-})
-
-chai.Assertion.addChainableMethod("text", function (expected) {
-    new chai.Assertion(renderFixture(this._obj).innerText).to.be.equal(expected);
-}, function () {
-    this._obj = renderFixture(this._obj).innerText;
-})
-
-export function debugHTML(node) {
-    switch (node.nodeType) {
-        case Node.ELEMENT_NODE: {
-            let text = `<${node.tagName}`;
-            if (node.attributes) for (const {name, value} of node.attributes) {
-                text += ` [${name}]=[${value}]`;
-            }
-            if (node.childNodes.length) {
-                text += ">";
-                text += debugHTML(node);
-                text += `</${node.tagName}>`;
-            } else {
-                text += "/>";
-            }
-            return text;
-        }
-        case Node.COMMENT_NODE:
-            return `<!${node.data}>`;
-        case Node.TEXT_NODE:
-            return `[#${node.data}]`;
-        default:
-            return String(node);
-    }
-}
-
-let only;
 
 export function suite(title, spec) {
     const test = {
@@ -102,53 +138,44 @@ export function suite(title, spec) {
     suite.current.tests.push(test);
     suite.current = test;
     spec({
-        each: fn => {
-            test.beforeEach = test.beforeEach?.concat(fn) ?? [fn];
+        before: {
+            each: fn => {
+                test.beforeEach = test.beforeEach?.concat(fn) ?? [fn];
+            },
+            all: fn => {
+                test.beforeAll = test.beforeAll?.concat(fn) ?? [fn];
+            }
         },
-        all: fn => {
-            test.beforeAll = test.beforeAll?.concat(fn) ?? [fn];
-        }
-    }, {
-        each: fn => {
-            test.afterEach = test.afterEach?.concat(fn) ?? [fn];
-        },
-        all: fn => {
-            test.afterAll = test.afterAll?.concat(fn) ?? [fn];
+        after: {
+            each: fn => {
+                test.afterEach = test.afterEach?.concat(fn) ?? [fn];
+            },
+            all: fn => {
+                test.afterAll = test.afterAll?.concat(fn) ?? [fn];
+            }
         }
     });
     return suite.current = suite.current.suite;
 }
 
-suite.only = function (title, spec) {
-    suite(title, spec);
-    runOnly(title);
-};
-
-function runOnly(title) {
-    let current = suite.current;
-    let last = suite.current.tests[suite.current.tests.length - 1];
-    if (!only) {
-        only = new Set([suite.root]);
-    }
-    while (!only.has(current)) {
-        only.add(current);
-        console.log("only running suite", current.title);
-        current = current.suite;
-    }
-    console.log("only running", last.tests ? "suite" : "test", title);
-    only.add(last);
-}
-
 async function* testWalker(suite) {
-    if (!only?.has(suite)) {
-        return;
+    const skip = suite.skip && new Set(suite.skip);
+    const only = suite.only && new Set(suite.only);
+    if (suite.title) {
+        console.group(`suite: ${suite.title} %c...`, "color: gray");
     }
     for (const test of suite.tests) {
-        if (!only?.has(test)) {
+        if (skip && skip.has(test) || only && !only.has(test)) {
+            console.log(`skipped ${test.spec ? "test" : "suite"}:`, test.title);
             continue;
         }
         if (test.spec) {
+            console.group(`test: ${test.title} %c...`, "color: gray");
             yield test;
+            console.groupEnd();
+            for (const fixture of document.querySelectorAll(`[data-fixture][data-test="${test.title}"]`)) {
+                fixture.setAttribute("hidden", "");
+            }
         } else {
             if (test.beforeAll) {
                 for (const fn of test.beforeAll) await fn(test);
@@ -159,12 +186,15 @@ async function* testWalker(suite) {
             }
         }
     }
+    if (suite.title && suite.tests.length) {
+        console.groupEnd();
+    }
 }
 
 suite.current = suite.root = {
     tests: [],
     async run() {
-        console.time("specs");
+        console.time("done in");
         let passed = 0, failed = 0;
         for await (const test of testWalker(this)) {
             Object.defineProperty(test.spec, "name", {value: test.id});
@@ -178,8 +208,10 @@ suite.current = suite.root = {
                 test.suite.passed++;
                 test.ok = true;
             } catch (error) {
-                console.error(`"${test.title}"`, "failed", error.stack);
-                console.log(`%cexpected: %c${error.expected}\n%cactual:   %c${error.actual}`, "font-weight:bold;color:green;", "color:darkgreen;", "font-weight:bold;color:red;", "color:darkred;");
+                sourceMappedStackTrace.mapStackTrace(error.stack, mappedStack => {
+                    console.error(`"${test.title}"`, "failed", error.stack);
+                    console.log(`%cexpected: %c${error.expected}\n%cactual:   %c${error.actual}`, "font-weight:bold;color:green;", "color:darkgreen;", "font-weight:bold;color:red;", "color:darkred;");
+                }, {cacheGlobally: true});
                 failed++;
                 test.suite.failed++;
                 test.error = error;
@@ -190,7 +222,7 @@ suite.current = suite.root = {
                 testContext[test.id] = undefined;
             }
         }
-        console.timeEnd("specs");
+        console.timeEnd("done in");
         if (failed) {
             console.log("Failed:", passed, "tests passed", failed, "tests failed");
         } else {
@@ -199,7 +231,7 @@ suite.current = suite.root = {
     }
 };
 
-export function test(title, spec) {
+export const test = (title, spec) => {
     const ctx = {
         id: "::" + simpleHash(title) + "-" + Date.now().toString(16),
         suite: suite.current,
@@ -207,9 +239,62 @@ export function test(title, spec) {
         spec
     };
     suite.current.tests.push(ctx);
-}
+};
+
+suite.only = function (title, spec) {
+    suite(title, spec);
+    include();
+};
+
+suite.skip = function (title, spec) {
+    suite(title, spec);
+    exclude();
+};
 
 test.only = function (title, spec) {
     test(title, spec);
-    runOnly(title);
+    include();
 };
+
+test.skip = function (title, spec) {
+    test(title, spec);
+    exclude();
+};
+
+function include() {
+    let current = suite.current;
+    (current.only ??= []).push(current.tests.at(-1));
+    while (current.suite !== suite.root && !current.suite.only) {
+        current = current.suite;
+        current.only = [current.tests.at(-1).title];
+    }
+}
+
+function exclude() {
+    let current = suite.current;
+    (current.skip ??= []).push(current.tests.at(-1));
+}
+
+if (typeof window !== "undefined") {
+    if (window.suite) {
+        ((suite, api) => window.suite = function (title, spec) {
+            return suite.call(this, title, function () {
+                return spec.call(this, api);
+            });
+        })(window.suite, {
+            before: {
+                each: window.setup,
+                all: window.suiteSetup
+            },
+            after: {
+                each: window.teardown,
+                all: window.suiteTeardown
+            }
+        });
+    } else {
+        window.suite = suite;
+        window.test = test;
+    }
+    window.expect ??= expect;
+    window.document.addEventListener("DOMContentLoaded", () => suite.root.run());
+}

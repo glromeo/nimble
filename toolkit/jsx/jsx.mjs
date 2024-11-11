@@ -1,303 +1,724 @@
-import {RenderEffect, Signal} from "../signals/signals.mjs";
+import {batch, Computed, contextScope, Signal, Subscriber} from "../signals/signals.mjs";
+import {directives} from "./directives.mjs";
 
 export const SVG_NAMESPACE_URI = "http://www.w3.org/2000/svg";
 export const XHTML_NAMESPACE_URI = "http://www.w3.org/1999/xhtml";
 
-export const svg = SVG_NAMESPACE_URI;
-export const xhtml = XHTML_NAMESPACE_URI;
+let namespaceURI = XHTML_NAMESPACE_URI;
 
-export const directives = {};
-
-export function createDirective(attr, callback) {
-    directives[attr] = callback;
-}
-
-export function Fragment({children}) {
-    const fragment = document.createDocumentFragment();
-    if (children !== undefined) {
-        appendChildren(fragment, children);
+function ns(tag, props, key) {
+    const outerNamespaceURI = namespaceURI;
+    namespaceURI = this;
+    try {
+        return jsx(tag, props, key);
+    } finally {
+        namespaceURI = outerNamespaceURI;
     }
-    return fragment;
 }
 
-function appendChildren(node, children) {
-    if (Array.isArray(children)) {
-        for (const child of children) {
-            appendNode(node, child);
-        }
+export const svg = ns.bind(SVG_NAMESPACE_URI);
+export const xhtml = ns.bind(XHTML_NAMESPACE_URI);
+
+let scope = null;
+
+export function jsx(tag, props, key = null) {
+    if (key === null) {
+        return typeof tag === "function" ? tag(props) : createElement(tag, props);
+    }
+    const map = scope ?? contextScope();
+    let node = map.get(key);
+    if (node !== undefined) {
+        node.setProperties(props);
     } else {
-        appendNode(node, children);
+        if (typeof tag === "function") {
+            if (tag === Fragment) {
+                node = Fragment(props);
+                node.setProperties = props => setChildren.call(node, props.children);
+            } else {
+                node = createKFC(tag, props);
+                node.setProperties = updateKFC.bind(props);
+            }
+        } else {
+            node = createElement(tag, props, key);
+            node.setProperties = updateElement.bind(node);
+        }
+        map.set(key, node);
+    }
+    return node;
+}
+
+/**
+ *
+ * @param tag {string}
+ * @param props {object}
+ * @returns {Node}
+ */
+function createKFC(tag, props) {
+    for (const name of Object.keys(props)) {
+        const desc = Object.getOwnPropertyDescriptor(props, name);
+        if (desc.get !== undefined) {
+            const cs = new Computed(desc.get);
+            desc.get = cs.get.bind(cs);
+            desc.set = cs.rewire.bind(cs);
+            Object.defineProperty(props, name, desc);
+        } else {
+            const ss = new Signal(desc.value);
+            Object.defineProperty(props, name, {
+                get: ss.get.bind(ss),
+                set: ss.set.bind(ss)
+            });
+        }
+    }
+    return tag(props);
+}
+
+function updateKFC(props) {
+    for (const name of Object.keys(props)) {
+        const desc = Object.getOwnPropertyDescriptor(props, name);
+        this[name] = desc.get ?? desc.value;
     }
 }
 
-export function createNode(tag, props) {
+/**
+ * @param props {{xmlns?: string, children?: any[]}}
+ * @returns {DocumentFragment}
+ */
+export function Fragment({xmlns, children}) {
+    return new PersistentFragment(xmlns ?? namespaceURI, children);
+}
 
-    if (typeof tag === "function") {
-        return tag(props);
+export class PersistentFragment extends DocumentFragment {
+    /**
+     * @param children {any}
+     */
+    constructor(namespaceURI, children) {
+        super();
+        this.namespaceURI = namespaceURI;
+        this.placeholder = new Comment();
+        this.appendChild(this.placeholder);
+        if (typeof children === "function") {
+            children = new Computed(children);
+        }
+        if (children instanceof Signal) {
+            children = propertyEffect(this, "children", children);
+        }
+        setChildren.call(this, children);
     }
 
+    appendChild(node) {
+        const placeholder = this.placeholder;
+        const parentNode = placeholder.parentNode;
+        if (parentNode) {
+            parentNode.insertBefore(node, placeholder);
+        } else {
+            super.appendChild(node);
+        }
+    }
+
+    append(...nodes) {
+        const placeholder = this.placeholder;
+        const parentNode = placeholder.parentNode;
+        if (parentNode) {
+            for (const node of nodes) {
+                parentNode.insertBefore(node, placeholder);
+            }
+        } else {
+            super.append(...nodes);
+        }
+    }
+
+    reclaim() {
+        if (this.childNodes.length === 0) {
+            const placeholder = this.placeholder;
+            super.appendChild(placeholder);
+            for (const node of this.__nodes__) {
+                super.insertBefore(node, placeholder);
+            }
+        }
+    }
+
+    remove() {
+        this.__nodes__?.forEach(removeNode);
+    }
+
+    get nextSibling() {
+        return this.placeholder.nextSibling;
+    }
+
+    get firstNode() {
+        let nodes = this.__nodes__;
+        if (nodes instanceof Array) {
+            return nodes[0];
+        }
+        return nodes ?? this.placeholder.previousSibling;
+    }
+}
+
+/**
+ *
+ * @param tag {string}
+ * @param props {{xmlns?: string, children?: any[], [key: string]: any}}
+ * @param key {any}
+ * @returns {HTMLElement}
+ */
+export function createElement(tag, props, key) {
     const {
-        jsxns: nsURI,
-        class: _class,
-        style: _style,
-        children,
-        ref,
-        ...attrs
+        xmlns = tag === "svg" ? SVG_NAMESPACE_URI : namespaceURI
     } = props;
 
-    const node = nsURI && nsURI !== XHTML_NAMESPACE_URI
-        ? document.createElementNS(nsURI, tag)
-        : tag === "svg"
-            ? document.createElementNS(SVG_NAMESPACE_URI, tag)
-            : document.createElement(tag);
+    const node = xmlns === XHTML_NAMESPACE_URI
+        ? document.createElement(tag)
+        : document.createElementNS(SVG_NAMESPACE_URI, tag);
 
-    if (_class) {
-        if (_class instanceof Signal) {
-            node.nextEffect = new ClassEffect(node, _class);
-        } else {
-            setClass(node, _class);
-        }
-    }
-    if (_style) {
-        if (_style instanceof Signal) {
-            node.nextEffect = new StyleEffect(node, _style);
-        } else {
-            setStyle(node, _style);
-        }
-    }
-    if (ref) {
-        if (ref instanceof Signal) {
-            ref.set(node);
-        } else {
-            ref(node);
-        }
-    }
-
-    for (const name of Object.keys(attrs)) {
-        const value = attrs[name];
-
-        if (name[0] === "o" && name[1] === "n") {
-            const event = name[2] === ":" ? name.slice(3) : name[2].toLowerCase() + name.slice(3);
-            node.addEventListener(event, value);
+    for (const name of Object.keys(props)) {
+        if (name[0] === "i" && name[1] === "s" && name[2] === ":") {
+            node.setAttribute(name, "");
+            directives[name.slice(3)](node, props);
             continue;
         }
 
-        const directive = directives[name];
-        if (directive) {
-            node.setAttribute(name, value);
-            directive(node, value);
-            continue;
-        }
+        let value = props[name];
 
+        if (typeof value === "function") {
+            if (name === "ref") {
+                value(node);
+                continue;
+            }
+            if (name[0] === "o" && name[1] === "n") {
+                const event = name[2] === ":" ? name.slice(3) : name.slice(2).toLowerCase();
+                node.addEventListener(event, value);
+                continue;
+            }
+            value = new Computed(value);
+        }
         if (value instanceof Signal) {
-            node.nextEffect = new AttrEffect(node, name, value);
-        } else {
-            setAttr(node, name, value);
+            if (name === "ref") {
+                value.set(node);
+                continue;
+            }
+            value = propertyEffect(node, name, value);
+        }
+        if (value != null) {
+            if (name === "children") {
+                if (key === null) {
+                    if (value instanceof Array) {
+                        for (const child of value) {
+                            node.appendChild(createNode(xmlns, child));
+                        }
+                    } else {
+                        node.appendChild(createNode(xmlns, value));
+                    }
+                    continue;
+                }
+                setChildren.call(node, value);
+            } else {
+                setProperty.call(node, name, value);
+            }
         }
     }
 
-    if (children !== undefined) {
-        appendChildren(node, children)
-    }
+    if (key !== null) node.__props__ = props;
 
     return node;
 }
 
+/**
+ * @this {HTMLElement}
+ * @param props {{xmlns?: string, children?: any[], [key: string]: any}}
+ */
+function updateElement(props) {
+    const prev = this.__props__;
+    let effect,
+        value;
+    for (let name of Object.keys(props)) {
+        if (Object.is(value = props[name], prev[name])) {
+            continue;
+        }
+        if (name[0] === "i" && name[1] === "s" && name[2] === ":") {
+            directives[name.slice(3)](this, props);
+            continue;
+        }
+
+        effect = this.__effects__?.[name];
+
+        if (typeof value === "function") {
+            if (name === "ref") {
+                value(this);
+                continue;
+            }
+            if (name[0] === "o" && name[1] === "n") {
+                const event = name[2] === ":" ? name.slice(3) : name.slice(2).toLowerCase();
+                this.removeEventListener(event, this[name]);
+                this.addEventListener(event, value);
+                continue;
+            }
+            if (effect) {
+                this.__effects__[name].rewire(value);
+                continue;
+            }
+            value = new Computed(value);
+        }
+        if (value instanceof Signal) {
+            if (name === "ref") {
+                value.set(this);
+                continue;
+            }
+            if (effect) {
+                this.__effects__[name].rewire(value);
+                continue;
+            }
+            value = propertyEffect(this, name, value);
+        } else {
+            if (effect) {
+                effect.dispose();
+                this.__effects__[name] = undefined;
+            }
+        }
+        if (name === "children") {
+            setChildren.call(this, value);
+        } else {
+            setProperty.call(this, name, value);
+        }
+    }
+    this.__props__ = props;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+let pendingUnmount = null;
+
+const unmountNodes = () => {
+    while (pendingUnmount !== null) {
+        unMount(pendingUnmount);
+        const nextUnmount = pendingUnmount.nextUnmount;
+        pendingUnmount.nextUnmount = null;
+        pendingUnmount = nextUnmount;
+    }
+};
+
+export function removeNode(child) {
+    if (child.__effects__) {
+        if (pendingUnmount === null) {
+            requestAnimationFrame(unmountNodes);
+        }
+        child.nextUnmount = pendingUnmount;
+        pendingUnmount = child;
+    }
+    child.remove();
+}
+
+const UNMOUNT_OPTIONS = {
+    acceptNode: node => node.__effects__ ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+};
+
 export function unMount(node) {
-    node.nextEffect?.dispose();
+    for (const effect of Object.values(node.__effects__)) {
+        effect.dispose();
+    }
+    node.__effects__ = null;
     if (node.firstChild) {
-        const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT, unMount.options);
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT, UNMOUNT_OPTIONS);
         while (node = walker.nextNode()) {
-            node.nextEffect.dispose();
+            for (const effect of Object.values(node.__effects__)) effect.dispose();
         }
     }
 }
 
-window.unMount = unMount;
+Object.defineProperty(window, "unMount", {enumerable: true, value: unMount});
 
-unMount.options = {
-    acceptNode: node => node.nextEffect ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+let pendingUpdate = null;
+
+const flushCallback = () => {
+    if (pendingUnmount !== null) {
+        unmountNodes();
+    }
+    while (pendingUpdate !== null) {
+        scope = pendingUpdate.signal.scope;
+        pendingUpdate.refresh(pendingUpdate.signal.peek());
+        pendingUpdate.done();
+        pendingUpdate = pendingUpdate.nextUpdate;
+    }
 };
 
+const flushUpdates = () => {
+    try {
+        batch(flushCallback);
+    } catch (e) {
+        console.error("failed to flush updates: " + pendingUpdate?.toString(), e);
+    } finally {
+        scope = null;
+    }
+};
 
-class ClassEffect extends RenderEffect {
-    constructor(node, signal) {
-        super(signal, node.nextEffect);
-        this.refresh = setClass.bind(null, node);
-        this.refresh(this.track());
+export class RenderEffect extends Subscriber {
+
+    constructor(signal, refresh) {
+        super(signal);
+        this.nextUpdate = null;
+        if (refresh) {
+            this.refresh = refresh;
+        }
+    }
+
+    refresh(value) {
+        throw new Error("refresh not implemented");
+    }
+
+    update() {
+        if (super.update()) {
+            if ((this.nextUpdate = pendingUpdate) === null) {
+                requestAnimationFrame(flushUpdates);
+            }
+            pendingUpdate = this;
+        }
     }
 }
 
-function setClass(node, value) {
-    if (value) {
-        if (typeof value === "object") {
+/**
+ *
+ * @param node
+ * @param name
+ * @param signal
+ * @returns {*}
+ */
+export function propertyEffect(node, name, signal) {
+    const value = signal.peek();
+    if (signal.isLinked) {
+        (node.__effects__ ??= {})[name] = new RenderEffect(
+            signal,
+            name === "children"
+                ? setChildren.bind(node)
+                : setProperty.bind(node, name)
+        );
+    }
+    return value;
+}
+
+/**
+ * @this {HTMLElement}
+ * @param name {string}
+ * @param value {any}
+ */
+export function setProperty(name, value) {
+    const type = typeof value;
+    if (name === "class") {
+        if (value !== null && type === "object") {
             const parts = [];
             if (value[Symbol.iterator]) {
                 for (const part of value) {
                     if (part) parts.push(part);
                 }
             } else {
-                for (const [key, part] of Object.entries(value)) {
-                    if (part) parts.push(key);
+                for (const key of Object.keys(value)) {
+                    if (value[key]) parts.push(key);
                 }
             }
-            value = parts.join(" ");
+            if (this.namespaceURI === xhtml) {
+                this.className = parts.join(" ");
+            } else {
+                this.setAttribute("class", parts.join(" "));
+            }
+            return;
         }
-        node.setAttribute("class", value);
-    } else {
-        node.removeAttribute("class");
-    }
-}
-
-class StyleEffect extends RenderEffect {
-    constructor(node, signal) {
-        super(signal, node.nextEffect);
-        this.refresh = setStyle.bind(null, node);
-        this.refresh(this.track());
-    }
-}
-
-function setStyle(node, value) {
-    if (value) {
-        if (typeof value === "object") {
-            node.setAttribute("style", "");
-            Object.assign(node.style, value);
-            return
+    } else if (name === "style") {
+        if (value !== null && type === "object") {
+            this.style = null;
+            Object.assign(this.style, value);
+            return;
         }
-        node.setAttribute("style", value);
+    }
+    if (value === true) {
+        this.setAttribute(name, "");
+    } else if (type === "string" || type === "number" || type === "bigint" || value) {
+        this.setAttribute(name, value);
     } else {
-        node.removeAttribute("style");
+        this.removeAttribute(name);
     }
 }
 
-class AttrEffect extends RenderEffect {
-    constructor(node, name, signal) {
-        super(signal, node.nextEffect);
-        this.refresh = setAttr.bind(null, node, name);
-        this.refresh(this.track());
-    }
-}
-
-function setAttr(node, name, value) {
-    const type = typeof value;
-    if (type === "string" || type === "number" || type === "bigint") {
-        node.setAttribute(name, value);
+/**
+ * @this {HTMLElement|PersistentFragment}
+ * @param value {any}
+ * @param value {any}
+ */
+export function setChildren(value) {
+    if (this.__value__ === value) {
         return;
     }
-    if (value) {
-        node.setAttribute(name, type === "boolean" ? "" : value);
+    const isArray = value instanceof Array;
+    const isEmpty = value == null || isArray && !value.length;
+    const wasArray = this.__value__ instanceof Array;
+    const wasEmpty = this.__value__ == null || wasArray && !this.__value__.length;
+    if (wasEmpty) {
+        if (isEmpty) return;
     } else {
-        node.removeAttribute(name);
+        if (isEmpty) {
+            if (wasArray) {
+                this.__nodes__.forEach(removeNode);
+            } else {
+                removeNode(this.__nodes__);
+            }
+            this.__nodes__ = this.__value__ = null;
+            return;
+        }
+        if (wasArray) {
+            if (isArray) {
+                this.__nodes__ = updateNodes(
+                    this,
+                    value,
+                    this.__value__,
+                    this.__nodes__
+                );
+                this.__value__ = value;
+                return;
+            }
+            let index = 0, recycled = null;
+            for (const node of this.__nodes__) {
+                if (recycled === null || !Object.is(value, this.__value__[index++])) {
+                    removeNode(node);
+                } else {
+                    recycled = this.__value__[index - 1];
+                }
+            }
+            if (recycled) {
+                this.__nodes__ = recycled;
+                this.__value__ = value;
+                return;
+            }
+        } else {
+            if (isArray) {
+                let index = value.length;
+                let nodes = Array(index);
+                let {parentNode, nextSibling} = this.__nodes__;
+                while (--index) {
+                    const child = value[index];
+                    if (Object.is(child, this.__value__)) {
+                        nodes[index] = this.__nodes__;
+                    } else {
+                        parentNode.insertBefore(nodes[index] = createNode(namespaceURI, child), nextSibling);
+                    }
+                }
+                this.__nodes__ = nodes;
+                this.__value__ = value;
+                return;
+            }
+            removeNode(this.__nodes__);
+        }
     }
+    if (isArray) {
+        this.append(...(this.__nodes__ = value.map(createNode.bind(null, this.namespaceURI))));
+    } else {
+        this.appendChild(this.__nodes__ = createNode(this.namespaceURI, value));
+    }
+    this.__value__ = value;
 }
 
-class NodeEffect extends RenderEffect {
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    constructor(parent, signal) {
-        super(signal, parent.nextEffect);
-        this.node = appendNode(parent, this.track());
+export class NodeEffect extends RenderEffect {
+
+    constructor(signal, node) {
+        super(signal);
+        this.node = node;
     }
 
     refresh(value) {
         const type = typeof value;
-        switch (type) {
-            case "string":
-            case "number":
-            case "bigint":
-                this.setText(value);
+        if (type === "string" || type === "number" || type === "bigint") {
+            if (this.node.nodeType === Node.TEXT_NODE) {
+                this.node.data = value;
+            } else {
+                this.replaceNode(new Text(value));
+            }
+            return;
+        } else if (type === "object") {
+            if (value instanceof Node) {
+                valure.reclaim?.();
+                this.replaceNode(value);
                 return;
-            case "function":
-                if ((value = value(node)) !== undefined) this.refresh(value);
-                return;
-            case "object":
-                if (value instanceof Node) {
-                    if (value !== this.node) this.setNode(value);
+            }
+            if (value !== null) {
+                const namespaceURI = this.node.namespaceURI;
+                if (value.forEach) {
+                    if (this.node instanceof PersistentFragment) {
+                        this.node.updateFragment(value);
+                        return;
+                    }
+                    this.node.replaceWith(this.node = new PersistentFragment(namespaceURI, value));
                     return;
                 }
-                if (value !== null) {
-                    if (value[Symbol.iterator]) {
-                        // TODO: make a proper diff/update
-                        // if (!this.node.lastNode) {
-                        //     this.node.replaceWith(this.node = document.createComment(value.constructor.name));
-                        // }
-                        const fragment = document.createDocumentFragment();
-                        const placeholder = fragment.appendChild(document.createComment(value.constructor.name));
-                        for (const item of value) {
-                            appendNode(fragment, item).sourceValue = item
-                        }
-                        placeholder.lastNode = fragment.lastChild
-                        this.setNode(fragment);
-                        return;
-                    }
-                    if (value.tag) {
-                        // TODO: make a proper diff/update
-                        this.setNode(createNode(value.tag, {
-                            jsxns: parent.namespaceURI,
-                            children: value.children,
-                            ...value.attrs
-                        }));
-                        return;
-                    }
+                if (value.tag) {
+                    this.replaceNode(jsx(value.tag, {
+                        xmlns: value.xmlns ?? namespaceURI,
+                        children: value.children,
+                        ...value.attrs
+                    }, value.key));
+                    return;
                 }
-            default:
-                parent.appendChild(document.createComment(String(value)));
+                value = value.toString();
+            }
+        } else if (type === "function") {
+            value = `[function ${value.name}]`;
+        } else if (type === "symbol") {
+            value = value.toString();
         }
-        if (type === "object" && value !== null) {
-        }
-        this.setText("");
-    }
-
-    setText(text) {
-        if (this.node.nodeType === Node.TEXT_NODE) {
-            this.node.data = text;
+        if (this.node.nodeType === Node.COMMENT_NODE) {
+            this.node.data = value;
         } else {
-            this.setNode(document.createTextNode(text));
+            this.replaceNode(new Comment(value));
         }
     }
 
-    setNode(node) {
-        let lastNode = this.node.lastNode;
-        if (lastNode) {
-            while (lastNode !== this.node) (lastNode = lastNode.previousSibling).nextSibling.remove();
-        }
+    replaceNode(node) {
+        node.__effects__ = this.node.__effects__;
         this.node.replaceWith(this.node = node);
     }
 }
 
-function appendNode(parent, value) {
-    switch (typeof value) {
-        case "bigint":
-        case "number":
-        case "string":
-            return parent.appendChild(document.createTextNode(value));
-        case "function":
-            return appendNode(parent, value(parent));
-        case "object":
-            if (value instanceof Node) {
-                return parent.appendChild(value);
+/**
+ *
+ * @param namespaceURI
+ * @param value
+ * @returns {Node|PersistentFragment|Text|Comment}
+ */
+export function createNode(namespaceURI, value) {
+    if (value instanceof Node) {
+        value.reclaim?.();
+        return value;
+    }
+    if (typeof value === "function") {
+        value = new Computed(value);
+    }
+    if (value instanceof Signal) {
+        let node = value.peek();
+        if (value.isLinked) {
+            if (!(node instanceof Node)) {
+                node = createUnboundNode(namespaceURI, node);
             }
-            if (value instanceof Signal) {
-                const {node} = parent.nextEffect = new NodeEffect(parent, value);
-                return node;
+            node.__effects__ = {self: new NodeEffect(value, node)};
+            return node;
+        } else {
+            value = node;
+        }
+    }
+    return createUnboundNode(namespaceURI, value);
+}
+
+function createUnboundNode(namespaceURI, value) {
+    const type = typeof value;
+    if (type === "object") {
+        if (value !== null) {
+            if (value.forEach) {
+                return new PersistentFragment(namespaceURI, value);
             }
-            if (value !== null) {
-                if (value[Symbol.iterator]) {
-                    const placeholder = parent.appendChild(document.createComment(value.constructor.name));
-                    for (const item of value) {
-                        appendNode(parent, item).sourceValue = item
-                    }
-                    placeholder.lastNode = parent.lastChild
-                    return placeholder;
+            if (value.tag) {
+                return jsx(value.tag, {
+                    xmlns: value.xmlns,
+                    children: value.children,
+                    ...value.attrs
+                }, value.key);
+            }
+        }
+    } else if (type === "string" || type === "number" || type === "bigint") {
+        return new Text(value);
+    } else if (type === "function") {
+        return new Comment(`[function ${value.name}]`);
+    } else if (type === "symbol") {
+        return new Comment(String(value));
+    }
+    return new Comment(value);
+}
+
+/**
+ * This method is an adaptation of https://github.com/WebReflection/uhtml/blob/main/esm/persistent-fragment.js
+ *
+ * Copyright © 2020-today, Andrea Giammarchi, @WebReflection
+ *
+ * @param parent
+ * @param next
+ * @param prev
+ * @param live
+ * @returns {*}
+ */
+export function updateNodes(owner, next, prev, live) {
+    let nodes = new Array(next.length);
+    let prevStart = 0;
+    let prevEnd = prev.length;
+    let nextStart = 0;
+    let nextEnd = next.length;
+    let map = null;
+    let nsURI = owner.namespaceURI;
+
+    const parent = owner instanceof PersistentFragment ? owner.placeholder.parentNode : owner;
+
+    while (prevStart < prevEnd && nextStart < nextEnd) {
+        if (nodes[nextStart]) {
+            const before = live[nextStart - 1].nextSibling;
+            insertBefore(parent, nodes[nextStart++], before);
+        } else if (prev[prevStart] === next[nextStart]) {
+            nodes[nextStart++] = live[prevStart++];
+        } else if (prev[prevEnd - 1] === next[nextEnd - 1]) {
+            nodes[--nextEnd] = live[--prevEnd];
+        } else if (prev[prevStart] === next[nextEnd - 1] && prev[prevEnd - 1] === next[nextStart]) {
+            const before = live[--prevEnd].nextSibling;
+            nodes[nextStart++] = insertBefore(parent, live[prevEnd], live[prevStart].nextSibling);
+            nodes[--nextEnd] = insertBefore(parent, live[prevStart++], before);
+        } else {
+            if (map === null) {
+                map = new Map();
+                let i = nextStart;
+                while (i < nextEnd) map.set(next[i], i++);
+            }
+            const index = map.get(prev[prevStart]);
+            if (index !== undefined) {
+                if (nextStart < index && index < nextEnd) {
+                    nodes[index] = live[prevStart++];
+                } else {
+                    prevStart++;
                 }
-                if (value.tag) {
-                    return parent.appendChild(createNode(value.tag, {
-                        jsxns: parent.namespaceURI,
-                        children: value.children,
-                        ...value.attrs
-                    }));
-                }
+            } else {
+                removeNode(live[prevStart++]);
             }
-        default:
-            return parent.appendChild(document.createComment(String(value)));
+        }
+    }
+
+    if (nextStart < nextEnd) {
+        const before = nextEnd < next.length
+            ? nextStart
+                ? nodes[nextStart - 1].nextSibling
+                : nodes[nextEnd].firstNode ?? nodes[nextEnd]
+            : owner.placeholder ?? null;
+        do {
+            nodes[nextStart] = insertBefore(parent, nodes[nextStart] ?? createNode(nsURI, next[nextStart]), before);
+        } while (++nextStart < nextEnd);
+    }
+
+    while (prevStart < prevEnd) {
+        if (map === null || !map.has(prev[prevStart])) {
+            live[prevStart].remove();
+        }
+        prevStart++;
+    }
+
+    return nodes;
+}
+
+export function insertBefore(parent, node, ref) {
+    node.reclaim?.();
+    parent.insertBefore(node, ref);
+    return node;
+}
+
+export function checkJsx() {
+    if (namespaceURI !== XHTML_NAMESPACE_URI) {
+        throw new Error(`unexpected namespaceURI: ${XHTML_NAMESPACE_URI}`);
+    }
+    if (pendingUnmount !== null) {
+        throw new Error(`pending nextUnmount: ${pendingUnmount.toString()}`);
+    }
+    if (pendingUpdate !== null) {
+        throw new Error(`pending nextUpdate: ${pendingUpdate.toString()}`);
     }
 }

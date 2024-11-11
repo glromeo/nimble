@@ -72,7 +72,7 @@ module.exports = {
     main,
     srcdir: resolve(cwd, "src"),
     outdir: resolve(cwd, "build"),
-    baseUrl: baseUrl ? new URL(baseUrl) : "http://localhost:3000",
+    baseUrl: new URL(baseUrl ?? "http://localhost:3000"),
     stories: [
         "src/**/*.stories.[jt]sx",
         "components/**/*.stories.[jt]sx",

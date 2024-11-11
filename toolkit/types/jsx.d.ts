@@ -1,5 +1,5 @@
 import * as csstype from "csstype";
-import {Signal} from "@nimble/toolkit/signals";
+import {Signal} from "nimble/signals/signals";
 
 /**
  * Based on JSX types for Surplus and Inferno and adapted for `dom-expressions`.
@@ -9,11 +9,13 @@ import {Signal} from "@nimble/toolkit/signals";
  */
 type DOMElement = Element;
 
-type MaybeSignal<T> = T | Signal<T>
+type Reactive<T> = T | Signal<T> | Function<T>
 
 export namespace JSX {
-    type Element = Node | ArrayElement | (string & {}) | number | boolean | null;
-    interface ArrayElement extends Array<Element> {}
+    type Element = Node; // | ArrayElement | (string & {}) | number | boolean | null;
+    type Children = Reactive<Node | ArrayElement | (string & {}) | number | boolean | null | undefined>;
+    // interface ArrayElement extends Array<Element> {}
+    interface ArrayElement extends Array<Children> {}
     interface ElementClass {
         // empty, libs can define requirements downstream
     }
@@ -127,17 +129,45 @@ export namespace JSX {
         [SERIALIZABLE]: never;
     }
 
+    interface IntrinsicAttributes {
+        ref?: unknown | ((e: unknown) => void) | undefined;
+    }
+
     interface CustomAttributes<T> {
         ref?: T | ((el: T) => void);
         classList?: {
             [k: string]: boolean | undefined;
         };
-        $ServerOnly?: boolean;
+    }
+    type Accessor<T> = () => T;
+    interface Directives {}
+    interface DirectiveFunctions {
+        [x: string]: (el: DOMElement, accessor: Accessor<any>) => void;
     }
     interface ExplicitProperties {}
     interface ExplicitAttributes {}
     interface CustomEvents {}
     interface CustomCaptureEvents {}
+
+    type DirectiveAttributes = {
+      [Key in keyof Directives as `is:${Key}`]?: Directives[Key];
+    };
+
+    type DirectiveFunctionAttributes<T> = {
+        [K in keyof DirectiveFunctions as string extends K ? never : `is:${K}`]?: DirectiveFunctions[K] extends (
+                el: infer E, // will be unknown if not provided
+                ...rest: infer R // use rest so that we can check whether it's provided or not
+            ) => void
+            ? T extends E // everything extends unknown if E is unknown
+                ? R extends [infer A] // check if has accessor provided
+                    ? A extends Accessor<infer V>
+                        ? V // it's an accessor
+                        : never // it isn't, type error
+                    : true // no accessor provided
+                : never // T is the wrong element
+            : never; // it isn't a function
+    };
+
     type PropAttributes = {
         [Key in keyof ExplicitProperties as `prop:${Key}`]?: ExplicitProperties[Key];
     };
@@ -163,7 +193,7 @@ export namespace JSX {
             OnCaptureAttributes<T>,
             CustomEventHandlersCamelCase<T>,
             CustomEventHandlersLowerCase<T> {
-        children?: Element;
+        children?: Children;
         innerHTML?: string;
         innerText?: string | number;
         textContent?: string | number;
@@ -255,12 +285,7 @@ export namespace JSX {
         onSeeking?: EventHandlerUnion<T, Event>;
         onSelect?: EventHandlerUnion<T, UIEvent>;
         onStalled?: EventHandlerUnion<T, Event>;
-        onSubmit?: EventHandlerUnion<
-            T,
-            Event & {
-            submitter: HTMLElement;
-        }
-        >;
+        onSubmit?: EventHandlerUnion<T, Event & { submitter: HTMLElement; }>;
         onSuspend?: EventHandlerUnion<T, Event>;
         onTimeUpdate?: EventHandlerUnion<T, Event>;
         onToggle?: EventHandlerUnion<T, ToggleEvent>;
@@ -694,8 +719,9 @@ export namespace JSX {
 
     interface HTMLAttributes<T> extends AriaAttributes, DOMAttributes<T> {
         // [key: ClassKeys]: boolean;
+        key?: any;
         accessKey?: string;
-        class?: MaybeSignal<string> | undefined;
+        class?: Reactive<string|string[]> | undefined;
         contenteditable?: boolean | "plaintext-only" | "inherit";
         contextmenu?: string;
         dir?: HTMLDir;
@@ -705,7 +731,7 @@ export namespace JSX {
         inert?: boolean;
         lang?: string;
         spellcheck?: boolean;
-        style?: CSSProperties | string;
+        style?: Reactive<CSSProperties | string>;
         tabindex?: number | string;
         title?: string;
         translate?: "yes" | "no";
