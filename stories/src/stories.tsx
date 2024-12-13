@@ -16,6 +16,6 @@ window.addEventListener('message', ({data}) => {
 
 document.body.append(
     <TkApp>
-        <Stories stories={$stories.value}/>
+        <Stories stories={$stories.get()}/>
     </TkApp> as Node
 )

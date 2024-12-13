@@ -10,14 +10,14 @@ const settings = storedSignal("stories.settings", {
     }
 });
 
-const tabIndex = signal<number | null>(settings.value.tabIndex);
-const navigatorWidth = signal<number>(settings.value.navigator.width);
+const tabIndex = signal<number | null>(settings.get().tabIndex);
+const navigatorWidth = signal<number>(settings.get().navigator.width);
 
 effect(() => {
     settings.set({
-        tabIndex: tabIndex.value,
+        tabIndex: tabIndex.get(),
         navigator: {
-            width: navigatorWidth.value
+            width: navigatorWidth.get()
         }
     });
 });
@@ -29,23 +29,23 @@ export function Stories(props: { stories: Record<string, string[]> }): JSX.Eleme
     const $fixture = signal(new URLSearchParams(location.search).get("fixture"));
 
     const $titles = computed(() => {
-        const fixture = $fixture.value;
+        const fixture = $fixture.get();
         if (fixture) {
             return [fixture || "default"];
         } else {
             const {stories} = props;
-            return stories && stories[$story.value] || [];
+            return stories && stories[$story.get()] || [];
         }
     });
 
-    const $focused = signal($titles.value);
+    const $focused = signal($titles.get());
 
     effect(() => {
         const url = new URL(location.href);
         if ($story) {
-            url.hash = `#/${$story.value}`;
+            url.hash = `#/${$story.get()}`;
         }
-        const focused = $focused.value;
+        const focused = $focused.get();
         if (focused.length === 1) {
             url.searchParams.set("fixture", focused[0]!);
         }
@@ -55,7 +55,7 @@ export function Stories(props: { stories: Record<string, string[]> }): JSX.Eleme
     return (
         <div class="stories">
             <div class="navigator-pane"
-                 style={`min-width: 200px, width: ${navigatorWidth.value}px`}
+                 style={`min-width: 200px, width: ${navigatorWidth.get()}px`}
                  is:resizable="right"
                  on:resized={e => {
                      const div = e.currentTarget as HTMLDivElement;
@@ -63,9 +63,9 @@ export function Stories(props: { stories: Record<string, string[]> }): JSX.Eleme
                  }}>
                 <Navigator
                     defaultOpen={true}
-                    $stories={$stories}
+                    stories={props.stories}
+                    titles={$titles.get()}
                     $selected={$story}
-                    $titles={$titles}
                     $focused={$focused}
                 />
             </div>

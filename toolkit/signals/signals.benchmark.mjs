@@ -37,8 +37,8 @@ function prepare(l) {
         }
     });
 
-    console.log(memoryUsage());
     console.log(total, performance.now() - timeStart);
+    console.log(memoryUsage());
 })();
 
 // 1000000 ????????????????? (M1)

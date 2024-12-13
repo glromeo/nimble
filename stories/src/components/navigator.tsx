@@ -1,5 +1,5 @@
 import "./navigator.scss";
-import {computed, JSX, Signal, signal} from "@nimble/toolkit";
+import {computed, JSX, signal, Signal} from "@nimble/toolkit";
 
 const storiesComparator = (l: String, r: string): number => {
     return l === "default" ? -1 : r === "default" ? 1 : l < r ? -1 : 1;
@@ -8,12 +8,14 @@ const storiesComparator = (l: String, r: string): number => {
 export function Navigator(props: {
     defaultOpen?: boolean;
     stories: Record<string, string[]>;
-    selected: string;
     titles: string[];
-    focused: string[];
+    $selected: Signal<string>;
+    $focused: Signal<string[]>;
 }) {
     const {
         defaultOpen = false,
+        $selected,
+        $focused
     } = props;
 
     const $root = computed(() => {
@@ -22,7 +24,7 @@ export function Navigator(props: {
             path: "/",
             children: []
         };
-        for (const story of Object.keys($stories).sort()) {
+        for (const story of Object.keys(props.stories).sort()) {
             let node = root;
             let path = "";
             main: for (const part of story.split(/\//g)) {
@@ -53,28 +55,26 @@ export function Navigator(props: {
 
     const onFileClick = (path: string) => {
         $selected.set(path);
-        $focused.set($stories.peek()[path]);
+        $focused.set(props.stories[path]);
     };
 
     function TreeFragment(props: {
         node: Node,
         indent: number
     }) {
-        const state = useState({
-            isOpen: defaultOpen,
-            indent: props.indent + 1
-        });
+        const {indent} = props;
+        const $isOpen = signal(defaultOpen);
         return <>
             <div
                 class="navigator-item node"
                 is-selected={$selected.is(props.node.path)}
-                is-open={state.isOpen}
-                style={() => `padding-left: ${4 + props.indent * 12}`}
-                onClick={() => state.isOpen = !state.isOpen}
+                is-open={$isOpen.get()}
+                style={() => `padding-left: ${4 + indent * 12}`}
+                onClick={() => $isOpen.set(!$isOpen.get())}
             >
-                {state.isOpen ? <LuFolderOpen/> : <LuFolder/>} {props.label.toLowerCase().replace(/[_-]/g, " ")}
+                {$isOpen.get() ? <LuFolderOpen/> : <LuFolder/>} {props.node.label.toLowerCase().replace(/[_-]/g, " ")}
             </div>
-            {$isOpen.peek() && props.node.children?.map(child => <TreeFragment node={child} indent={indent} />)}
+            {$isOpen.peek() && props.node.children?.map(child => <TreeFragment node={child} indent={indent + 1}/>)}
         </>;
     }
 
@@ -128,7 +128,7 @@ export function Navigator(props: {
 
     return (
         <div class="navigator">
-            <TreeFragment node={root.value} indent={0} />
+            <TreeFragment node={$root.get()} indent={0}/>
         </div>
     );
 }
