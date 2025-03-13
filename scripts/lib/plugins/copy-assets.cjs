@@ -8,6 +8,7 @@ const squirrelly = require("squirrelly");
 const config = require("../../config.cjs");
 
 /**
+ * Copy Assets Plugin
  *
  * @type {import("esbuild").Plugin}
  */

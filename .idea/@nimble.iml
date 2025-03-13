@@ -13,6 +13,7 @@
       <excludeFolder url="file://$MODULE_DIR$/attic" />
       <excludeFolder url="file://$MODULE_DIR$/plugin/esbuild-jsx-plugin/coverage" />
       <excludeFolder url="file://$MODULE_DIR$/plugin/esbuild-jsx-plugin/dist" />
+      <excludeFolder url="file://$MODULE_DIR$/plugin/esbuild-jsx-plugin/lib" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

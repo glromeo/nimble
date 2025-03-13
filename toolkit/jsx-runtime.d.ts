@@ -1,6 +1,6 @@
 import {JSX} from "nimble/types/jsx";
 
-export * from "./types/jsx";
+export * from "nimble/types/jsx";
 
 // https://www.typescriptlang.org/docs/handbook/jsx.html
 

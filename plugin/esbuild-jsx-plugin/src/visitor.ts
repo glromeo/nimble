@@ -23,7 +23,7 @@ import {
 import __template from "@babel/template";
 import {NodePath, Visitor} from "@babel/traverse";
 
-const NIMBLE_MODULE = "@nimble/index.mjs";
+const NIMBLE_MODULE = "@nimble/toolkit/index.mjs";
 const JSX_RUNTIME_MODULE = "@nimble/toolkit/jsx-runtime.js";
 
 const template = __template.ast ? __template : __template.default;
@@ -110,7 +110,6 @@ const nodeVisitor = {
     exit(path: NodePath<JSXFragment | JSXElement>, {imports}: State) {
         const props = [];
         let transpiled;
-        let isReactive = false;
         let isIntrinsic = true;
 
         if (path.node.type === "JSXElement") {
@@ -126,7 +125,6 @@ const nodeVisitor = {
             }
             for (const attr of attributes) {
                 if (attr.type === "JSXSpreadAttribute") {
-                    isReactive ||= attr.isReactive;
                     props.push(spreadElement(attr.argument));
                 } else {
                     let key: Identifier | StringLiteral;
@@ -147,7 +145,6 @@ const nodeVisitor = {
                     if (value?.type === "JSXExpressionContainer") {
                         const expression = value.expression;
                         if (value.isReactive && !isHandler(key)) {
-                            isReactive ||= true;
                             props.push(reactiveProperty(isIntrinsic && !isDirective(key), key, expression));
                         } else {
                             props.push(objectProperty(key, expression));
@@ -161,11 +158,10 @@ const nodeVisitor = {
             transpiled = jsxExpression(imports.jsx, imports.Fragment, props);
         }
         const children = [];
-        isReactive = false;
+        let isReactive = false;
         for (const child of path.node.children) {
             const {type} = child;
             if (type === "CallExpression") {
-                isReactive ||= isReactiveCallExpression(child);
                 children.push(child);
             } else if (type === "JSXText") {
                 const lines = child.value.split("\n");
@@ -179,7 +175,7 @@ const nodeVisitor = {
             } else if (type === "JSXExpressionContainer") {
                 if (child.expression.type !== "JSXEmptyExpression") {
                     isReactive ||= child.isReactive;
-                    children.push(child.expression);
+                    children.push(isIntrinsic && child.isReactive ? arrowFunctionExpression([], child.expression) : child.expression);
                 }
             } else if (type === "JSXSpreadChild") {
                 isReactive ||= child.isReactive;
@@ -190,9 +186,8 @@ const nodeVisitor = {
             const value = children.length === 1 && children[0].type !== "SpreadElement"
                 ? children[0]
                 : arrayExpression(children);
-            if (isReactive) {
-                props.push(reactiveProperty(isIntrinsic, CHILDREN, value));
-                transpiled.isReactive = true;
+            if (isReactive && !isIntrinsic) {
+                props.push(reactiveProperty(false, CHILDREN, value));
             } else {
                 props.push(objectProperty(CHILDREN, value));
             }
@@ -202,18 +197,9 @@ const nodeVisitor = {
     }
 };
 
-function isReactiveCallExpression(node) {
-    const callee = node.callee.name;
-    return callee !== "jsx" && callee !== "signal" && callee !== "computed";
-}
-
 const skipSubTree = path => path.skip();
 
 const jsxExpressionVisitor = {
-    CallExpression(path, rootNode) {
-        rootNode.isReactive = isReactiveCallExpression(path.node);
-        path.stop();
-    },
     MemberExpression(path, rootNode) {
         rootNode.isReactive = true;
         path.stop();

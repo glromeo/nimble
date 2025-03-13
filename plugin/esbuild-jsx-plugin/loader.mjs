@@ -2,7 +2,7 @@ import {transformSync} from "esbuild";
 import {transpiler} from "./lib/index.js";
 import {fileURLToPath} from "node:url";
 import {extname} from "node:path";
-import {existsSync, readFileSync} from "node:fs";
+import {readFileSync} from "node:fs";
 
 function transpile(source, sourcefile) {
     const {code, map} = transpiler(source, {

@@ -8,9 +8,6 @@ esbuild.build({
     format: 'esm',
     sourcemap: false,
     minify: false,
-    external: [
-        "@nimble/index.mjs"
-    ],
     define: {
         "process.env.DEBUG": "false",
         "process.env.FORCE_COLOR": '"false"',

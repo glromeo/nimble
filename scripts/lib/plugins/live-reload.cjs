@@ -1,6 +1,7 @@
 const {clients} = require("../middleware/live-reload.cjs");
 
 /**
+ * Live Reload Plugin
  *
  * @type {import("esbuild").Plugin}
  */

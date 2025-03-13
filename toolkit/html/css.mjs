@@ -1,4 +1,4 @@
-import {RenderEffect, Signal} from "../signals/signals.mjs";
+import {Signal} from "../signals/signals.mjs";
 
 function setProperty(style, property, value) {
     const type = typeof value;
@@ -123,7 +123,7 @@ export function css(strings) {
         }
         const style = rule.style;
         if (value instanceof Signal) {
-            styleSheet.nextEffect = new StyleSheetEffect(value,
+            value.sub(
                 property ? setProperty.bind(styleSheet, style, property) : setStyle.bind(styleSheet, style),
                 styleSheet.nextEffect
             );
@@ -140,11 +140,4 @@ export function css(strings) {
 
 export function adoptStyle(styleSheet) {
     document.adoptedStyleSheets.push(styleSheet);
-}
-
-class StyleSheetEffect extends RenderEffect {
-    constructor(signal, refresh, nextEffect) {
-        super(signal, refresh);
-        this.nextUpdate = nextEffect;
-    }
 }

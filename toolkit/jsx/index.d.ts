@@ -1,4 +1,4 @@
-import {JSX} from "../index";
+import {JSX} from "../types/jsx";
 
 export function createDirective<D extends JSX.Directives>(
     name: keyof D,

@@ -1,4 +1,4 @@
-import {batch, Computed, contextScope, Signal, Subscriber} from "../signals/signals.mjs";
+import {Computed, contextScope, currentContext, observe, Signal, Observer} from "../signals/signals.mjs";
 import {directives} from "./directives.mjs";
 
 export const SVG_NAMESPACE_URI = "http://www.w3.org/2000/svg";
@@ -152,6 +152,10 @@ export class PersistentFragment extends DocumentFragment {
         }
         return nodes ?? this.placeholder.previousSibling;
     }
+
+    updateFragment(children) {
+        setChildren.call(this, children);
+    }
 }
 
 /**
@@ -212,12 +216,15 @@ export function createElement(tag, props, key) {
                 }
                 setChildren.call(node, value);
             } else {
-                setProperty.call(node, name, value);
+                setProperty(node, name, value);
             }
         }
     }
 
-    if (key !== null) node.__props__ = props;
+    if (key !== null) {
+        node.__props__ = props;
+        node["#key"] = key;
+    }
 
     return node;
 }
@@ -277,7 +284,7 @@ function updateElement(props) {
         if (name === "children") {
             setChildren.call(this, value);
         } else {
-            setProperty.call(this, name, value);
+            setProperty(this, name, value);
         }
     }
     this.__props__ = props;
@@ -299,7 +306,7 @@ const unmountNodes = () => {
 export function removeNode(child) {
     if (child.__effects__) {
         if (pendingUnmount === null) {
-            requestAnimationFrame(unmountNodes);
+            unmountNodes();
         }
         child.nextUnmount = pendingUnmount;
         pendingUnmount = child;
@@ -328,54 +335,6 @@ Object.defineProperty(window, "unMount", {enumerable: true, value: unMount});
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-let pendingUpdate = null;
-
-const flushCallback = () => {
-    if (pendingUnmount !== null) {
-        unmountNodes();
-    }
-    while (pendingUpdate !== null) {
-        scope = pendingUpdate.signal.scope;
-        pendingUpdate.refresh(pendingUpdate.signal.peek());
-        pendingUpdate.done();
-        pendingUpdate = pendingUpdate.nextUpdate;
-    }
-};
-
-const flushUpdates = () => {
-    try {
-        batch(flushCallback);
-    } catch (e) {
-        console.error("failed to flush updates: " + pendingUpdate?.toString(), e);
-    } finally {
-        scope = null;
-    }
-};
-
-export class RenderEffect extends Subscriber {
-
-    constructor(signal, refresh) {
-        super(signal);
-        this.nextUpdate = null;
-        if (refresh) {
-            this.refresh = refresh;
-        }
-    }
-
-    refresh(value) {
-        throw new Error("refresh not implemented");
-    }
-
-    update() {
-        if (super.update()) {
-            if ((this.nextUpdate = pendingUpdate) === null) {
-                requestAnimationFrame(flushUpdates);
-            }
-            pendingUpdate = this;
-        }
-    }
-}
-
 /**
  *
  * @param node
@@ -385,12 +344,12 @@ export class RenderEffect extends Subscriber {
  */
 export function propertyEffect(node, name, signal) {
     const value = signal.peek();
-    if (signal.isLinked) {
-        (node.__effects__ ??= {})[name] = new RenderEffect(
+    if (signal.sources) {
+        (node.__effects__ ??= {})[name] = new observe(
             signal,
             name === "children"
                 ? setChildren.bind(node)
-                : setProperty.bind(node, name)
+                : setProperty.bind(null, node, name)
         );
     }
     return value;
@@ -401,7 +360,7 @@ export function propertyEffect(node, name, signal) {
  * @param name {string}
  * @param value {any}
  */
-export function setProperty(name, value) {
+export function setProperty(node, name, value) {
     const type = typeof value;
     if (name === "class") {
         if (value !== null && type === "object") {
@@ -415,26 +374,36 @@ export function setProperty(name, value) {
                     if (value[key]) parts.push(key);
                 }
             }
-            if (this.namespaceURI === xhtml) {
-                this.className = parts.join(" ");
+            if (node.namespaceURI === xhtml) {
+                node.className = parts.join(" ");
             } else {
-                this.setAttribute("class", parts.join(" "));
+                node.setAttribute("class", parts.join(" "));
             }
             return;
         }
     } else if (name === "style") {
         if (value !== null && type === "object") {
-            this.style = null;
-            Object.assign(this.style, value);
+            node.style = null;
+            Object.assign(node.style, value);
             return;
         }
+    } else if (name === "children") {
+        if (value instanceof Array) {
+            const xmlns = node.namespaceURI;
+            for (const child of value) {
+                node.appendChild(createNode(xmlns, child));
+            }
+            return;
+        }
+        node.appendChild(createNode(node.namespaceURI, value));
+        return;
     }
     if (value === true) {
-        this.setAttribute(name, "");
+        node.setAttribute(name, "");
     } else if (type === "string" || type === "number" || type === "bigint" || value) {
-        this.setAttribute(name, value);
+        node.setAttribute(name, value);
     } else {
-        this.removeAttribute(name);
+        node.removeAttribute(name);
     }
 }
 
@@ -517,64 +486,57 @@ export function setChildren(value) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-export class NodeEffect extends RenderEffect {
-
-    constructor(signal, node) {
-        super(signal);
-        this.node = node;
-    }
-
-    refresh(value) {
-        const type = typeof value;
-        if (type === "string" || type === "number" || type === "bigint") {
-            if (this.node.nodeType === Node.TEXT_NODE) {
-                this.node.data = value;
-            } else {
-                this.replaceNode(new Text(value));
-            }
+function replaceNodeWith(value) {
+    const type = typeof value;
+    const node = this.node;
+    if (type === "string" || type === "number" || type === "bigint") {
+        if (node.nodeType === Node.TEXT_NODE) {
+            node.data = value;
+        } else {
+            replaceNode(this, new Text(value));
+        }
+        return;
+    } else if (type === "object") {
+        if (value instanceof Node) {
+            valure.reclaim?.();
+            replaceNode(this, value);
             return;
-        } else if (type === "object") {
-            if (value instanceof Node) {
-                valure.reclaim?.();
-                this.replaceNode(value);
+        }
+        if (value !== null) {
+            const namespaceURI = node.namespaceURI;
+            if (value.forEach) {
+                if (node instanceof PersistentFragment) {
+                    node.updateFragment(value);
+                    return;
+                }
+                replaceNode(this, new PersistentFragment(namespaceURI, value));
                 return;
             }
-            if (value !== null) {
-                const namespaceURI = this.node.namespaceURI;
-                if (value.forEach) {
-                    if (this.node instanceof PersistentFragment) {
-                        this.node.updateFragment(value);
-                        return;
-                    }
-                    this.node.replaceWith(this.node = new PersistentFragment(namespaceURI, value));
-                    return;
-                }
-                if (value.tag) {
-                    this.replaceNode(jsx(value.tag, {
-                        xmlns: value.xmlns ?? namespaceURI,
-                        children: value.children,
-                        ...value.attrs
-                    }, value.key));
-                    return;
-                }
-                value = value.toString();
+            if (value.tag) {
+                replaceNode(this, jsx(value.tag, {
+                    xmlns: value.xmlns ?? namespaceURI,
+                    children: value.children,
+                    ...value.attrs
+                }, value.key));
+                return;
             }
-        } else if (type === "function") {
-            value = `[function ${value.name}]`;
-        } else if (type === "symbol") {
             value = value.toString();
         }
-        if (this.node.nodeType === Node.COMMENT_NODE) {
-            this.node.data = value;
-        } else {
-            this.replaceNode(new Comment(value));
-        }
+    } else if (type === "function") {
+        value = `[function ${value.name}]`;
+    } else if (type === "symbol") {
+        value = value.toString();
     }
+    if (node.nodeType === Node.COMMENT_NODE) {
+        node.data = value;
+    } else {
+        replaceNode(this, new Comment(value));
+    }
+}
 
-    replaceNode(node) {
-        node.__effects__ = this.node.__effects__;
-        this.node.replaceWith(this.node = node);
-    }
+function replaceNode(ref, replacement) {
+    replacement.__effects__ = ref.node.__effects__;
+    ref.node.replaceWith(ref.node = replacement);
 }
 
 /**
@@ -593,11 +555,13 @@ export function createNode(namespaceURI, value) {
     }
     if (value instanceof Signal) {
         let node = value.peek();
-        if (value.isLinked) {
-            if (!(node instanceof Node)) {
+        if (value.sources) {
+            if (node instanceof Node) {
+                node.reclaim?.();
+            } else {
                 node = createUnboundNode(namespaceURI, node);
             }
-            node.__effects__ = {self: new NodeEffect(value, node)};
+            node.__effects__ = {self: observe(value, replaceNodeWith.bind({node}))};
             return node;
         } else {
             value = node;
@@ -637,69 +601,81 @@ function createUnboundNode(namespaceURI, value) {
  * Copyright © 2020-today, Andrea Giammarchi, @WebReflection
  *
  * @param parent
- * @param next
- * @param prev
+ * @param b
+ * @param a
  * @param live
  * @returns {*}
  */
-export function updateNodes(owner, next, prev, live) {
-    let nodes = new Array(next.length);
-    let prevStart = 0;
-    let prevEnd = prev.length;
-    let nextStart = 0;
-    let nextEnd = next.length;
-    let map = null;
+export function updateNodes(owner, b, a, live) {
+    let nodes = new Array(b.length);
+    let aStart = 0;
+    let aEnd = a.length;
+    let bStart = 0;
+    let bEnd = b.length;
+    let map = undefined;
     let nsURI = owner.namespaceURI;
 
     const parent = owner instanceof PersistentFragment ? owner.placeholder.parentNode : owner;
 
-    while (prevStart < prevEnd && nextStart < nextEnd) {
-        if (nodes[nextStart]) {
-            const before = live[nextStart - 1].nextSibling;
-            insertBefore(parent, nodes[nextStart++], before);
-        } else if (prev[prevStart] === next[nextStart]) {
-            nodes[nextStart++] = live[prevStart++];
-        } else if (prev[prevEnd - 1] === next[nextEnd - 1]) {
-            nodes[--nextEnd] = live[--prevEnd];
-        } else if (prev[prevStart] === next[nextEnd - 1] && prev[prevEnd - 1] === next[nextStart]) {
-            const before = live[--prevEnd].nextSibling;
-            nodes[nextStart++] = insertBefore(parent, live[prevEnd], live[prevStart].nextSibling);
-            nodes[--nextEnd] = insertBefore(parent, live[prevStart++], before);
+    while (aStart < aEnd && bStart < bEnd) {
+        if (a[aStart] === b[bStart]) {
+            nodes[bStart++] = live[aStart++];
+        } else if (a[aEnd - 1] === b[bEnd - 1]) {
+            nodes[--bEnd] = live[--aEnd];
+        } else if (a[aStart] === b[bEnd - 1] && a[aEnd - 1] === b[bStart]) {
+            const before = live[--aEnd].nextSibling;
+            nodes[bStart++] = insertBefore(parent, live[aEnd], live[aStart].nextSibling);
+            nodes[--bEnd] = insertBefore(parent, live[aStart++], before);
         } else {
-            if (map === null) {
+            if (map === undefined) {
                 map = new Map();
-                let i = nextStart;
-                while (i < nextEnd) map.set(next[i], i++);
+                let i = bStart;
+                while (i < bEnd) map.set(b[i], i++);
             }
-            const index = map.get(prev[prevStart]);
+            const index = map.get(a[aStart]);
             if (index !== undefined) {
-                if (nextStart < index && index < nextEnd) {
-                    nodes[index] = live[prevStart++];
+                if (bStart < index && index < bEnd) {
+                    let n = index + 1;
+                    let i = aStart;
+                    while (++i < aEnd && n < bEnd && a[i] === b[n]) n++;
+                    if (n - index > index - bStart) {
+                        const before = live[aStart];
+                        while (bStart < index) {
+                            nodes[bStart] = insertBefore(parent, createNode(nsURI, b[bStart++]), before);
+                        }
+                    } else {
+                        nodes[bStart] = insertBefore(parent, createNode(nsURI, b[bStart++]), live[aStart]);
+                        removeNode(live[aStart++]);
+                    }
                 } else {
-                    prevStart++;
+                    aStart++;
                 }
             } else {
-                removeNode(live[prevStart++]);
+                removeNode(live[aStart++]);
             }
         }
     }
 
-    if (nextStart < nextEnd) {
-        const before = nextEnd < next.length
-            ? nextStart
-                ? nodes[nextStart - 1].nextSibling
-                : nodes[nextEnd].firstNode ?? nodes[nextEnd]
+    if (bStart < bEnd) {
+        const before = bEnd < b.length
+            ? bStart > 0
+                ? nodes[bStart - 1].nextSibling
+                : nodes[bEnd].firstNode ?? nodes[bEnd]
             : owner.placeholder ?? null;
         do {
-            nodes[nextStart] = insertBefore(parent, nodes[nextStart] ?? createNode(nsURI, next[nextStart]), before);
-        } while (++nextStart < nextEnd);
+            nodes[bStart] = insertBefore(parent, createNode(nsURI, b[bStart++]), before);
+        } while (bStart < bEnd);
     }
 
-    while (prevStart < prevEnd) {
-        if (map === null || !map.has(prev[prevStart])) {
-            live[prevStart].remove();
+    while (aStart < aEnd) {
+        if (map === undefined || !map.has(a[aStart])) {
+            removeNode(live[aStart]);
         }
-        prevStart++;
+        aStart++;
+    }
+
+    if (nodes.some(n => !n.parentNode)) {
+        // debugger;
     }
 
     return nodes;
@@ -715,10 +691,10 @@ export function checkJsx() {
     if (namespaceURI !== XHTML_NAMESPACE_URI) {
         throw new Error(`unexpected namespaceURI: ${XHTML_NAMESPACE_URI}`);
     }
-    if (pendingUnmount !== null) {
-        throw new Error(`pending nextUnmount: ${pendingUnmount.toString()}`);
-    }
-    if (pendingUpdate !== null) {
-        throw new Error(`pending nextUpdate: ${pendingUpdate.toString()}`);
-    }
+    // if (pendingUnmount !== null) {
+    //     throw new Error(`pending nextUnmount: ${pendingUnmount.toString()}`);
+    // }
+    // if (pendingUpdate !== null) {
+    //     throw new Error(`pending nextUpdate: ${pendingUpdate.toString()}`);
+    // }
 }

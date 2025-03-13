@@ -6,7 +6,9 @@
   "workspaces": [
     "apps/event-planner",
     "docs",
+    "demo/sierpinski-triangle",
     "plugin/esbuild-jsx-plugin",
+    "plugin/esbuild-postcss-plugin",
     "sample",
     "scripts",
     "stories",

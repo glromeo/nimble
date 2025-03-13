@@ -3,6 +3,6 @@
  */
 module.exports = {
     plugins: [
-        require("esbuild-sass-plugin").sassPlugin()
+        require("esbuild-sass-plugin").sassPlugin({filter: /\.scss$/})
     ]
 }

@@ -16,12 +16,6 @@ module.exports.plugin = {
         build.onEnd(({errors, warnings}) => {
             console.timeEnd(BUILD_MSG);
             console.log(`with ${errors.length} errors and ${warnings.length} warnings`);
-            errors?.forEach(({id, location: {column, line}, text}) => {
-                console.error(id, `at (${line}:${column})`, text);
-            });
-            warnings?.forEach(({id, location: {column, line}, text}) => {
-                console.info(id, `at (${line}:${column})`, text);
-            });
         });
     }
 };

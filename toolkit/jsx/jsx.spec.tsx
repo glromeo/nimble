@@ -1,9 +1,9 @@
-import {expect} from "chai";
+import {expect, assert} from "chai";
 import type Sinon from "sinon";
 import sinon from "sinon";
 import {Fragment, PersistentFragment, checkJsx} from "./jsx.mjs";
 import {createDirective} from "./directives.mjs";
-import {computed, signal, tracked, currentContext, Effect} from "../signals/signals.mjs";
+import {computed, signal, tracked, currentContext, contextScope, Effect} from "../signals/signals.mjs";
 import {vsync} from "@nimble/testing";
 
 declare module "@nimble/toolkit" {
@@ -17,13 +17,13 @@ declare module "@nimble/toolkit" {
 suite("Nimble JSX", ({before}) => {
 
     before.each(async () => {
-        if (currentContext() !== null) {
-            fail("invalid signals state: " + context);
+        if (currentContext() != undefined) {
+            assert.fail("invalid signals state: " + currentContext());
         }
         checkJsx();
     })
 
-    test(`You can use JSX syntax to create DOM Elements and Text Nodes`, () => {
+    test(`jsx syntax creates DOM elements and Text nodes`, () => {
 
         expect(<h1>Hello World</h1>)
             .to.be.instanceof(HTMLHeadingElement)
@@ -40,7 +40,7 @@ suite("Nimble JSX", ({before}) => {
             .and.have.property("data", "paragraph");
     });
 
-    test("You can create fragments <>...</> and they are 'persistent'", () => {
+    test("fragments <>...</> are 'persistent'", () => {
 
         expect(<></>)
             .to.be.instanceof(DocumentFragment)
@@ -54,23 +54,10 @@ suite("Nimble JSX", ({before}) => {
             .to.have.text("")
             .to.equal("<!---->");
 
-        expect(<p><></>
-        </p>).to.equal("<p><!----></p>");
+        expect(<p><></></p>).to.equal("<p><!----></p>");
         expect(<><p></p></>).to.equal("<p></p><!---->");
-        expect(<>
-            <p><></>
-            </p>
-        </>).to.equal("<p><!----></p><!---->");
-        expect(<>b<>l<p>m</p>r</>
-            a</>).to.equal("bl<p>m</p>r<!---->a<!---->");
-    });
-
-    test("persistent fragment in efficient, allocating memory only when needed", () => {
-        expect(<></>).not.to.have.property("__value__");
-        expect(<></>).not.to.have.property("__nodes__");
-        expect(<>hello</>).to.have.property("__value__", "hello");
-        expect(<>hello</>).to.have.property("__nodes__");
-        expect((<>hello{"world"}</> as PersistentFragment).__nodes__.map(n => n.data)).to.have.members(["hello", "world"]);
+        expect(<><p><></></p></>).to.equal("<p><!----></p><!---->");
+        expect(<>b<>l<p>m</p>r</>a</>).to.equal("bl<p>m</p>r<!---->a<!---->");
     });
 
     test("<> and <Fragment> are equivalent", () => {
@@ -79,11 +66,12 @@ suite("Nimble JSX", ({before}) => {
         expect(<Fragment></Fragment>).eq("<!---->");
     });
 
-    test("fragments don't introduce further elements", () => tracked({}, function (this:any) {
-        expect(<div key="C"><>Hello</></div>).eq("<div>Hello<!----></div>");
-        expect(this.scope.get("C").children).to.have.length(0);
-        expect(this.scope.get("C").childNodes).to.have.length(2);
-    }));
+    test("fragments don't introduce further elements", () => {
+        const wrapper = <div key="C"><>Hello</></div> as HTMLDivElement;
+        expect(wrapper).eq("<div>Hello<!----></div>");
+        expect(wrapper.children).to.have.length(0);
+        expect(wrapper.childNodes).to.have.length(2);
+    });
 
     test("jsx expression let you move fragments from one element to another", async () => {
         let f = <><a></a>B{"C"}{<br/>}</> as DocumentFragment;
@@ -95,13 +83,14 @@ suite("Nimble JSX", ({before}) => {
     });
 
     test("fragments can have keys", async () => {
-        const scope = tracked({}, function (this:any) {
+        let scope;
+        tracked({}, function () {
+            scope = contextScope();
             let f;
             expect(<p key="P">{f = <Fragment key="F"></Fragment>}</p>).eq("<p><!----></p>");
-            expect(this.scope.get("P")).not.to.be.undefined // P ends up in global scope here
-            expect(this.scope.get("F")).not.to.be.undefined; // F is within the scope of P's children
+            expect(scope.get("P")).not.to.be.undefined // P ends up in global scope here
+            expect(scope.get("F")).not.to.be.undefined; // F is within the scope of P's children
             f.setProperties({children: "Hello"});
-            return this.scope;
         })
         await vsync();
         expect(scope.get("P")).eq("<p>Hello<!----></p>");
@@ -296,11 +285,30 @@ suite("Nimble JSX", ({before}) => {
         items.set(sn);
         await vsync();
         expect(node.firstChild).have.text("Annabela");
-        let expected = node.childNodes[2];
+        let zero = node.childNodes[0];
+        let first = node.childNodes[1];
+        let second = node.childNodes[2];
+        let third = node.childNodes[3];
         sn = [...sn.slice(1), sn[0]];
         items.set(sn);
         await vsync();
-        expect(Object.is(expected, node.childNodes[1])).to.be.true;
+        expect(Object.is(first, node.childNodes[0])).to.be.true;
+        expect(Object.is(second, node.childNodes[1])).to.be.true;
+        sn = [...sn.slice(1), sn[0]];
+        items.set(sn);
+        await vsync();
+        expect(Object.is(second, node.childNodes[0])).to.be.true;
+        expect(Object.is(third, node.childNodes[1])).to.be.true;
+        sn = [sn[sn.length-1], ...sn.slice(0, -1)];
+        items.set(sn);
+        await vsync();
+        expect(Object.is(first, node.childNodes[0])).to.be.true;
+        expect(Object.is(second, node.childNodes[1])).to.be.true;
+        sn = [sn[sn.length-1], ...sn.slice(0, -1)];
+        items.set(sn);
+        await vsync();
+        expect(Object.is(zero, node.childNodes[0])).to.be.true;
+        expect(Object.is(first, node.childNodes[1])).to.be.true;
     });
 
     test("signal updates", async () => {

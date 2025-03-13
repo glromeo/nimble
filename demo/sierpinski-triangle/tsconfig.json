@@ -23,7 +23,7 @@
     "sourceMap": true,
     "strict": true,
     "rootDir": ".",
-    "baseUrl": ".",
+    "baseUrl": "..",
     "paths": {
       "nimble": [
         "../node_modules/@nimble/toolkit"

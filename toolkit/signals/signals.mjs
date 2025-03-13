@@ -1,468 +1,601 @@
-// Flags for Computed and Effect.
-export const UNDEFINED = 1 << 0;
-export const NOTIFIED = 1 << 1;
-export const UPDATING = 1 << 2;
-export const ERROR = 1 << 3;
-export const STALE = NOTIFIED | UNDEFINED;
-export const UPDATED = ~(UPDATING | UNDEFINED);
+const RUNNING = 1 << 0;
+const NOTIFIED = 1 << 1;
+const OUTDATED = 1 << 2;
+const DISPOSED = 1 << 3;
+const ERRORED = 1 << 4;
+const TRACKING = 1 << 5;
 
-let context = null;
-let pending = null;
-let recycling = null;
-
-export function currentContext() {
-    return context;
+function startBatch() {
+    batchDepth++;
 }
 
-export function contextScope() {
-    if (context === BATCH) {
-        return null;
+function endBatch() {
+    if (batchDepth > 1) {
+        batchDepth--;
+        return;
     }
-    return context.scope ??= new Map();
-}
+    let error = undefined;
+    while (batchedEffect !== undefined) {
+        let effect = batchedEffect;
+        batchedEffect = undefined;
+        batchIteration++;
+        while (effect !== undefined) {
+            const next = effect.nextEffect;
+            effect.nextEffect = undefined;
+            effect.flags &= ~NOTIFIED;
 
-export const signal = init => new Signal(init);
-
-export const computed = callback => new Computed(callback);
-
-export function effect(callback) {
-    const e = new Effect(callback);
-    try {
-        e.update();
-    } catch (err) {
-        e.dispose();
-        throw err;
+            if (!(effect.flags & DISPOSED) && needsToRecompute(effect)) {
+                try {
+                    effect.invoke();
+                } catch (err) {
+                    error ??= err;
+                }
+            }
+            effect = next;
+        }
     }
-    return e.dispose.bind(e);
+    batchIteration = 0;
+    batchDepth--;
+    if (error !== undefined) {
+        throw error;
+    }
 }
 
-const BATCH = Symbol();
-
-export function batch(callback) {
-    const parent = context;
-    context = BATCH;
+function batch(callback) {
+    if (batchDepth > 0) {
+        return callback();
+    }
+    startBatch();
     try {
         return callback();
     } finally {
-        if ((context = parent) === null) commit();
+        endBatch();
     }
 }
 
-export function untracked(callback) {
-    const parent = context;
-    context = BATCH;
+let evalContext = undefined;
+
+function untracked(callback) {
+    const prevContext = evalContext;
+    evalContext = undefined;
     try {
         return callback();
     } finally {
-        context = parent;
+        evalContext = prevContext;
     }
 }
 
-export function tracked(ctx, callback) {
-    const parent = context;
-    context = ctx;
-    try {
-        return callback.call(ctx);
-    } finally {
-        if ((context = parent) === null) commit();
-    }
-}
+let batchedEffect = undefined;
+let batchDepth = 0;
+let batchIteration = 0;
+
+let globalVersion = 0;
 
 function link(target, source) {
-    let t = target;
-    while (t.nextSource) {
-        t = t.nextSource;
-        if (t.sourceNode === source) return;
+    if (target === undefined) {
+        return undefined
     }
-    if (recycling) {
-        let recycled = recycling;
-        recycling = recycled.nextTarget;
-        recycled.version = source.version;
-        recycled.sourceNode = source;
-        recycled.nextSource = null;
-        recycled.targetNode = target;
-        recycled.nextTarget = source.nextTarget;
-        t.nextSource = source.nextTarget = recycled;
-    } else {
-        t.nextSource = source.nextTarget = {
-            version: source.version,
-            sourceNode: source,
-            nextSource: null,
-            targetNode: target,
-            nextTarget: source.nextTarget
+    let node = source.node;
+    if (node === undefined || node.target !== target) {
+        node = {
+            version: 0,
+            source: source,
+            prevSource: target.sources,
+            nextSource: undefined,
+            target: target,
+            prevTarget: undefined,
+            nextTarget: undefined,
+            rollbackNode: node,
         };
+        if (target.sources !== undefined) {
+            target.sources.nextSource = node;
+        }
+        target.sources = node;
+        source.node = node;
+        if (target.flags & TRACKING) {
+            source.subscribe(node);
+        }
+        return node;
+    } else if (node.version === -1) {
+        node.version = 0;
+        if (node.nextSource !== undefined) {
+            node.nextSource.prevSource = node.prevSource;
+
+            if (node.prevSource !== undefined) {
+                node.prevSource.nextSource = node.nextSource;
+            }
+
+            node.prevSource = target.sources;
+            node.nextSource = undefined;
+
+            target.sources.nextSource = node;
+            target.sources = node;
+        }
+        return node;
     }
+    return undefined;
 }
 
-const unlink = (target, force) => {
-    let s = target;
-    while ((s = s.nextSource)) {
-        for (let sn = s.sourceNode, nt = sn.nextTarget; nt; nt = (sn = nt).nextTarget) {
-            if (nt.targetNode === target) {
-                if (force) {
-                    (sn.nextTarget = nt.nextTarget) || unlink(sn, force);
-                } else {
-                    sn.nextTarget = nt.nextTarget;
-                    nt.nextTarget = recycling;
-                    recycling = nt;
-                }
-                break;
-            }
-        }
-    }
-    target.nextSource = null;
-};
+class Signal {
 
-const commit = () => {
-    if (pending) {
-        context = BATCH;
-        let effect;
-        try {
-            do {
-                effect = pending;
-                pending = effect.nextTarget;
-                effect.nextTarget = null;
-                effect.update();
-            } while (pending);
-        } catch (err) {
-            while (pending) try {
-                effect = pending;
-                pending = effect.nextTarget;
-                effect.nextTarget = null;
-                effect.update();
-            } catch (ignored) {
-            }
-            throw err;
-        } finally {
-            context = null;
-        }
-    }
-    while (recycling) {
-        if (!recycling.nextTarget) {
-            unlink(recycling, true);
-        }
-        recycling = recycling.nextTarget;
-    }
-};
-
-export class Signal {
-
-    constructor(init) {
+    constructor(value) {
+        this.__value__ = value;
         this.version = 0;
-        this.__value__ = init;
-        this.nextTarget = null;
+        this.node = undefined;
+        this.targets = undefined;
     }
 
-    as(name) {
-        this.name = name;
-        return this;
-    }
+    refresh() {
+        return true;
+    };
+
+    subscribe(node) {
+        if (this.targets !== node && node.prevTarget === undefined) {
+            node.nextTarget = this.targets;
+            if (this.targets !== undefined) {
+                this.targets.prevTarget = node;
+            }
+            this.targets = node;
+        }
+    };
+
+    unsubscribe(node) {
+        if (this.targets !== undefined) {
+            const prev = node.prevTarget;
+            const next = node.nextTarget;
+            if (prev !== undefined) {
+                prev.nextTarget = next;
+                node.prevTarget = undefined;
+            }
+            if (next !== undefined) {
+                next.prevTarget = prev;
+                node.nextTarget = undefined;
+            }
+            if (node === this.targets) {
+                this.targets = next;
+            }
+        }
+    };
+
+    sub(callback) {
+        return effect(() => {
+            const value = this.get();
+            const prevContext = evalContext;
+            evalContext = undefined;
+            try {
+                callback(value);
+            } finally {
+                evalContext = prevContext;
+            }
+        });
+    };
+
+    valueOf() {
+        return this.get();
+    };
+
+    toString() {
+        return this.get() + "";
+    };
+
+    toJSON() {
+        return this.get();
+    };
+
+    peek() {
+        const prevContext = evalContext;
+        evalContext = undefined;
+        try {
+            return this.get();
+        } finally {
+            evalContext = prevContext;
+        }
+    };
 
     get() {
-        if (context && context !== BATCH) {
-            link(context, this);
+        const node = link(evalContext, this);
+        if (node !== undefined) {
+            node.version = this.version;
         }
         return this.__value__;
     }
 
     set(value) {
-        if (!Object.is(this.__value__, value)) {
-            ++this.version;
+        if (value !== this.__value__) {
+            if (batchIteration > 100) {
+                throw new Error("Cycle detected");
+            }
             this.__value__ = value;
-            this.notify();
-            if (context === null) commit();
-        }
-    }
-
-    peek() {
-        return this.__value__;
-    }
-
-    get isLinked() {
-        return true;
-    }
-
-    is(value) {
-        return Object.is(this.__value__, value);
-    }
-
-    notify(state = NOTIFIED) {
-        let t = this.nextTarget;
-        while (t) {
-            let n = t.targetNode;
-            if (!(n.state & NOTIFIED)) {
-                n.state |= state;
-                n.notify(state);
-            }
-            t = t.nextTarget;
-        }
-    }
-
-    sub(fn) {
-        // TODO: refactor this to use Subscriber
-        return effect(() => {
-            const value = this.get();
-            const parent = context;
-            context = null;
+            this.version++;
+            globalVersion++;
+            startBatch();
             try {
-                fn(value);
+                for (let node = this.targets; node !== undefined; node = node.nextTarget) {
+                    node.target.notify();
+                }
             } finally {
-                context = parent;
+                endBatch();
             }
-        });
-    }
-
-    toString() {
-        return this.__value__ + "";
-    }
-
-    toJSON() {
-        return this.__value__;
-    }
-
-    valueOf() {
-        return this.__value__;
+        }
     }
 }
 
 Object.defineProperty(Signal.prototype, "value", {
-    enumerable: true,
-    configurable: false,
     get: Signal.prototype.get,
     set: Signal.prototype.set
 });
 
-export const findChanged = target => {
-    let s = target.nextSource;
-    while (s) {
-        let n = s.sourceNode;
-        if (n.state & NOTIFIED && n.update() || s.version < n.version) {
-            return s;
+function signal(value) {
+    return new Signal(value);
+}
+
+function needsToRecompute(target) {
+    for (let node = target.sources; node !== undefined; node = node.nextSource) {
+        if (node.source.version !== node.version || !node.source.refresh() || node.source.version !== node.version) {
+            return true;
         }
-        s = s.nextSource;
     }
-};
+    return false;
+}
 
-const isOutdated = source => {
-    return !source || source.version < source.sourceNode.version;
-};
+function prepareSources(target) {
+    for (let node = target.sources; node !== undefined; node = node.nextSource) {
+        const rollbackNode = node.source.node;
+        if (rollbackNode !== undefined) {
+            node.rollbackNode = rollbackNode;
+        }
+        node.source.node = node;
+        node.version = -1;
 
-export class Computed extends Signal {
+        if (node.nextSource === undefined) {
+            target.sources = node;
+            break;
+        }
+    }
+}
+
+function cleanupSources(target) {
+    let node = target.sources;
+    let head = undefined;
+
+    while (node !== undefined) {
+        const prev = node.prevSource;
+
+        if (node.version === -1) {
+            node.source.unsubscribe(node);
+            if (prev !== undefined) {
+                prev.nextSource = node.nextSource;
+            }
+            if (node.nextSource !== undefined) {
+                node.nextSource.prevSource = prev;
+            }
+        } else {
+            head = node;
+        }
+
+        node.source.node = node.rollbackNode;
+        if (node.rollbackNode !== undefined) {
+            node.rollbackNode = undefined;
+        }
+
+        node = prev;
+    }
+
+    target.sources = head;
+}
+
+class Computed extends Signal {
 
     constructor(callback) {
         super(undefined);
+
         this.callback = callback;
-        this.state = UNDEFINED;
-        this.nextSource = null;
+        this.sources = undefined;
+        this.globalVersion = globalVersion - 1;
+        this.flags = OUTDATED;
     }
 
-    reset(callback) {
-        this.callback = callback;
-        this.state = UNDEFINED;
-        return this.peek();
-    }
+    refresh() {
+        this.flags &= ~NOTIFIED;
 
-    rewire(callback) {
-        this.callback = typeof callback === "function" ? callback : () => callback;
-        this.state = UNDEFINED;
-        unlink(this, true);
-        this.notify(this.state = STALE);
-    }
+        if (this.flags & RUNNING) {
+            return false;
+        }
 
-    is(value) {
+        if (this.flags & OUTDATED) {
+            this.flags &= ~OUTDATED;
+        } else if (this.flags & TRACKING) {
+            return true;
+        }
+
+        if (this.globalVersion === globalVersion) {
+            return true;
+        }
+        this.globalVersion = globalVersion;
+
+        this.flags |= RUNNING;
+        if (this.version > 0 && !needsToRecompute(this)) {
+            this.flags &= ~RUNNING;
+            return true;
+        }
+
+        const prevContext = evalContext;
         try {
-            return Object.is(this.peek(), value);
-        } catch (e) {
-            return undefined;
+            prepareSources(this);
+            evalContext = this;
+            const value = this.callback();
+            if (this.flags & ERRORED || this.__value__ !== value || this.version === 0) {
+                this.__value__ = value;
+                this.flags &= ~ERRORED;
+                this.version++;
+            }
+        } catch (err) {
+            this.__value__ = err;
+            this.flags |= ERRORED;
+            this.version++;
         }
-    }
+        evalContext = prevContext;
+        cleanupSources(this);
+        this.flags &= ~RUNNING;
+        return true;
+    };
 
-    get value() {
-        if (context && context !== BATCH) {
-            link(context, this);
+    subscribe(node) {
+        if (this.targets === undefined) {
+            this.flags |= OUTDATED | TRACKING;
+
+            for (let node = this.sources; node !== undefined; node = node.nextSource) {
+                node.source.subscribe(node);
+            }
         }
-        return this.peek();
-    }
+        super.subscribe(node);
+    };
 
-    set value(value) {
-        throw new Error("Cannot write to a computed signal");
-    }
+    unsubscribe(node) {
+        if (this.targets !== undefined) {
+            super.unsubscribe(node);
+
+            if (this.targets === undefined) {
+                this.flags &= ~TRACKING;
+
+                for (let node = this.sources; node !== undefined; node = node.nextSource) {
+                    node.source.unsubscribe(node);
+                }
+            }
+        }
+    };
+
+    notify() {
+        if (this.flags & NOTIFIED) {
+            return;
+        }
+        this.flags |= OUTDATED | NOTIFIED;
+        for (let node = this.targets; node !== undefined; node = node.nextTarget) {
+            node.target.notify();
+        }
+    };
 
     get() {
-        if (context && context !== BATCH) {
-            link(context, this);
+        if (this.flags & RUNNING) {
+            throw new Error("Cycle detected");
         }
-        return this.peek();
-    }
-
-    set() {
-        throw new Error("Cannot write to a computed signal");
-    }
-
-    peek() {
-        if (this.state & STALE) {
-            this.update();
+        const node = link(evalContext, this);
+        this.refresh();
+        if (node !== undefined) {
+            node.version = this.version;
         }
-        if (this.state & ERROR) {
+        if (this.flags & ERRORED) {
             throw this.__value__;
         }
         return this.__value__;
     }
+}
 
-    get isLinked() {
-        return this.nextSource !== null;
-    }
+Object.defineProperty(Computed.prototype, "value", {
+    get: Computed.prototype.get
+});
 
-    update() {
-        this.state &= ~NOTIFIED;
-        if (this.state & UPDATING || this.nextSource && !(this.state & UNDEFINED || findChanged(this))) {
-            return false;
-        }
-        const parent = context;
-        context = this;
+function computed(callback) {
+    return new Computed(callback);
+}
+
+function cleanupEffect(effect) {
+    const cleanup = effect.cleanup;
+    effect.cleanup = undefined;
+    if (typeof cleanup === "function") {
+        startBatch();
+        const prevContext = evalContext;
+        evalContext = undefined;
         try {
-            this.state |= UPDATING;
-            unlink(this, false);
-            let value = this.__value__;
-            this.__value__ = this.callback();
-            this.state &= ~ERROR;
-            if (this.state & UNDEFINED) {
-                this.state &= ~UNDEFINED;
-            } else if (!Object.is(value, this.__value__)) {
-                ++this.version;
-                return true;
-            }
-            return false;
+            cleanup();
         } catch (err) {
-            this.state |= ERROR;
-            this.__value__ = err;
-            return true;
+            effect.flags &= ~RUNNING;
+            effect.flags |= DISPOSED;
+            disposeEffect(effect);
+            throw err;
         } finally {
-            if ((context = parent) === null) commit();
-            this.state &= UPDATED;
+            evalContext = prevContext;
+            endBatch();
         }
-    }
-
-    toString() {
-        return this.__value__ + "";
-    }
-
-    toJSON() {
-        return this.__value__;
-    }
-
-    valueOf() {
-        return this.__value__;
     }
 }
 
-export class Effect {
+function disposeEffect(effect) {
+    for (let node = effect.sources; node !== undefined; node = node.nextSource) {
+        node.source.unsubscribe(node);
+    }
+    effect.callback = undefined;
+    effect.sources = undefined;
+
+    cleanupEffect(effect);
+}
+
+function endEffect(prevContext) {
+    if (evalContext !== this) {
+        throw new Error("Out-of-order effect");
+    }
+    cleanupSources(this);
+    evalContext = prevContext;
+
+    this.flags &= ~RUNNING;
+    if (this.flags & DISPOSED) {
+        disposeEffect(this);
+    }
+    endBatch();
+}
+
+class Effect {
 
     constructor(callback) {
-        this.state = UNDEFINED;
         this.callback = callback;
         this.cleanup = undefined;
-        this.nextSource = null;
-        this.nextTarget = null;
+        this.sources = undefined;
+        this.nextEffect = undefined;
+        this.flags = TRACKING;
     }
 
-    update() {
-        this.state &= ~NOTIFIED;
-        if (this.cleanup) {
-            const parent = context;
-            context = BATCH;
-            try {
-                this.cleanup();
-            } catch (err) {
-                this.dispose();
-                throw err;
-            } finally {
-                this.cleanup = undefined;
-                context = parent;
-            }
-        }
-        if (!this.callback || this.state & UPDATING && !isOutdated(this.nextSource) || !(this.state & UNDEFINED || findChanged(this))) {
-            return;
-        }
-        const parent = context;
-        context = this;
+    invoke() {
+        const finish = this.start();
         try {
-            this.state |= UPDATING;
-            unlink(this, false);
-            this.cleanup = this.callback();
+            if (this.flags & DISPOSED) return;
+            if (this.callback === undefined) return;
+
+            const cleanup = this.callback();
+            if (typeof cleanup === "function") {
+                this.cleanup = cleanup;
+            }
         } finally {
-            if ((context = parent) === null) commit();
-            this.state &= UPDATED;
+            finish();
         }
-    }
+    };
+
+    start() {
+        if (this.flags & RUNNING) {
+            throw new Error("Cycle detected");
+        }
+        this.flags |= RUNNING;
+        this.flags &= ~DISPOSED;
+        cleanupEffect(this);
+        prepareSources(this);
+
+        startBatch();
+        const prevContext = evalContext;
+        evalContext = this;
+        return endEffect.bind(this, prevContext);
+    };
 
     notify() {
-        this.nextTarget = pending;
-        pending = this;
-    }
+        if (this.flags & NOTIFIED) {
+            return;
+        }
+        this.flags |= NOTIFIED;
+        this.nextEffect = batchedEffect;
+        batchedEffect = this;
+    };
 
     dispose() {
-        if (this.callback) {
-            this.callback = null;
-            unlink(this, true);
-            this.notify();
-            if (context === null) commit();
+        this.flags |= DISPOSED;
+        if (!(this.flags & RUNNING)) {
+            disposeEffect(this);
         }
+    };
+
+}
+
+function effect(callback) {
+    const effect = new Effect(callback);
+    try {
+        effect.invoke();
+    } catch (err) {
+        effect.dispose();
+        throw err;
+    }
+    return effect.dispose.bind(effect);
+}
+
+export {signal, computed, effect, batch, untracked, Signal, Computed, Effect};
+
+export function currentContext() {
+    return evalContext;
+}
+
+const scopes = new WeakMap();
+const globalScope = new Map();
+
+export function contextScope(context = evalContext) {
+    if (context === undefined) {
+        return globalScope;
+    }
+    let map = scopes.get(context);
+    if (map === undefined) {
+        scopes.set(context, map = new Map());
+    }
+    return map;
+}
+
+export function tracked(ctx, callback) {
+    const prevContext = evalContext;
+    evalContext = ctx;
+    try {
+        return callback(ctx);
+    } finally {
+        evalContext = prevContext;
     }
 }
 
-export class Subscriber {
+export class Observer {
 
-    constructor(signal) {
-        this.state = 0;
+    constructor(signal, callback) {
         this.signal = signal;
-        this.nextSource = null;
-        this.nextTarget = null;
+        this.callback = callback;
+        this.source = undefined; // there is only one
+        this.nextEffect = undefined;
+        this.flags = TRACKING;
         link(this, signal);
     }
 
-    rewire(source) {
-        const value = this.signal.peek();
-        if (typeof source === "function") {
-            if (this.signal.rewire) {
-                this.signal.rewire(source);
-            } else {
-                unlink(this, false);
-                link(this, this.signal = computed(source));
+    invoke() {
+        if (this.flags & RUNNING) {
+            throw new Error("Cycle detected");
+        }
+        this.flags |= RUNNING;
+        this.flags &= ~DISPOSED;
+
+        const prevContext = evalContext;
+        evalContext = undefined; // this;
+        try {
+            if (this.callback !== undefined) this.callback(this.signal.get());
+        } finally {
+            evalContext = prevContext;
+
+            this.flags &= ~RUNNING;
+            if (this.flags & DISPOSED) {
+                this.dispose();
             }
-        } else {
-            unlink(this, false);
-            link(this, this.signal = signal);
         }
-        if (!Object.is(value, this.signal.peek())) {
-            this.state |= UNDEFINED;
-            this.update();
-        }
-    }
-
-    update() {
-        this.state &= ~NOTIFIED;
-        if (this.signal && !(this.state & UPDATING) && (this.state & UNDEFINED || findChanged(this))) {
-            this.state |= UPDATING;
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    done() {
-        this.state &= UPDATED;
-    }
+    };
 
     notify() {
-        this.nextTarget = pending;
-        pending = this;
-    }
+        if (this.flags & NOTIFIED) {
+            return;
+        }
+        this.flags |= NOTIFIED;
+        this.nextEffect = batchedEffect;
+        batchedEffect = this;
+    };
 
     dispose() {
-        if (this.signal) {
-            this.signal = null;
-            unlink(this, true);
+        if ((this.flags |= DISPOSED) & RUNNING) {
+            return;
         }
-    }
+        const node = this.source;
+        node.source.unsubscribe(node);
+        this.callback = undefined;
+    };
+
+}
+
+export function observe(signal, callback) {
+    const effect = new Observer(signal, callback);
+    return effect.dispose.bind(effect);
 }

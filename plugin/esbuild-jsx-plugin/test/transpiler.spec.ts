@@ -122,6 +122,11 @@ describe("transpiler tests", () => {
                 children: "Hello"
             });
         `);
+        expect(ts`<>{"Hello"}{"World"}</>`).to.eq(trim`
+            jsx(Fragment, {
+                children: ["Hello", "World"]
+            });
+        `);
         expect(ts`<>{["Hello","World"]}</>`).to.eq(trim`
             jsx(Fragment, {
                 children: ["Hello", "World"]
@@ -131,19 +136,20 @@ describe("transpiler tests", () => {
 
     it("fragments & signals", () => {
         expect(tx`
-            let DEFINITELY = () => {}, MAYBE = {value: "unknown"};
+            let fn = () => {}, $s = {value: "unknown"};
             <><p/></>;
             <><p>NO</p></>;
-            <><p>NO{DEFINITELY}</p></>;
-            <><p>{DEFINITELY()}</p></>;
-            <>{MAYBE}</>;
-            <>{MAYBE.value}</>;
+            <><p>NO{fn}</p></>;
+            <><p>{fn()}</p></>;
+            <>{$s}</>;
+            <>{$s.value}</>;
+            <>{$s.value}{$s.value}</>;
             <>{"Hello"}{"World"}</>;
             <>{["Hello","World"]}</>;
             <>{...["Hello","World"]}</>;
         `).to.eq(trim`import { Fragment, jsx } from "@nimble/toolkit/jsx-runtime.js";
-            let DEFINITELY = () => {},
-                MAYBE = {
+            let fn = () => {},
+                $s = {
                     value: "unknown"
                 };
             jsx(Fragment, {
@@ -156,19 +162,22 @@ describe("transpiler tests", () => {
             });
             jsx(Fragment, {
                 children: jsx("p", {
-                    children: ["NO", DEFINITELY]
+                    children: ["NO", fn]
                 })
             });
             jsx(Fragment, {
                 children: jsx("p", {
-                    children: () => DEFINITELY()
+                    children: fn()
                 })
             });
             jsx(Fragment, {
-                children: MAYBE
+                children: $s
             });
             jsx(Fragment, {
-                children: () => MAYBE.value
+                children: () => $s.value
+            });
+            jsx(Fragment, {
+                children: [() => $s.value, () => $s.value]
             });
             jsx(Fragment, {
                 children: ["Hello", "World"]
@@ -248,11 +257,11 @@ describe("transpiler tests", () => {
             <FC class="one" style="color: red;" 
                  data-field={value} 
                  arrow_expr={()=>{}} 
-                 reactive:fn={fn()}
+                 kall:fn={fn()}
                  property_access={obj.value}
                  indexed_access={obj[0]}
                  methodCall={obj.get()}
-                 nested={<div not={fn} yes={fn()}>{obj}{obj.value}</div>}
+                 nested={<div not={fn} yes={fn.call()}>{obj}{obj.value}</div>}
              >A B C {...new Set([1, 2, 3])}</FC>
         `).to.eq(trim`
             import { jsx } from "@nimble/toolkit/jsx-runtime.js";
@@ -263,9 +272,7 @@ describe("transpiler tests", () => {
                 style: "color: red;", 
                 "data-field": value,
                 arrow_expr: () => {},
-                get ["reactive:fn"]() {
-                    return fn();
-                },
+                "kall:fn": fn(),
                 get property_access() {
                     return obj.value;
                 },
@@ -277,8 +284,8 @@ describe("transpiler tests", () => {
                 },
                 nested: jsx("div", { 
                     not: fn,
-                    yes: () => fn(),
-                    children: () => [obj, obj.value]
+                    yes: () => fn.call(),
+                    children: [obj, () => obj.value]
                 }),
                 children: ["A B C ", ...new Set([1, 2, 3])]
             });
@@ -289,7 +296,7 @@ describe("transpiler tests", () => {
         expect(ts`<div el={<p>{fn()}</p>}/>`).to.eq(trim`
             jsx("div", {
                 el: jsx("p", {
-                    children: () => fn()
+                    children: fn()
                 })
             });
         `);
@@ -377,7 +384,7 @@ describe("transpiler tests", () => {
             <div class="one" style="color: red;" 
                  data-field={value} 
                  arrow_expr={()=>{}} 
-                 reactive:fn={fn()}
+                 kall:fn={fn()}
                  property_access={obj.value}
                  indexed_access={obj[0]}
                  methodCall={obj.get()}
@@ -391,26 +398,28 @@ describe("transpiler tests", () => {
                 style: "color: red;", 
                 "data-field": value,
                 arrow_expr: () => {},
-                "reactive:fn": () => fn(),
+                "kall:fn": fn(),
                 property_access: () => obj.value,
                 indexed_access: () => obj[0],
                 methodCall: () => obj.get(),
                 nested: jsx("div", {
                     not: fn,
-                    yes: () => fn(),
-                    children: () => [obj, obj.value]
+                    yes: fn(),
+                    children: [obj, () => obj.value]
                 }),
                 children: ["A B C ", ...new Set([1, 2, 3])]
             });
         `);
         expect(ts`
-            let axis = () => "north south";
-            <div is:resizable={axis()}></div>
+            let axis = {value: "north south"};
+            <div is:resizable={axis.value}></div>
         `).to.eq(trim`
-            let axis = () => "north south";
+            let axis = {
+                value: "north south"
+            };
             jsx("div", {
                 get ["is:resizable"]() {
-                    return axis();
+                    return axis.value;
                 }
             });
         `);
@@ -471,7 +480,7 @@ describe("transpiler tests", () => {
             <div>{(function X() { return props.message })()}</div>
         `).to.eq(trim`
             jsx("div", {
-                children: () => function X() { 
+                children: function X() { 
                     return props.message; 
                 }()
             });

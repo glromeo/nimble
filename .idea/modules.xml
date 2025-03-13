@@ -3,8 +3,12 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/@nimble.iml" filepath="$PROJECT_DIR$/.idea/@nimble.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../atoms/atoms.iml" filepath="$PROJECT_DIR$/../atoms/atoms.iml" />
       <module fileurl="file://$PROJECT_DIR$/../dom-expressions-main/dom-expressions-main.iml" filepath="$PROJECT_DIR$/../dom-expressions-main/dom-expressions-main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../sample-react-app/sample-react-app.iml" filepath="$PROJECT_DIR$/../sample-react-app/sample-react-app.iml" />
       <module fileurl="file://$PROJECT_DIR$/scripts/scripts.iml" filepath="$PROJECT_DIR$/scripts/scripts.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../sierpinski-triangle/sierpinski-triangle.iml" filepath="$PROJECT_DIR$/../sierpinski-triangle/sierpinski-triangle.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../signals-main/signals-main.iml" filepath="$PROJECT_DIR$/../signals-main/signals-main.iml" />
       <module fileurl="file://$PROJECT_DIR$/stories/stories.iml" filepath="$PROJECT_DIR$/stories/stories.iml" />
       <module fileurl="file://$PROJECT_DIR$/testing.iml" filepath="$PROJECT_DIR$/testing.iml" />
       <module fileurl="file://$PROJECT_DIR$/toolkit/toolkit.iml" filepath="$PROJECT_DIR$/toolkit/toolkit.iml" />

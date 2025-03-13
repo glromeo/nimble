@@ -14,6 +14,7 @@ function configureBuild({environment}) {
     } = require("../config.cjs");
 
     const {jsxPlugin} = require("esbuild-jsx-plugin");
+    const {postcssPlugin} = require("esbuild-postcss-plugin");
 
     return {
         entryPoints: [
@@ -45,8 +46,10 @@ function configureBuild({environment}) {
             ...plugins,
             require("./plugins/build-logging.cjs").plugin,
             require("./plugins/copy-assets.cjs").plugin,
+            require("./plugins/csv-files.cjs").plugin,
             require("./plugins/live-reload.cjs").plugin,
             jsxPlugin(),
+            postcssPlugin()
         ]
     };
 }
