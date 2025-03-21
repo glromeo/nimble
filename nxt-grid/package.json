@@ -1,0 +1,20 @@
+{
+  "name": "ntx-grid",
+  "version": "1.0.0",
+  "license": "MIT",
+  "config": {
+    "baseUrl": "http://localhost:3000/ntx-grid"
+  },
+  "scripts": {
+    "build": "nimble build",
+    "start": "nimble start --watch"
+  },
+  "dependencies": {
+    "@nimble/toolkit": "^1.0.0"
+  },
+  "devDependencies": {
+    "postcss": "^8.5.1",
+    "@nimble/scripts": "^1.0.0",
+    "@nimble/stories": "^1.0.0"
+  }
+}

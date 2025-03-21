@@ -1,0 +1,255 @@
+@import "variables.css";
+
+.ps-grid {
+    background: $grid-background-color;
+    border: $grid-border;
+    flex: 1 1 auto;
+    height: 100%;
+    max-height: 100%;
+    max-width: var(--ps-grid-max-width, 100%);
+    outline: none;
+    overflow: auto;
+    position: relative;
+    user-select: none;
+    width: 100%;
+}
+.ps-grid div {
+    box-sizing: border-box;
+}
+.psg-ltr {
+    border-left: $grid-border;
+    border-right: $grid-border;
+}
+.psg-ltr .ps-grid-cell {
+    border-right: $grid-border;
+}
+.psg-rtl {
+    border-left: $grid-border;
+    border-right: $grid-border;
+    margin-left: -1px;
+}
+.psg-rtl .ps-grid-cell {
+    border-left: $grid-border;
+}
+.ps-grid.fill-width .psg-row {
+    border-bottom: $grid-border;
+}
+.ps-grid.fill-width .ps-grid-cell {
+    border-bottom: none;
+}
+.ps-grid.fill-y {
+    overflow-y: hidden;
+}
+.ps-grid.fill-x {
+    overflow-x: hidden;
+}
+.ps-grid .svg-icon {
+    color: auto;
+    fill: auto;
+}
+
+/* rows and cells are styled slightly different whether they're in the header or the body look in the respective files for further classes, the ones defined in here are for the properties that apply to both cases */
+.psg-row {
+    display: block;
+    position: absolute;
+    white-space: nowrap;
+}
+.psg-row .filler {
+    min-width: 0;
+    padding: 0;
+}
+.psg-row .pending .ps-grid-cell {
+    color: lightgray;
+}
+.ps-grid-cell {
+    border-bottom: $grid-border;
+    display: flex;
+    position: absolute;
+    text-align: left;
+    height: 100%;
+    white-space: nowrap;
+}
+.ps-grid-cell .svg-icon {
+    position: absolute;
+    left: 0;
+    margin-left: 0.25rem;
+    min-width: 0.75rem;
+    max-width: 0.75rem;
+    min-height: 0.75rem;
+    max-height: 0.75rem;
+}
+.ps-grid-cell.justify-right .ps-grid-cell-content {
+    flex-direction: row-reverse;
+}
+.ps-grid-cell-content {
+    padding: 0.25rem;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.group-by > .ps-grid-cell {
+    padding-left: 0.75rem;
+}
+.psg-body {
+    position: relative;
+    background: $grid-background-color;
+}
+.psg-body .psg-row-details {
+    display: block;
+    padding: 1rem;
+    border-bottom: $grid-border;
+}
+.psg-body .psg-row.group-by .ps-grid-cell {
+    font-weight: bold;
+    border-top: $grid-border;
+    background-color: gray;
+}
+.psg-body .psg-row[hover]::after {
+    position: absolute;
+    z-index: 1000;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    content: "";
+    user-select: none;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+    background: $grid-background--hover;
+}
+.psg-body .psg-row[selected] {
+    border-color: red !important;
+    background: darkred !important;
+}
+.psg-body .psg-row.info {
+    background-color: green;
+}
+.psg-body .psg-row.warning {
+    background-color: orange;
+}
+.psg-body .psg-row.danger {
+    background-color: red;
+}
+.psg-body .psg-row.success {
+    background-color: green;
+}
+.psg-body .ps-grid-cell {
+    overflow: hidden;
+    align-items: center;
+    background-color: inherit;
+    user-select: auto;
+}
+.psg-body .ps-grid-cell[selected] {
+    border-color: red !important;
+    background: darkred !important;
+}
+.psg-body .ps-grid-cell.justify-left {
+    justify-content: flex-start;
+}
+.psg-body .ps-grid-cell.justify-center {
+    justify-content: center;
+}
+.psg-body .ps-grid-cell.justify-right {
+    justify-content: flex-end;
+}
+.psg-body .ps-grid-cell-content {
+    overflow: hidden;
+    max-width: 100%;
+    text-overflow: ellipsis;
+}
+.psg-body .ps-grid-cell-content em {
+    text-decoration: underline;
+}
+.psg-body.scroll {
+    position: absolute;
+}
+.ps-grid.stripes .psg-body .psg-row.odd {
+    background-color: lightgray;
+}
+.ps-grid.stripes .psg-body .psg-row.odd[selected] {
+    background-color: darkred;
+}
+.ps-grid.stripes .psg-body .psg-row.odd.info {
+    border-top-color: blue;
+    background-color: green;
+}
+.ps-grid.stripes .psg-body .psg-row.odd.warning {
+    border-top-color: darkorange;
+    background-color: orange;
+}
+.ps-grid.stripes .psg-body .psg-row.odd.danger {
+    border-top-color: darkred;
+    background-color: red;
+}
+.ps-grid.stripes .psg-body .psg-row.odd.success {
+    border-top-color: darkgreen;
+    background-color: green;
+}
+.ps-grid.drag-n-drop {
+    pointer-events: none;
+}
+.ps-grid.drag-n-drop .psg-header .ps-grid-cell {
+    pointer-events: all;
+}
+.ps-grid.drag-n-drop .psg-header .ps-grid-cell * {
+    pointer-events: none;
+}
+.psg-ltr.drag-n-drop .ps-grid-cell {
+    transition: left ease-in-out 200ms;
+    transform: translateX(-0.5px);
+    border-left: $grid-border;
+}
+.psg-rtl.drag-n-drop .ps-grid-cell {
+    transition: right ease-in-out 200ms;
+    transform: translateX(0.5px);
+    border-right: $grid-border;
+}
+.psg-header .ps-grid-cell-content[drag-start] {
+    border: 1px solid;
+    width: 100%;
+    height: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 2rem;
+    position: relative;
+}
+.psg-header .ps-grid-cell-content[drag-start] svg {
+    position: absolute;
+    display: block;
+    height: 1rem;
+    width: 1rem;
+    top: 0.5rem;
+    left: 0.5rem;
+}
+.psg-header .ps-grid-cell[drag-active] .ps-grid-cell-content {
+    min-height: 2rem;
+}
+.psg-header .ps-grid-cell[drag-active] .ps-text-field {
+    display: none;
+}
+.psg-header .ps-grid-cell[drag-over] {
+    background: $grid-background--hover;
+}
+.resizer {
+    position: absolute;
+    z-index: 1000;
+    top: 0;
+    right: -0.1875rem;
+    width: 0.3125rem;
+    height: 100%;
+    cursor: ew-resize;
+    background: transparent;
+}
+.resizer.inverse {
+    right: unset;
+    left: 0;
+}
+
+.ps-grid-cell {
+    contain: strict;
+}
+.psg-row {
+    contain: layout;
+}

@@ -1,0 +1,14 @@
+body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  margin: 0;
+  padding: 1rem;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}

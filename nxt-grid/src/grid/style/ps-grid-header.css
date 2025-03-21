@@ -1,0 +1,85 @@
+@import "./variables.css";
+
+.psg-header {
+    position: relative;
+    user-select: none;
+    border-bottom: $grid-border;
+    background: $header-background-color;
+}
+.psg-header .psg-header-row {
+    height: calc(100% - 1.75rem);
+    background: $header-background-color;
+}
+.psg-header .psg-header-row:only-child {
+    height: 100%;
+}
+.psg-header .ps-grid-filters-row {
+    bottom: 0;
+    height: 1.75rem;
+    background: $header-background-color;
+}
+.psg-header .psg-header-cell {
+    font-weight: bold;
+    border-bottom: none;
+    background: $header-background-color;
+}
+.psg-header .psg-header-cell.has-sort {
+    padding-right: 0.5rem;
+}
+.psg-header .psg-header-cell .sort {
+    position: absolute;
+    right: 0.125rem;
+    display: flex;
+    flex-direction: column;
+    width: 0.625rem;
+    height: 1.75rem;
+    opacity: 25%;
+}
+.psg-header .psg-header-cell .sort .order {
+    font-size: smaller;
+    flex: 1 0 0;
+    text-align: center;
+}
+.psg-header .psg-header-cell .sort svg {
+    min-width: 0.375rem;
+    height: 0.8125rem;
+}
+.psg-header .psg-header-cell .sort._0, .psg-header .psg-header-cell .sort._1 {
+    opacity: 100%;
+}
+.psg-header .psg-header-cell .sort._2 {
+    opacity: 50%;
+}
+.psg-header .psg-header-cell.justify-right .sort {
+    right: unset;
+    left: 0.125rem;
+    padding-right: 0;
+    padding-left: 0.25rem;
+}
+.psg-header .psg-header-cell.justify-left {
+    justify-content: flex-start;
+}
+.psg-header .psg-header-cell.justify-center {
+    justify-content: center;
+}
+.psg-header .psg-header-cell.justify-right {
+    justify-content: flex-end;
+}
+.psg-header .psg-header-cell .ps-text-field {
+    display: block;
+    margin: 0.125rem;
+}
+.psg-header .psg-header-cell .ps-text-field .ps-icon {
+    right: 1rem;
+    top: 0.125rem;
+    float: unset;
+}
+.psg-header .psg-header-cell .ps-grid-cell-content {
+    line-height: 1;
+    margin-bottom: 0;
+    margin-top: auto;
+    padding: 0.375rem;
+}
+.psg-header .psg-header-cell.filtered .ps-grid-cell-content {
+    max-height: calc(50% - 0.1875rem);
+}
