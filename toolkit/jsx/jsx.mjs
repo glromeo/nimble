@@ -19,14 +19,12 @@ function ns(tag, props, key) {
 export const svg = ns.bind(SVG_NAMESPACE_URI);
 export const xhtml = ns.bind(XHTML_NAMESPACE_URI);
 
-let scope = null;
-
 export function jsx(tag, props, key = null) {
     if (key === null) {
         return typeof tag === "function" ? tag(props) : createElement(tag, props);
     }
-    const map = scope ?? contextScope();
-    let node = map.get(key);
+    const scope = contextScope();
+    let node = scope.get(key);
     if (node !== undefined) {
         node.setProperties(props);
     } else {
@@ -42,7 +40,7 @@ export function jsx(tag, props, key = null) {
             node = createElement(tag, props, key);
             node.setProperties = updateElement.bind(node);
         }
-        map.set(key, node);
+        scope.set(key, node);
     }
     return node;
 }
