@@ -28,20 +28,20 @@
   },
   "dependencies": {
     "postcss": "^8.5.1",
-    "postcss-simple-vars": "^7.0.1",
-    "postcss-import": "^16.1.0"
+    "postcss-import": "^16.1.0",
+    "postcss-simple-vars": "^7.0.1"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0",
+    "@types/chai": "^5.0.1",
+    "@types/mocha": "^10.0.9",
+    "@types/sinon": "^17.0.3",
+    "@types/sinon-chai": "^4.0.0",
     "c8": "^10.1.2",
     "chai": "^5.1.2",
-    "@types/chai": "^5.0.1",
+    "esbuild": "^0.25.1",
     "mocha": "^10.8.2",
-    "@types/mocha": "^10.0.9",
     "sinon": "^19.0.2",
-    "@types/sinon": "^17.0.3",
-    "sinon-chai": "^4.0.0",
-    "@types/sinon-chai": "^4.0.0"
+    "sinon-chai": "^4.0.0"
   },
   "peerDependencies": {
     "esbuild": ">=0.20.1"

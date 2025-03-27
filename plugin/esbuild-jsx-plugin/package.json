@@ -35,27 +35,27 @@
     "@babel/core": "^7.25.8",
     "@babel/generator": "^7.25.7",
     "@babel/parser": "^7.25.8",
+    "@babel/preset-typescript": "^7.26.0",
     "@babel/standalone": "^7.25.8",
     "@babel/template": "^7.25.7",
     "@babel/traverse": "^7.25.7",
     "@babel/types": "^7.25.8",
-    "@babel/preset-typescript": "^7.26.0",
     "@happy-dom/global-registrator": "^15.7.4",
     "happy-dom": "^15.7.4"
   },
   "devDependencies": {
     "@types/babel__core": "^7.20.5",
+    "@types/chai": "^5.0.1",
+    "@types/mocha": "^10.0.9",
     "@types/resolve": "^1.20.6",
-    "esbuild": "^0.24.0",
+    "@types/sinon": "^17.0.3",
+    "@types/sinon-chai": "^4.0.0",
     "c8": "^10.1.2",
     "chai": "^5.1.2",
-    "@types/chai": "^5.0.1",
+    "esbuild": "^0.25.1",
     "mocha": "^10.8.2",
-    "@types/mocha": "^10.0.9",
     "sinon": "^19.0.2",
-    "@types/sinon": "^17.0.3",
-    "sinon-chai": "^4.0.0",
-    "@types/sinon-chai": "^4.0.0"
+    "sinon-chai": "^4.0.0"
   },
   "peerDependencies": {
     "esbuild": ">=0.20.1"

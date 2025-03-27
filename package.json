@@ -5,8 +5,9 @@
   "private": true,
   "workspaces": [
     "apps/event-planner",
-    "docs",
     "demo/sierpinski-triangle",
+    "docs",
+    "nxt-grid",
     "plugin/esbuild-jsx-plugin",
     "plugin/esbuild-postcss-plugin",
     "sample",

@@ -129,8 +129,12 @@ export class PersistentFragment extends DocumentFragment {
         if (this.childNodes.length === 0) {
             const placeholder = this.placeholder;
             super.appendChild(placeholder);
-            for (const node of this.__nodes__) {
-                super.insertBefore(node, placeholder);
+            if (Array.isArray(this.__nodes__)) {
+                for (const node of this.__nodes__) {
+                    super.insertBefore(node, placeholder);
+                }
+            } else if (this.__nodes__) {
+                super.insertBefore(this.__nodes__, placeholder);
             }
         }
     }

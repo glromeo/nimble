@@ -66,19 +66,24 @@ suite("Nimble JSX", ({before}) => {
         expect(<Fragment></Fragment>).eq("<!---->");
     });
 
-    test("fragments don't introduce further elements", () => {
-        const wrapper = <div key="C"><>Hello</></div> as HTMLDivElement;
+    test("fragments use a comment as placeholder", () => {
+        const wrapper = <div><>Hello</></div> as HTMLDivElement;
         expect(wrapper).eq("<div>Hello<!----></div>");
         expect(wrapper.children).to.have.length(0);
         expect(wrapper.childNodes).to.have.length(2);
     });
 
+    test("fragments accept any kind of children", () => {
+        const d = <div><><a></a>B{"C"}{<br/>}</></div> as HTMLDivElement;
+        expect(d).eq("<div><a></a>BC<br><!----></div>");
+    });
+
     test("jsx expression let you move fragments from one element to another", async () => {
-        let f = <><a></a>B{"C"}{<br/>}</> as DocumentFragment;
+        let f = <><p></p></> as DocumentFragment;
         let p1 = <div>{f}</div> as HTMLDivElement;
-        expect(p1).eq("<div><a></a>BC<br><!----></div>");
+        expect(p1).eq("<div><p></p><!----></div>");
         let p2 = <div>{f}</div> as HTMLDivElement;
-        expect(p2).eq("<div><a></a>BC<br><!----></div>");
+        expect(p2).eq("<div><p></p><!----></div>");
         expect(p1).eq("<div></div>");
     });
 
