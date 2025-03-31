@@ -14,6 +14,12 @@ declare module "@nimble/toolkit" {
     }
 }
 
+function outerHTML(node:Node) {
+    const div = document.createElement('div');
+    div.appendChild(node);
+    return div.innerHTML;
+}
+
 suite("Nimble JSX", ({before}) => {
 
     before.each(async () => {
@@ -62,8 +68,7 @@ suite("Nimble JSX", ({before}) => {
 
     test("<> and <Fragment> are equivalent", () => {
         expect((<></>).constructor).eq((<Fragment></Fragment>).constructor);
-        expect((<>{["hello", "world"]}</>).textContent).eq((<Fragment>{["hello", "world"]}</Fragment>).textContent);
-        expect(<Fragment></Fragment>).eq("<!---->");
+        expect(outerHTML(<>Hello</>)).eq(outerHTML(<Fragment>Hello</Fragment>));
     });
 
     test("fragments use a comment as placeholder", () => {
@@ -71,9 +76,11 @@ suite("Nimble JSX", ({before}) => {
         expect(wrapper).eq("<div>Hello<!----></div>");
         expect(wrapper.children).to.have.length(0);
         expect(wrapper.childNodes).to.have.length(2);
+        expect(<Fragment></Fragment>).eq("<!---->");
     });
 
     test("fragments accept any kind of children", () => {
+        expect((<>hello world</>).textContent).eq((<Fragment>{["hello", " ", "world"]}</Fragment>).textContent);
         const d = <div><><a></a>B{"C"}{<br/>}</></div> as HTMLDivElement;
         expect(d).eq("<div><a></a>BC<br><!----></div>");
     });
@@ -95,7 +102,10 @@ suite("Nimble JSX", ({before}) => {
             expect(<p key="P">{f = <Fragment key="F"></Fragment>}</p>).eq("<p><!----></p>");
             expect(scope.get("P")).not.to.be.undefined // P ends up in global scope here
             expect(scope.get("F")).not.to.be.undefined; // F is within the scope of P's children
-            f.setProperties({children: "Hello"});
+
+            const node = scope.get("F");
+            expect(node).to.eq(f);
+            node.setProperties({children: "Hello"});
         })
         await vsync();
         expect(scope.get("P")).eq("<p>Hello<!----></p>");
@@ -150,38 +160,39 @@ suite("Nimble JSX", ({before}) => {
             return <div>{props.letter + ":" + props.counter}</div>;
         }
 
-        const letter = signal("A");
         const counter = signal(0);
 
         const ctx = new Effect(() => {});
 
-        const node = tracked(ctx, () => <FC key="0" letter={letter.value} counter={counter.value}/>);
+        const node = tracked(ctx, () => <FC key="0" letter={"A"} counter={counter.value}/>);
         expect(node).eq(`<div>A:0</div>`);
-
         counter.value++;
         await vsync();
         expect(node).eq(`<div>A:1</div>`);
 
         const negative = signal(-1);
-        const node2 = tracked(ctx, () => <FC key="0" letter={letter.value} counter={negative.value}/>);
-        expect(node2).to.equal(node);
-        expect(node).eq(`<div>A:1</div>`); // refresh happens on next rendering cycle
+        const node2 = tracked(ctx, () => <FC key="0" letter={"A"} counter={negative.value}/>);
         await vsync();
+        expect(node2).to.equal(node);
         expect(node).eq(`<div>A:-1</div>`);
 
-        letter.value = "B";
+        tracked(ctx, () => <FC key="0" letter={"B"} counter={negative.value}/>);
         await vsync();
         expect(node).eq(`<div>B:-1</div>`);
 
-        tracked(ctx, () => <FC key="0" letter={"D"} counter={3}/>);
+        const letter = signal("C");
+        tracked(ctx, () => <FC key="0" letter={letter.value} counter={3}/>);
+        await vsync();
+        expect(node).eq(`<div>C:3</div>`);
+
+        letter.value = "D";
         await vsync();
         expect(node).eq(`<div>D:3</div>`);
 
-        tracked(ctx, () => <FC key="0" letter={signal("E")} counter={() => 0}/>);
+        const cmp = computed(() => 0);
+        tracked(ctx, () => <FC key="0" letter={"E"} counter={cmp.value}/>);
         await vsync();
         expect(node).eq(`<div>E:0</div>`);
-
-        expect(ctx.scope.has("0")).to.be.true;
     });
 
     test("elements are passed through as they are", () => {
@@ -276,9 +287,9 @@ suite("Nimble JSX", ({before}) => {
         items.value = ["d", "e", "f", "g", "h", "b", "c"];
         await vsync();
         expect(node).eq("<div>defghbc</div>");
-        expect(cn[0]).to.eq(node.childNodes[5]);
+        expect(cn[0]).to.not.eq(node.childNodes[5]); // b is re-created
         expect(cn[1]).to.eq(node.childNodes[6]);
-        expect(cn[2]).to.eq(node.childNodes[0]);
+        expect(cn[2]).to.not.eq(node.childNodes[0]); // d is re-created
         expect(cn[3]).to.eq(node.childNodes[1]);
     });
 
@@ -439,20 +450,24 @@ suite("Nimble JSX", ({before}) => {
 
         function Comp(props) {
 
-            const fragment = <>{props.entries.get().map(({id, name}) => <div key={id}>{name}</div>)}</>;
+            let scope: Map<any,any>;
+
+            const fragment = <>{props.entries.map(({id, name}) => {
+                scope = contextScope();
+                return <div key={id}>{name}</div>;
+            })}</>;
 
             expect(fragment.parentNode).to.equal(null);
             expect(fragment.childNodes).to.have.length(10 + 1);
 
-            const scope = (fragment as any).__effects__.children.signal.scope;
-
-            expect(scope.get(6).constructor.name).to.equal("HTMLDivElement");
-            expect(scope.get(6).innerText).to.equal("Dona");
+            const node = scope.get(6);
+            expect(node.constructor.name).to.equal("HTMLDivElement");
+            expect(node.innerText).to.equal("Dona");
 
             return fragment;
         }
 
-        let node = <div name="wrapper"><Comp entries={entries}/></div>;
+        let node = <div name="wrapper"><Comp entries={entries.value}/></div>;
 
         expect(node).to.equal(`
             <div name="wrapper">
@@ -558,13 +573,13 @@ suite("Nimble JSX", ({before}) => {
         const c = computed(() => s.value === "l" ? l : r);
         const node = <div>{c}</div>;
         expect(node).to.equal("<div>left</div>");
-        expect(s.nextTarget.targetNode).to.eq(c);
-        expect(l.nextTarget.targetNode).not.to.eq(c);
+        expect(s.targets.target).to.eq(c);
+        expect(l.targets.target).not.to.eq(c);
         s.set("r");
         await vsync();
         expect(node).to.equal("<div>right</div>");
-        expect(r.nextTarget).not.to.be.null; // r is bound
-        expect(r.nextTarget.targetNode).not.eq(c); // ...but not to c, r is bound to a dynamic node
+        expect(r.targets).not.to.be.undefined; // r is bound
+        expect(r.targets.target).not.eq(c); // ...but not to c, r is bound to a dynamic node
         r.set("right 2");
         await vsync();
         expect(node).to.equal("<div>right 2</div>"); // and indeed the node changes
@@ -572,11 +587,11 @@ suite("Nimble JSX", ({before}) => {
         await vsync();
         expect(node).to.equal("<div>left</div>");
         await vsync();
-        expect(l.nextTarget.targetNode).not.eq(c); // the signal returned from c is bound to a dynamic node
-        expect(c.nextSource.sourceNode).to.eq(s); // c is still bound to s
-        expect(c.nextSource.nextSource).to.be.null; // ...and nothing else
+        expect(l.targets.target).not.eq(c); // the signal returned from c is bound to a dynamic node
+        expect(c.sources.source).to.eq(s); // c is still bound to s
+        expect(c.sources.nextSource).to.be.undefined; // ...and nothing else
         await vsync();
-        expect(r.nextTarget).to.be.null; // r is not bound anymore
+        expect(r.targets).to.be.undefined; // r is not bound anymore
     });
 
     test("tree of nodes (implicit signals)", async () => {

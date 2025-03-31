@@ -50,18 +50,18 @@ export const defineViewport = <T extends DataItem>(
                 $clientHeight.value = grid.clientHeight;
                 af = 0;
             });
-            af ||= requestAnimationFrame(refreshViewPort);
+            refreshViewPort();
 
             const mutationObserver = () => {
                 const deltaX = $clientWidth.value - grid.clientWidth;
-                af ||= requestAnimationFrame(refreshViewPort);
+                refreshViewPort();
                 if (props.inverse && deltaX) {
                     grid.scrollLeft += deltaX;
                 }
             }
 
             const scrollListener = () => {
-                af ||= requestAnimationFrame(refreshViewPort);
+                refreshViewPort();
                 callbacks.onScroll?.(grid);
             };
 

@@ -61,8 +61,8 @@ export type PsGridColumnLayoutUpdate = {
 
 const NO_VRT = location.search.indexOf("NO_VRT") >= 0;
 
-const BUFFER_X = 0;
-const BUFFER_Y = 0;
+const BUFFER_X = 8;
+const BUFFER_Y = 8;
 
 export function layoutColumns(columns: PsGridColumnLayout[]) {
     let left = 0;

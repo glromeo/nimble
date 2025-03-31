@@ -1,4 +1,11 @@
-import {Computed, contextScope, currentContext, observe, Signal, Observer} from "../signals/signals.mjs";
+import {
+    batch,
+    Computed,
+    contextScope,
+    increaseGlobalVersion,
+    Signal,
+    Observer
+} from "../signals/signals.mjs";
 import {directives} from "./directives.mjs";
 
 export const SVG_NAMESPACE_URI = "http://www.w3.org/2000/svg";
@@ -19,6 +26,31 @@ function ns(tag, props, key) {
 export const svg = ns.bind(SVG_NAMESPACE_URI);
 export const xhtml = ns.bind(XHTML_NAMESPACE_URI);
 
+function reactivify({get, value}) {
+    let cs = get !== undefined ? new Computed(get) : new Signal(value);
+    return {
+        get: () => cs.get(),
+        set: ({get, value}) => {
+            cs.notify();
+            if (cs.constructor === Signal) {
+                cs.version++;
+                if (get !== undefined) {
+                    cs = new Computed(get);
+                } else {
+                    cs.__value__ = value;
+                }
+            } else {
+                cs.version = 0;
+                if (get !== undefined) {
+                    cs.callback = get;
+                } else {
+                    cs = new Signal(value);
+                }
+            }
+        }
+    };
+}
+
 export function jsx(tag, props, key = null) {
     if (key === null) {
         return typeof tag === "function" ? tag(props) : createElement(tag, props);
@@ -26,19 +58,35 @@ export function jsx(tag, props, key = null) {
     const scope = contextScope();
     let node = scope.get(key);
     if (node !== undefined) {
-        node.setProperties(props);
+        batch(() => node.setProperties(props));
     } else {
         if (typeof tag === "function") {
             if (tag === Fragment) {
                 node = Fragment(props);
-                node.setProperties = props => setChildren.call(node, props.children);
+                node.setProperties = props => {
+                    setChildren.call(node, props.children);
+                };
             } else {
-                node = createKFC(tag, props);
-                node.setProperties = updateKFC.bind(props);
+                const setters = [];
+                for (const [name, desc] of Object.entries(Object.getOwnPropertyDescriptors(props))) {
+                    const {get, set} = reactivify(desc);
+                    Object.defineProperty(props, name, {get});
+                    setters.push(set);
+                }
+                node = tag(props);
+                node.setProperties = props => {
+                    const descriptors = Object.values(Object.getOwnPropertyDescriptors(props));
+                    for (let i = 0; i < descriptors.length; i++) {
+                        setters[i](descriptors[i]);
+                    }
+                    increaseGlobalVersion();
+                };
             }
         } else {
             node = createElement(tag, props, key);
-            node.setProperties = updateElement.bind(node);
+            node.setProperties = props => {
+                updateElement.call(node, props);
+            };
         }
         scope.set(key, node);
     }
@@ -46,39 +94,7 @@ export function jsx(tag, props, key = null) {
 }
 
 /**
- *
- * @param tag {string}
- * @param props {object}
- * @returns {Node}
- */
-function createKFC(tag, props) {
-    for (const name of Object.keys(props)) {
-        const desc = Object.getOwnPropertyDescriptor(props, name);
-        if (desc.get !== undefined) {
-            const cs = new Computed(desc.get);
-            desc.get = cs.get.bind(cs);
-            desc.set = cs.rewire.bind(cs);
-            Object.defineProperty(props, name, desc);
-        } else {
-            const ss = new Signal(desc.value);
-            Object.defineProperty(props, name, {
-                get: ss.get.bind(ss),
-                set: ss.set.bind(ss)
-            });
-        }
-    }
-    return tag(props);
-}
-
-function updateKFC(props) {
-    for (const name of Object.keys(props)) {
-        const desc = Object.getOwnPropertyDescriptor(props, name);
-        this[name] = desc.get ?? desc.value;
-    }
-}
-
-/**
- * @param props {{xmlns?: string, children?: any[]}}
+ * @param props {{xmlns?: string, children?: any|(any[])}}
  * @returns {DocumentFragment}
  */
 export function Fragment({xmlns, children}) {
@@ -346,14 +362,12 @@ Object.defineProperty(window, "unMount", {enumerable: true, value: unMount});
  */
 export function propertyEffect(node, name, signal) {
     const value = signal.peek();
-    if (signal.sources) {
-        (node.__effects__ ??= {})[name] = new observe(
-            signal,
-            name === "children"
-                ? setChildren.bind(node)
-                : setProperty.bind(null, node, name)
-        );
-    }
+    (node.__effects__ ??= {})[name] = new Observer(
+        signal,
+        name === "children"
+            ? setChildren.bind(node)
+            : setProperty.bind(null, node, name)
+    );
     return value;
 }
 
@@ -468,7 +482,7 @@ export function setChildren(value) {
                     if (Object.is(child, this.__value__)) {
                         nodes[index] = this.__nodes__;
                     } else {
-                        parentNode.insertBefore(nodes[index] = createNode(namespaceURI, child), nextSibling);
+                        insertBefore(parentNode, nodes[index] = createNode(namespaceURI, child), nextSibling);
                     }
                 }
                 this.__nodes__ = nodes;
@@ -557,17 +571,13 @@ export function createNode(namespaceURI, value) {
     }
     if (value instanceof Signal) {
         let node = value.peek();
-        if (value.sources) {
-            if (node instanceof Node) {
-                node.reclaim?.();
-            } else {
-                node = createUnboundNode(namespaceURI, node);
-            }
-            node.__effects__ = {self: observe(value, replaceNodeWith.bind({node}))};
-            return node;
+        if (node instanceof Node) {
+            node.reclaim?.();
         } else {
-            value = node;
+            node = createUnboundNode(namespaceURI, node);
         }
+        node.__effects__ = {self: new Observer(value, replaceNodeWith.bind({node}))};
+        return node;
     }
     return createUnboundNode(namespaceURI, value);
 }
@@ -626,8 +636,8 @@ export function updateNodes(owner, b, a, live) {
             nodes[--bEnd] = live[--aEnd];
         } else if (a[aStart] === b[bEnd - 1] && a[aEnd - 1] === b[bStart]) {
             const before = live[--aEnd].nextSibling;
-            nodes[bStart++] = insertBefore(parent, live[aEnd], live[aStart].nextSibling);
-            nodes[--bEnd] = insertBefore(parent, live[aStart++], before);
+            insertBefore(parent, nodes[bStart++] = live[aEnd], live[aStart].nextSibling);
+            insertBefore(parent, nodes[--bEnd] = live[aStart++], before);
         } else {
             if (map === undefined) {
                 map = new Map();
@@ -643,13 +653,16 @@ export function updateNodes(owner, b, a, live) {
                     if (n - index > index - bStart) {
                         const before = live[aStart];
                         while (bStart < index) {
-                            nodes[bStart] = insertBefore(parent, createNode(nsURI, b[bStart++]), before);
+                            insertBefore(parent, nodes[bStart] = createNode(nsURI, b[bStart++]), before);
                         }
                     } else {
-                        nodes[bStart] = insertBefore(parent, createNode(nsURI, b[bStart++]), live[aStart]);
+                        insertBefore(parent, nodes[bStart] = createNode(nsURI, b[bStart++]), live[aStart]);
                         removeNode(live[aStart++]);
                     }
                 } else {
+                    if (a[aStart] !== live[aStart]) {
+                        removeNode(live[aStart]);
+                    }
                     aStart++;
                 }
             } else {
@@ -665,7 +678,7 @@ export function updateNodes(owner, b, a, live) {
                 : nodes[bEnd].firstNode ?? nodes[bEnd]
             : owner.placeholder ?? null;
         do {
-            nodes[bStart] = insertBefore(parent, createNode(nsURI, b[bStart++]), before);
+            insertBefore(parent, nodes[bStart] = createNode(nsURI, b[bStart++]), before);
         } while (bStart < bEnd);
     }
 
@@ -676,17 +689,12 @@ export function updateNodes(owner, b, a, live) {
         aStart++;
     }
 
-    if (nodes.some(n => !n.parentNode)) {
-        // debugger;
-    }
-
     return nodes;
 }
 
 export function insertBefore(parent, node, ref) {
     node.reclaim?.();
     parent.insertBefore(node, ref);
-    return node;
 }
 
 export function checkJsx() {

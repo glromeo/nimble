@@ -9,7 +9,7 @@ declare function batch<T>(callback: () => T): T;
 
 declare function untracked<T>(callback: () => T): T;
 
-declare function tracked<T>(callback: () => T): T;
+declare function tracked<T>(context: any, callback: () => T): T;
 
 export class Signal<T> {
 
@@ -47,15 +47,7 @@ export class Effect {
     dispose(): void;
 }
 
-export class RenderEffect<T> {
-
+export class Observer<T> extends Effect {
     constructor(signal: Signal<T>, nextEffect: Effect);
-
-    track(signal?: Signal<T>): T;
-
-    refresh(): void;
-
-    notify(): void;
-
-    dispose(): void;
+    static ASYNC: boolean;
 }

@@ -1,4 +1,3 @@
-
 export function useStore(props) {
     for (const key of Object.keys(props)) {
         let value = props[key];

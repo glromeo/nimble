@@ -71,6 +71,10 @@ let batchIteration = 0;
 
 let globalVersion = 0;
 
+export function increaseGlobalVersion() {
+    globalVersion++;
+}
+
 function link(target, source) {
     if (target === undefined) {
         return undefined
@@ -210,12 +214,16 @@ class Signal {
             globalVersion++;
             startBatch();
             try {
-                for (let node = this.targets; node !== undefined; node = node.nextTarget) {
-                    node.target.notify();
-                }
+                this.notify();
             } finally {
                 endBatch();
             }
+        }
+    }
+
+    notify() {
+        for (let node = this.targets; node !== undefined; node = node.nextTarget) {
+            node.target.notify();
         }
     }
 }
@@ -370,9 +378,7 @@ class Computed extends Signal {
             return;
         }
         this.flags |= OUTDATED | NOTIFIED;
-        for (let node = this.targets; node !== undefined; node = node.nextTarget) {
-            node.target.notify();
-        }
+        super.notify();
     };
 
     get() {
@@ -388,6 +394,18 @@ class Computed extends Signal {
             throw this.__value__;
         }
         return this.__value__;
+    }
+
+    reset(callback) {
+        this.callback = callback;
+        this.version = 0;
+        globalVersion++;
+        startBatch();
+        try {
+            this.notify();
+        } finally {
+            endBatch();
+        }
     }
 }
 
@@ -520,11 +538,10 @@ export function currentContext() {
 }
 
 const scopes = new WeakMap();
-const globalScope = new Map();
 
 export function contextScope(context = evalContext) {
     if (context === undefined) {
-        return globalScope;
+        throw new Error("missing context");
     }
     let map = scopes.get(context);
     if (map === undefined) {
@@ -543,6 +560,34 @@ export function tracked(ctx, callback) {
     }
 }
 
+let queuedObserver = undefined;
+
+const notifyObservers = untracked.bind(null, () => {
+    let observer = queuedObserver;
+    queuedObserver = undefined;
+    while (observer !== undefined) {
+        const next = observer.nextEffect;
+        observer.nextEffect = undefined;
+        observer.flags &= ~NOTIFIED;
+        if (!(observer.flags & DISPOSED) && needsToRecompute(observer)) {
+            observer.flags |= RUNNING;
+            observer.flags &= ~DISPOSED;
+            try {
+                const {callback, signal} = observer;
+                if (callback !== undefined) callback(signal.get());
+            } catch (err) {
+                console.error("observer callback failure", err);
+            } finally {
+                observer.flags &= ~RUNNING;
+                if (observer.flags & DISPOSED) {
+                    observer.dispose();
+                }
+            }
+        }
+        observer = next;
+    }
+});
+
 export class Observer {
 
     constructor(signal, callback) {
@@ -555,9 +600,6 @@ export class Observer {
     }
 
     invoke() {
-        if (this.flags & RUNNING) {
-            throw new Error("Cycle detected");
-        }
         this.flags |= RUNNING;
         this.flags &= ~DISPOSED;
 
@@ -573,16 +615,23 @@ export class Observer {
                 this.dispose();
             }
         }
-    };
+    }
 
     notify() {
         if (this.flags & NOTIFIED) {
             return;
         }
         this.flags |= NOTIFIED;
-        this.nextEffect = batchedEffect;
-        batchedEffect = this;
-    };
+        if (batchDepth > 1) {
+            this.nextEffect = batchedEffect;
+            batchedEffect = this;
+        } else {
+            if ((this.nextEffect = queuedObserver) === undefined) {
+                requestAnimationFrame(notifyObservers);
+            }
+            queuedObserver = this;
+        }
+    }
 
     dispose() {
         if ((this.flags |= DISPOSED) & RUNNING) {
@@ -591,8 +640,7 @@ export class Observer {
         const node = this.source;
         node.source.unsubscribe(node);
         this.callback = undefined;
-    };
-
+    }
 }
 
 export function observe(signal, callback) {
