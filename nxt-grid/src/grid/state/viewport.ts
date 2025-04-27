@@ -34,34 +34,40 @@ export const defineViewport = <T extends DataItem>(
     const $clientWidth = signal(0);
     const $clientHeight = signal(0);
 
-    let af = 0;
-
     effect(() => {
         const grid = $grid.value;
         if (grid) {
             grid.scrollLeft = props.inverse ? Number.MAX_SAFE_INTEGER : 0;
-
-            const refreshViewPort = batch.bind(null, () => {
-                $scrollLeft.value = grid.scrollLeft;
-                $scrollTop.value = grid.scrollTop;
-                $clientLeft.value = grid.clientLeft;
-                $clientTop.value = grid.clientTop;
-                $clientWidth.value = grid.clientWidth;
-                $clientHeight.value = grid.clientHeight;
+            let af = 0;
+            const refreshViewPort = requestAnimationFrame.bind(null, batch.bind(null, () => {
+                const {
+                    scrollLeft,
+                    scrollTop,
+                    clientLeft,
+                    clientTop,
+                    clientWidth,
+                    clientHeight
+                } = grid;
+                $scrollLeft.value = scrollLeft;
+                $scrollTop.value = scrollTop;
+                $clientLeft.value = clientLeft;
+                $clientTop.value = clientTop;
+                $clientWidth.value = clientWidth;
+                $clientHeight.value = clientHeight;
                 af = 0;
-            });
-            refreshViewPort();
+            }));
+            af ||= refreshViewPort();
 
             const mutationObserver = () => {
                 const deltaX = $clientWidth.value - grid.clientWidth;
-                refreshViewPort();
+                af ||= refreshViewPort();
                 if (props.inverse && deltaX) {
                     grid.scrollLeft += deltaX;
                 }
             }
 
             const scrollListener = () => {
-                refreshViewPort();
+                af ||= refreshViewPort();
                 callbacks.onScroll?.(grid);
             };
 

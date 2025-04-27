@@ -11,7 +11,7 @@ export const PsGridContainer:PsgFC = ({store}) => {
     const fillX = computed(() => layout.scrollWidth <= viewport.clientWidth - layout.pinnedWidth);
     const fillY = computed(() => layout.scrollHeight <= viewport.clientHeight - layout.headerHeight);
 
-    const className = computed(() => [
+    const className = () => [
         props.inverse ? "ps-grid psg-rtl" : "ps-grid psg-ltr",
         props.fill && "fill-width",
         props.stripes && "stripes",
@@ -19,13 +19,13 @@ export const PsGridContainer:PsgFC = ({store}) => {
         fillY.value && "fill-y",
         dnd.dragColumn && "drag-n-drop",
         props.className,
-    ].filter(Boolean).join(" "));
+    ].filter(Boolean).join(" ");
 
-    const style = computed(() => ((props.style ? `${props.style};` : "") +
+    const style = () => ((props.style ? `${props.style};` : "") +
         `--ps-grid-max-width:${props.fill ? "100%" : `${layout.pinnedWidth + layout.scrollWidth + 10}px`};` +
         `--psg-header-width:${layout.pinnedWidth - 0.5}px;` +
         `--psg-header-height:${layout.headerHeight - 0.5}px;`
-    ));
+    );
 
     styleSheetEffects(store);
 

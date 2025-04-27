@@ -26,7 +26,7 @@ export const PsGridSortIcon:PsgFC<{
     column: PsGridColumn<any>,
     onClick: PsGridColumnSortHandler
 }> = ({store, column, onClick}) => {
-    return <>{computed(() => {
+    return <>{() => {
         const {sort} = store.state;
         if (sort) {
             let sortOrder = 0;
@@ -43,5 +43,5 @@ export const PsGridSortIcon:PsgFC<{
             }
         }
         return null;
-    })}</>;
+    }}</>;
 }

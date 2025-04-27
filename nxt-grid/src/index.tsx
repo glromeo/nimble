@@ -9,12 +9,9 @@ function Showcase() {
 
     // requestAnimationFrame(() => {
     //     const grid = document.querySelector(".left-grid")!;
+    //     grid.scrollTop = 0;
     //     let i = setInterval(() => {
-    //         if (grid.scrollTop) {
-    //             grid.scrollTop = 0;
-    //         } else {
-    //             grid.scrollTop = 2000;
-    //         }
+    //         grid.scrollTop += 200;
     //     }, 250);
     //     setTimeout(() => {
     //         clearInterval(i)

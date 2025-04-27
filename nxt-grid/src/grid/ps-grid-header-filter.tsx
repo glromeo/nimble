@@ -19,7 +19,7 @@ export const PsGridHeaderFilter:PsgFC<{ column: PsGridColumn }> = ({store, colum
                         state.filters = {
                             ...state.filters,
                             [column.field]: text
-                        } as PsGridFilters<T>;
+                        } as PsGridFilters<any>;
                     }}
                 />
             ) : null}

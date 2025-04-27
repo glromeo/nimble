@@ -15,7 +15,6 @@ const PsGridBodyRow:PsgFC<{row: PsGridRow, section: "pinned" | "visible"}> = ({s
     );
 }
 
-
 export const PsGridPinnedBody:PsgFC = ({store}) => {
     const {hover, rows} = store;
     return (

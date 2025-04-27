@@ -2,6 +2,7 @@ import {PsGridColumn} from "./state/columns";
 import {PsGridRow} from "./state/rows";
 import {DataItem} from "./ps-grid";
 import {JSX} from "@nimble/toolkit";
+import {PsgFC} from "./types";
 
 export function DEFAULT_CELL_RENDERER<T extends DataItem>(
     row: PsGridRow<T>,
@@ -66,7 +67,7 @@ export function Chevron({isCollapsed, onClick}: PsGridChevronProps) {
     }
 }
 
-export const PsGridCell = <T extends DataItem>({row, column}: { row: PsGridRow<T>; column: PsGridColumn<T>; }) => {
+export const PsGridCell:PsgFC<{ row: PsGridRow; column: PsGridColumn; }> = ({row, column}) => {
     return (
         <div
             class={column.className}

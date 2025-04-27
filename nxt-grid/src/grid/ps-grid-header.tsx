@@ -3,6 +3,7 @@ import {PsGridColumnResizer} from "./ps-grid-column-resizer";
 import {PsGridColumn} from "./state/columns";
 import {PsGridHeaderFilter} from "./ps-grid-header-filter";
 import {PsgFC} from "./types";
+import {effect} from "@nimble/toolkit";
 
 function PsTooltip({children, title}:{title:any, children:any}) {
     return children;

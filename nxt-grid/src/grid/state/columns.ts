@@ -1,8 +1,8 @@
-import {PsGridCellRenderer, cellJustify} from "../ps-grid-cell";
-import {computed, JSX, Signal} from "@nimble/toolkit";
+import {cellJustify, PsGridCellRenderer} from "../ps-grid-cell";
+import {computed, effect, JSX, Signal} from "@nimble/toolkit";
 import {defineReactiveProperty, reactivify} from "./utils";
 import {PsGridColumnLayout, PsGridLayout} from "./layout";
-import {PsGridCellFormatter, PsGridColumnDef, PsGridProps, DataItem} from "../ps-grid";
+import {DataItem, PsGridCellFormatter, PsGridColumnDef, PsGridProps} from "../ps-grid";
 import {PsGridDnD} from "./dnd";
 import {PsGridCallbacks} from "./callbacks";
 import {PsGridColumnSortHandler} from "../ps-grid-sort-icon";
@@ -93,18 +93,18 @@ export const defineColumns = <T extends DataItem = DataItem>(
                     filter: null
                 };
                 if (groupBy?.includes(field!)) {
-                    column.aggregate = true;
+                    column!.aggregate = true;
                 }
                 if (sortable) {
-                    column.onSort = onSort.bind(null, column) as any;
+                    column!.onSort = onSort.bind(null, column!) as any;
                 }
-                defineReactiveProperty(column, "filter", computed(() => {
+                defineReactiveProperty(column!, "filter", computed(() => {
                     const text = state.filters?.[field];
                     return typeof text === "string" && text || null;
                 }));
-                cache.set(layoutColumn, column);
+                cache.set(layoutColumn, column!);
             }
-            return column;
+            return column!;
         };
     });
 
