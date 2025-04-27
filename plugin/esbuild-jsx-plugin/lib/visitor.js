@@ -124,9 +124,12 @@ const nodeVisitor = {
             transpiled = jsxExpression(imports.jsx, imports.Fragment, props);
         }
         const children = [];
-        let isReactive = false;
+        const reactive = [];
         for (const child of path.node.children) {
-            const { type } = child;
+            const { type, isReactive } = child;
+            if (isReactive) {
+                reactive.push(children.length);
+            }
             if (type === "CallExpression") {
                 children.push(child);
             }
@@ -142,36 +145,42 @@ const nodeVisitor = {
             }
             else if (type === "JSXExpressionContainer") {
                 if (child.expression.type !== "JSXEmptyExpression") {
-                    isReactive ||= child.isReactive;
-                    children.push(isIntrinsic && child.isReactive ? (0, types_1.arrowFunctionExpression)([], child.expression) : child.expression);
+                    children.push(child.expression);
                 }
             }
             else if (type === "JSXSpreadChild") {
-                isReactive ||= child.isReactive;
                 children.push((0, types_1.spreadElement)(child.expression));
             }
         }
         if (children.length) {
-            const value = children.length === 1 && children[0].type !== "SpreadElement"
-                ? children[0]
-                : (0, types_1.arrayExpression)(children);
-            if (isReactive && !isIntrinsic) {
-                props.push(reactiveProperty(false, CHILDREN, value));
+            const isSpread = children.some(({ type }) => type === "SpreadElement");
+            const value = children.length > 1 || isSpread
+                ? (0, types_1.arrayExpression)(children)
+                : children[0];
+            if (reactive.length === 0 || isIntrinsic && children.length > 1 && !isSpread) {
+                for (const i of reactive) {
+                    children[i] = (0, types_1.arrowFunctionExpression)([], children[i]);
+                }
+                props.push((0, types_1.objectProperty)(CHILDREN, value));
             }
             else {
-                props.push((0, types_1.objectProperty)(CHILDREN, value));
+                props.push(reactiveProperty(isIntrinsic, CHILDREN, value));
             }
         }
         path.replaceWith(transpiled);
         path.skip();
     }
 };
-const skipSubTree = path => path.skip();
+const skipSubTree = (path) => {
+    path.skip();
+};
+const markReactive = (path, rootNode) => {
+    rootNode.isReactive = true;
+    path.stop();
+};
 const jsxExpressionVisitor = {
-    MemberExpression(path, rootNode) {
-        rootNode.isReactive = true;
-        path.stop();
-    },
+    CallExpression: markReactive,
+    MemberExpression: markReactive,
     NewExpression: skipSubTree,
     ArrowFunctionExpression: skipSubTree,
     FunctionExpression: skipSubTree

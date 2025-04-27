@@ -135,60 +135,69 @@ describe("transpiler tests", () => {
     });
 
     it("fragments & signals", () => {
-        expect(tx`
-            let fn = () => {}, $s = {value: "unknown"};
-            <><p/></>;
-            <><p>NO</p></>;
-            <><p>NO{fn}</p></>;
-            <><p>{fn()}</p></>;
-            <>{$s}</>;
-            <>{$s.value}</>;
-            <>{$s.value}{$s.value}</>;
-            <>{"Hello"}{"World"}</>;
-            <>{["Hello","World"]}</>;
-            <>{...["Hello","World"]}</>;
-        `).to.eq(trim`import { Fragment, jsx } from "@nimble/toolkit/jsx-runtime.js";
-            let fn = () => {},
-                $s = {
-                    value: "unknown"
-                };
+        expect(ts`<p>{}</p>`).to.eq(trim`jsx("p", {});`);
+        expect(ts`<p>{fn}</p>`).to.eq(trim`jsx("p", { 
+            children: fn 
+        });`);
+        expect(ts`<><p/></>`).to.eq(trim`
             jsx(Fragment, {
                 children: jsx("p", {})
-            });
+            });`);
+        expect(ts`<><p>NO</p></>`).to.eq(trim`
             jsx(Fragment, {
                 children: jsx("p", {
-                    children: "NO"
+                   children: "NO"
                 })
-            });
+            });`);
+        expect(ts`<><p>NO{fn}</p></>`).to.eq(trim`
             jsx(Fragment, {
                 children: jsx("p", {
-                    children: ["NO", fn]
+                  children: ["NO", fn]
                 })
-            });
+            });`);
+        expect(ts`<p>{fn()}</p>`).to.eq(trim`jsx("p", { 
+            children: () => fn()
+        });`);
+        expect(ts`<>{fn()}{fn()}</>`).to.eq(trim`
+            jsx(Fragment, {
+              children: [() => fn(), () => fn()]
+            });`);
+        expect(ts`<p>{...fn()}</p>`).to.eq(trim`jsx("p", { 
+            children: () => [...fn()] 
+        });`);
+        expect(ts`<p>{0}{...fn()}{gn()}</p>`).to.eq(trim`jsx("p", { 
+            children: () => [0, ...fn(), gn()]
+        });`);
+        expect(ts`<><p>{jsx()}</p></>`).to.eq(trim`
             jsx(Fragment, {
                 children: jsx("p", {
-                    children: fn()
+                  children: () => jsx()
                 })
-            });
+            });`);
+        expect(ts`<>{$s}</>`).to.eq(trim`
             jsx(Fragment, {
                 children: $s
-            });
+            });`);
+        expect(ts`<>{$s.value}</>`).to.eq(trim`
             jsx(Fragment, {
                 children: () => $s.value
-            });
+            });`);
+        expect(ts`<>{$s.value}{$s.value}</>`).to.eq(trim`
             jsx(Fragment, {
                 children: [() => $s.value, () => $s.value]
-            });
+            });`);
+        expect(ts`<>{"Hello"}{"World"}</>`).to.eq(trim`
             jsx(Fragment, {
                 children: ["Hello", "World"]
-            });
+            });`);
+        expect(ts`<>{["Hello","World"]}</>`).to.eq(trim`
             jsx(Fragment, {
                 children: ["Hello", "World"]
-            });
+            });`);
+        expect(ts`<>{...["Hello","World"]}</>`).to.eq(trim`
             jsx(Fragment, {
                 children: [...["Hello", "World"]]
-            });
-        `);
+            });`);
     });
 
     it("FC", () => {
@@ -262,7 +271,7 @@ describe("transpiler tests", () => {
                  indexed_access={obj[0]}
                  methodCall={obj.get()}
                  nested={<div not={fn} yes={fn.call()}>{obj}{obj.value}</div>}
-             >A B C {...new Set([1, 2, 3])}</FC>
+             >A B C {...new Set([1, 2, 3])} {fn()} {jsx()}</FC>
         `).to.eq(trim`
             import { jsx } from "@nimble/toolkit/jsx-runtime.js";
             let FC = () => {};
@@ -272,7 +281,9 @@ describe("transpiler tests", () => {
                 style: "color: red;", 
                 "data-field": value,
                 arrow_expr: () => {},
-                "kall:fn": fn(),
+                get ["kall:fn"]() {
+                    return fn();
+                },
                 get property_access() {
                     return obj.value;
                 },
@@ -282,12 +293,16 @@ describe("transpiler tests", () => {
                 get methodCall() {
                     return obj.get();
                 },
-                nested: jsx("div", { 
-                    not: fn,
-                    yes: () => fn.call(),
-                    children: [obj, () => obj.value]
-                }),
-                children: ["A B C ", ...new Set([1, 2, 3])]
+                get nested() {
+                    return jsx("div", {
+                        not: fn,
+                        yes: () => fn.call(),
+                        children: [obj, () => obj.value]
+                    });
+                },
+                get children() {
+                    return ["A B C ", ...new Set([1, 2, 3]), " ", fn(), " ", jsx()];
+                }
             });
         `);
     });
@@ -295,8 +310,8 @@ describe("transpiler tests", () => {
     it("element", () => {
         expect(ts`<div el={<p>{fn()}</p>}/>`).to.eq(trim`
             jsx("div", {
-                el: jsx("p", {
-                    children: fn()
+                el: () => jsx("p", {
+                    children: () => fn()
                 })
             });
         `);
@@ -376,7 +391,7 @@ describe("transpiler tests", () => {
         `);
         expect(ts`<div el={<p></p>}/>`).to.eq(trim`
             jsx("div", {
-                el: jsx("p", {})
+                el: () => jsx("p", {})
             });
         `);
         expect(tx`
@@ -398,13 +413,13 @@ describe("transpiler tests", () => {
                 style: "color: red;", 
                 "data-field": value,
                 arrow_expr: () => {},
-                "kall:fn": fn(),
+                "kall:fn": () => fn(),
                 property_access: () => obj.value,
                 indexed_access: () => obj[0],
                 methodCall: () => obj.get(),
-                nested: jsx("div", {
+                nested: () => jsx("div", {
                     not: fn,
-                    yes: fn(),
+                    yes: () => fn(),
                     children: [obj, () => obj.value]
                 }),
                 children: ["A B C ", ...new Set([1, 2, 3])]
@@ -449,22 +464,22 @@ describe("transpiler tests", () => {
                 return jsx("div", {
                     k: () => y = props.z,
                     w: () => y[0] = 0,
-                    children: x = jsx(Fragment, {})
+                    children: () => x = jsx(Fragment, {})
                 });
             }
         `);
         expect(ts`
-            <div>{new Computed(() => props.message)}</div>
+            <div>{new Computed(() => props.message).value}</div>
         `).to.eq(trim`
             jsx("div", {
-                children: new Computed(() => props.message)
+                children: () => new Computed(() => props.message).value
             });
         `);
         expect(ts`
-            <div>{computed(() => props.message)}</div>
+            <div>{computed(() => props.message).value}</div>
         `).to.eq(trim`
-                jsx("div", {
-                    children: computed(() => props.message)
+            jsx("div", {
+                children: () => computed(() => props.message).value
             });
         `);
         expect(ts`
@@ -480,10 +495,10 @@ describe("transpiler tests", () => {
             <div>{(function X() { return props.message })()}</div>
         `).to.eq(trim`
             jsx("div", {
-                children: function X() { 
-                    return props.message; 
+                children: () => function X() {
+                    return props.message;
                 }()
             });
         `);
-    })
+    });
 });
