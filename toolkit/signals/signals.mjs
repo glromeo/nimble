@@ -41,7 +41,7 @@ function endBatch() {
     }
 }
 
-function batch(callback) {
+export function batch(callback, force = false) {
     if (batchDepth > 0) {
         return callback();
     }
@@ -49,13 +49,18 @@ function batch(callback) {
     try {
         return callback();
     } finally {
+        if (force) globalVersion++;
         endBatch();
     }
 }
 
 let evalContext = undefined;
 
-function untracked(callback) {
+export function currentContext() {
+    return evalContext
+}
+
+export function untracked(callback) {
     const prevContext = evalContext;
     evalContext = undefined;
     try {
@@ -70,10 +75,6 @@ let batchDepth = 0;
 let batchIteration = 0;
 
 let globalVersion = 0;
-
-export function increaseGlobalVersion() {
-    globalVersion++;
-}
 
 function link(target, source) {
     if (target === undefined) {
@@ -120,7 +121,7 @@ function link(target, source) {
     return undefined;
 }
 
-class Signal {
+export class Signal {
 
     constructor(value) {
         this.__value__ = value;
@@ -131,7 +132,7 @@ class Signal {
 
     refresh() {
         return true;
-    };
+    }
 
     subscribe(node) {
         if (this.targets !== node && node.prevTarget === undefined) {
@@ -141,7 +142,7 @@ class Signal {
             }
             this.targets = node;
         }
-    };
+    }
 
     unsubscribe(node) {
         if (this.targets !== undefined) {
@@ -159,7 +160,7 @@ class Signal {
                 this.targets = next;
             }
         }
-    };
+    }
 
     sub(callback) {
         return effect(() => {
@@ -172,19 +173,19 @@ class Signal {
                 evalContext = prevContext;
             }
         });
-    };
+    }
 
     valueOf() {
         return this.get();
-    };
+    }
 
     toString() {
         return this.get() + "";
-    };
+    }
 
     toJSON() {
         return this.get();
-    };
+    }
 
     peek() {
         const prevContext = evalContext;
@@ -194,7 +195,7 @@ class Signal {
         } finally {
             evalContext = prevContext;
         }
-    };
+    }
 
     get() {
         const node = link(evalContext, this);
@@ -233,7 +234,7 @@ Object.defineProperty(Signal.prototype, "value", {
     set: Signal.prototype.set
 });
 
-function signal(value) {
+export function signal(value) {
     return new Signal(value);
 }
 
@@ -292,7 +293,7 @@ function cleanupSources(target) {
     target.sources = head;
 }
 
-class Computed extends Signal {
+export class Computed extends Signal {
 
     constructor(callback) {
         super(undefined);
@@ -346,7 +347,7 @@ class Computed extends Signal {
         cleanupSources(this);
         this.flags &= ~RUNNING;
         return true;
-    };
+    }
 
     subscribe(node) {
         if (this.targets === undefined) {
@@ -357,7 +358,7 @@ class Computed extends Signal {
             }
         }
         super.subscribe(node);
-    };
+    }
 
     unsubscribe(node) {
         if (this.targets !== undefined) {
@@ -371,7 +372,7 @@ class Computed extends Signal {
                 }
             }
         }
-    };
+    }
 
     notify() {
         if (this.flags & NOTIFIED) {
@@ -379,7 +380,7 @@ class Computed extends Signal {
         }
         this.flags |= OUTDATED | NOTIFIED;
         super.notify();
-    };
+    }
 
     get() {
         if (this.flags & RUNNING) {
@@ -413,7 +414,7 @@ Object.defineProperty(Computed.prototype, "value", {
     get: Computed.prototype.get
 });
 
-function computed(callback) {
+export function computed(callback) {
     return new Computed(callback);
 }
 
@@ -462,7 +463,7 @@ function endEffect(prevContext) {
     endBatch();
 }
 
-class Effect {
+export class Effect {
 
     constructor(callback) {
         this.callback = callback;
@@ -485,7 +486,7 @@ class Effect {
         } finally {
             finish();
         }
-    };
+    }
 
     start() {
         if (this.flags & RUNNING) {
@@ -500,7 +501,7 @@ class Effect {
         const prevContext = evalContext;
         evalContext = this;
         return endEffect.bind(this, prevContext);
-    };
+    }
 
     notify() {
         if (this.flags & NOTIFIED) {
@@ -509,18 +510,18 @@ class Effect {
         this.flags |= NOTIFIED;
         this.nextEffect = batchedEffect;
         batchedEffect = this;
-    };
+    }
 
     dispose() {
-        this.flags |= DISPOSED;
-        if (!(this.flags & RUNNING)) {
-            disposeEffect(this);
+        if ((this.flags |= DISPOSED) & RUNNING) {
+            return;
         }
-    };
+        disposeEffect(this);
+    }
 
 }
 
-function effect(callback) {
+export function effect(callback) {
     const effect = new Effect(callback);
     try {
         effect.invoke();
@@ -531,119 +532,99 @@ function effect(callback) {
     return effect.dispose.bind(effect);
 }
 
-export {signal, computed, effect, batch, untracked, Signal, Computed, Effect};
-
-export function currentContext() {
-    return evalContext;
-}
-
-const scopes = new WeakMap();
-
-export function contextScope(context = evalContext) {
-    if (context === undefined) {
-        throw new Error("missing context");
-    }
-    let map = scopes.get(context);
-    if (map === undefined) {
-        scopes.set(context, map = new Map());
-    }
-    return map;
-}
-
 export function tracked(ctx, callback) {
     const prevContext = evalContext;
     evalContext = ctx;
     try {
-        return callback(ctx);
+        return callback();
     } finally {
         evalContext = prevContext;
+        cleanupSources(ctx);
     }
 }
 
-let queuedObserver = undefined;
-
-const notifyObservers = untracked.bind(null, () => {
-    let observer = queuedObserver;
-    queuedObserver = undefined;
-    while (observer !== undefined) {
-        const next = observer.nextEffect;
-        observer.nextEffect = undefined;
-        observer.flags &= ~NOTIFIED;
-        if (!(observer.flags & DISPOSED) && needsToRecompute(observer)) {
-            observer.flags |= RUNNING;
-            observer.flags &= ~DISPOSED;
-            try {
-                const {callback, signal} = observer;
-                if (callback !== undefined) callback(signal.get());
-            } catch (err) {
-                console.error("observer callback failure", err);
-            } finally {
-                observer.flags &= ~RUNNING;
-                if (observer.flags & DISPOSED) {
-                    observer.dispose();
-                }
-            }
-        }
-        observer = next;
+export function ownerContext() {
+    if (evalContext === undefined) {
+        throw new Error("missing context");
     }
-});
+    return evalContext;
+}
+
+export function runWithOwner(owner) {
+    const prevContext = evalContext;
+    evalContext = owner;
+    owner.i = 0;
+    owner.prev = owner.next;
+    owner.next = [];
+    owner.cache = undefined;
+    return () => evalContext = prevContext;
+}
+
 
 export class Observer {
 
-    constructor(signal, callback) {
-        this.signal = signal;
-        this.callback = callback;
-        this.source = undefined; // there is only one
-        this.nextEffect = undefined;
+    constructor(observable) {
         this.flags = TRACKING;
-        link(this, signal);
+        this.nextEffect = undefined;
+        this.observable = observable;
+        this.sources = undefined;
+        this.i = 0;
+        this.next = [];
+        this.value = tracked(this, this.observable);
+    }
+
+    observe(observable) {
+        this.observable = typeof observable === "function" ? observable : () => observable;
+        this.notify();
+    }
+
+    onChange(value, prev) {
     }
 
     invoke() {
         this.flags |= RUNNING;
         this.flags &= ~DISPOSED;
-
+        prepareSources(this);
+        startBatch();
         const prevContext = evalContext;
-        evalContext = undefined; // this;
+        evalContext = this;
         try {
-            if (this.callback !== undefined) this.callback(this.signal.get());
+            if (this.observable !== undefined) {
+                const value = this.observable();
+                if (value !== this.value) {
+                    this.onChange(value, this.value);
+                    this.value = value;
+                }
+            }
+        } catch (err) {
+            console.error("unhandled error in mutation callback", err);
         } finally {
             evalContext = prevContext;
-
+            cleanupSources(this);
             this.flags &= ~RUNNING;
             if (this.flags & DISPOSED) {
                 this.dispose();
             }
+            endBatch();
         }
     }
 
     notify() {
-        if (this.flags & NOTIFIED) {
-            return;
-        }
-        this.flags |= NOTIFIED;
-        if (batchDepth > 1) {
+        if (!(this.flags & NOTIFIED)) {
+            this.flags |= NOTIFIED;
             this.nextEffect = batchedEffect;
             batchedEffect = this;
-        } else {
-            if ((this.nextEffect = queuedObserver) === undefined) {
-                requestAnimationFrame(notifyObservers);
-            }
-            queuedObserver = this;
         }
     }
 
     dispose() {
-        if ((this.flags |= DISPOSED) & RUNNING) {
-            return;
+        if (!((this.flags |= DISPOSED) & RUNNING)) {
+            for (let node = this.sources; node !== undefined; node = node.nextSource) {
+                node.source.unsubscribe(node);
+            }
+            this.observable = undefined;
+            this.sources = undefined;
         }
-        const node = this.source;
-        node.source.unsubscribe(node);
-        this.callback = undefined;
+        return this.value;
     }
-}
-
-export function observe(signal, callback) {
-    const effect = new Observer(signal, callback);
-    return effect.dispose.bind(effect);
 }

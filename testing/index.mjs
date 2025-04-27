@@ -22,11 +22,18 @@ function outerHTML(node) {
             }
             return `<${tag}${attrs}>${node.innerHTML}</${tag}>`;
         case Node.DOCUMENT_FRAGMENT_NODE:
-            if (node.placeholder) {
-                let nodes = node.__nodes__ ?? []
-                return `${nodes instanceof Array ? nodes.map(outerHTML).join("") : outerHTML(nodes)}<!---->`;
+            const {groupStart, groupEnd} = node;
+            if (groupStart) {
+                let html = `<!--${groupStart.data}-->`;
+                let node = groupStart.nextSibling;
+                while (node !== groupEnd) {
+                    html += outerHTML(node);
+                    node = node.nextSibling;
+                }
+                html += `<!--${node.data}-->`;
+                return html;
             } else {
-                return [...node.childNodes].map(outerHTML).join();
+                return [...node.childNodes].map(outerHTML).join("");
             }
         default:
             return String(node);

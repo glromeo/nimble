@@ -6,3 +6,4 @@
 /toolkit/**/*.js
 /toolkit/**/*.map
 /**/coverage/
+/.idea/

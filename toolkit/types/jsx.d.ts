@@ -1,5 +1,4 @@
 import * as csstype from "csstype";
-import {Signal} from "nimble/signals/signals";
 
 /**
  * Based on JSX types for Surplus and Inferno and adapted for `dom-expressions`.
@@ -9,7 +8,7 @@ import {Signal} from "nimble/signals/signals";
  */
 type DOMElement = Element;
 
-type Reactive<T> = T | Signal<T> | Function<T>
+type Reactive<T> = T | Function<T>
 
 export namespace JSX {
     type Element = Node; // | ArrayElement | (string & {}) | number | boolean | null;
@@ -131,6 +130,7 @@ export namespace JSX {
 
     interface IntrinsicAttributes {
         ref?: unknown | ((e: unknown) => void) | undefined;
+        key?: any;
     }
 
     interface CustomAttributes<T> {

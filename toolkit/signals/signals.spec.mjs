@@ -4,7 +4,7 @@ import {
     effect,
     batch,
     Signal,
-    untracked, observe,
+    untracked
 } from "./signals.mjs";
 
 import {expect, use} from "chai";
@@ -186,43 +186,6 @@ describe("signal", () => {
             expect(spy).not.to.be.called;
         });
     });
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    describe("observe()", () => {
-        it("should observe a signal", () => {
-            const spy = sinon.spy();
-            const a = signal(0);
-
-            observe(a, spy);
-            expect(spy).not.to.be.calledWith(0);
-            a.value = 1;
-            expect(spy).to.be.calledWith(1);
-            spy.resetHistory();
-            a.value = 2;
-            expect(spy).to.be.calledWith(2);
-        });
-        it("should not trigger when a signal accessed in the callback changes", () => {
-            const spy = sinon.spy();
-            const a = signal(0);
-            const b = signal(0);
-
-            observe(a, () => {
-                b.value;
-                spy();
-            });
-            a.value++;
-
-            expect(spy).to.be.calledOnce;
-            spy.resetHistory();
-
-            b.value++;
-            expect(spy).not.to.be.called;
-        });
-    });
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 });
 
 describe("effect()", () => {
@@ -2013,7 +1976,7 @@ describe("batch/transaction", () => {
 });
 
 describe("untracked", () => {
-    it("should block tracking inside effects", () => {
+    it("should block tracked inside effects", () => {
         const a = signal(1);
         const b = signal(2);
         const spy = sinon.spy(() => {
@@ -2027,7 +1990,7 @@ describe("untracked", () => {
         expect(spy).to.be.calledOnce;
     });
 
-    it("should block tracking even when run inside effect run inside untracked", () => {
+    it("should block tracked even when run inside effect run inside untracked", () => {
         const s = signal(1);
         const spy = sinon.spy(() => s.value);
 
@@ -2061,7 +2024,7 @@ describe("untracked", () => {
         dispose();
     });
 
-    it("should block tracking inside computed signals", () => {
+    it("should block tracked inside computed signals", () => {
         const a = signal(1);
         const b = signal(2);
         const spy = sinon.spy(() => a.value + b.value);

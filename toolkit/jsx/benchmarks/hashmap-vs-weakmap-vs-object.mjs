@@ -1,6 +1,6 @@
 import Benchmark from "benchmark";
 
-const sym = "_i_"; // Symbol();
+const sym = Symbol();
 const nodes = Array.from({length: 100}, (index) => index % 2 ? {_i_:{index}} : {[sym]: {}});
 
 const weakmap = new WeakMap(nodes.filter((_,i)=>i%2).map((n,index) => [n, {index}]));
