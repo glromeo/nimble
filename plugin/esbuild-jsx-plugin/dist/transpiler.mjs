@@ -45505,31 +45505,27 @@ var visitor = {
 };
 
 // src/transpiler.ts
-var traverse = import_traverse.default.default ?? import_traverse.default;
-var generate = import_generator.default.default ?? import_generator.default;
-var transpiler_default = (source, {
-  compact = false,
-  minified = false,
-  sourceMaps = true,
-  sourceFileName,
-  defaultExt
-} = {}) => {
-  const ast = (0, import_parser.parse)(source, {
+var babelTraverse = import_traverse.default.default ?? import_traverse.default;
+var babelGenerate = import_generator.default.default ?? import_generator.default;
+var transpiler_default = (source, options = {}) => {
+  return generate(traverse(parse(source)), options, source);
+};
+function parse(source) {
+  return (0, import_parser.parse)(source, {
     sourceType: "module",
     plugins: ["jsx", "typescript"]
   });
-  traverse(ast, visitor, void 0, { defaultExt });
-  return generate(
-    ast,
-    {
-      compact,
-      minified,
-      sourceMaps,
-      sourceFileName
-    },
-    source
-  );
-};
+}
+function traverse(ast) {
+  babelTraverse(ast, visitor, void 0, {});
+  return ast;
+}
+function generate(ast, options, source) {
+  return babelGenerate(ast, options, source);
+}
 export {
-  transpiler_default as default
+  transpiler_default as default,
+  generate,
+  parse,
+  traverse
 };

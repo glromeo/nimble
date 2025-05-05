@@ -35,8 +35,7 @@ export type State = {
         xhtml: Identifier,
         Fragment: Identifier
     },
-    isReactive?: boolean,
-    defaultExt?: string
+    isReactive?: boolean
 };
 
 function importIdentifier(this: State["imports"], root: NodePath<Program>, name: string, module: string) {

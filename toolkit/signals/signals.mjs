@@ -56,10 +56,6 @@ export function batch(callback, force = false) {
 
 let evalContext = undefined;
 
-export function currentContext() {
-    return evalContext
-}
-
 export function untracked(callback) {
     const prevContext = evalContext;
     evalContext = undefined;
@@ -544,9 +540,6 @@ export function tracked(ctx, callback) {
 }
 
 export function ownerContext() {
-    if (evalContext === undefined) {
-        throw new Error("missing context");
-    }
     return evalContext;
 }
 
@@ -555,9 +548,13 @@ export function runWithOwner(owner) {
     evalContext = owner;
     owner.i = 0;
     owner.prev = owner.next;
-    owner.next = [];
+    owner.next = undefined;
     owner.cache = undefined;
-    return () => evalContext = prevContext;
+    return () => {
+        evalContext = prevContext;
+        owner.prev = undefined;
+        owner.cache = undefined;
+    };
 }
 
 
@@ -568,8 +565,6 @@ export class Observer {
         this.nextEffect = undefined;
         this.observable = observable;
         this.sources = undefined;
-        this.i = 0;
-        this.next = [];
         this.value = tracked(this, this.observable);
     }
 
@@ -628,3 +623,4 @@ export class Observer {
         return this.value;
     }
 }
+

@@ -1,6 +1,6 @@
 import {Navigator} from "./navigator";
 import {computed, effect, JSX, signal, Signal, storedSignal} from "@nimble/toolkit";
-
+import "nimble/directives/resizable";
 import "./stories.scss";
 
 const settings = storedSignal("stories.settings", {

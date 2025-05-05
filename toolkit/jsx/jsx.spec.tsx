@@ -3,7 +3,7 @@ import type Sinon from "sinon";
 import sinon from "sinon";
 import {checkJsx, Fragment, NodeGroup} from "./jsx.mjs";
 import {createDirective} from "./directives.mjs";
-import {contextScope, computed, ownerScope, Effect, signal, tracked, currentContext, effect} from "../signals/signals.mjs";
+import {computed, Effect, signal, tracked, ownerContext, runWithOwner} from "../signals/signals.mjs";
 import {vsync} from "@nimble/testing";
 
 declare module "@nimble/toolkit" {
@@ -23,8 +23,8 @@ function outerHTML(node: Node) {
 suite("Nimble JSX", ({before}) => {
 
     before.each(async () => {
-        if (currentContext() != undefined) {
-            assert.fail("invalid signals state: " + currentContext());
+        if (ownerContext() != undefined) {
+            assert.fail("invalid signals state: " + ownerContext());
         }
         checkJsx();
     });
@@ -102,20 +102,26 @@ suite("Nimble JSX", ({before}) => {
     });
 
     test("fragments can have keys", async () => {
-        let scope;
-        tracked({}, function () {
-            scope = contextScope();
-            let f;
-            expect(<p key="P">{f = <Fragment key="F"></Fragment>}</p>).eq("<p><!--<>--><!--</>--></p>");
-            expect(scope.get("P")).not.to.be.undefined; // P ends up in global scope here
-            expect(scope.get("F")).not.to.be.undefined; // F is within the scope of P's children
+        const done = runWithOwner({});
+        try {
+            let inner, f;
+            expect(<p key="P">{(() => {
+                inner = ownerContext();
+                return f = <Fragment key="F"></Fragment>
+            })()}</p>).eq("<p><!--<>--><!--</>--></p>");
+            const {next} = ownerContext();
+            expect(next.constructor.name).to.eq("Array");
+            expect(next.length).to.eq(1);
+            expect(next[0].key).to.eq("P"); // P ends up in global scope here
+            expect(inner.next[0].key).to.eq("F"); // F is within the scope of P's children
 
-            const state = scope.get("F");
-            expect(state.node).to.eq(f);
-            state.update({children: "Hello"});
-        });
+            expect(inner.next[0].node).to.eq(f);
+            inner.next[0].update({children: "Hello"});
+        } finally {
+            done();
+        }
         await vsync();
-        expect(scope.get("P").node).eq("<p><!--<>-->Hello<!--</>--></p>");
+        expect(ownerContext().next[0].node).eq("<p><!--<>-->Hello<!--</>--></p>");
     });
 
     test("directives", () => {
@@ -312,7 +318,8 @@ suite("Nimble JSX", ({before}) => {
 
     test("scrolling", async () => {
         let items = signal([]);
-        let node = <div>{items.value?.map((value: string) => <div key={value} data-value={() => value}>{value}</div>)}</div>;
+        let node = <div>{items.value?.map((value: string) => <div key={value}
+                                                                  data-value={() => value}>{value}</div>)}</div>;
         expect(node).to.equal("<div></div>");
         let sn = [...names];
         items.set(sn);
@@ -821,32 +828,32 @@ suite("Nimble JSX", ({before}) => {
         const second = signal("s");
         let node = <div>{first.value}{second.value}</div>
         expect(node).to.html("<!--<>-->0<!--</>-->s");
-        first.value = [0,1];
+        first.value = [0, 1];
         expect(node).to.html("<!--<>-->01<!--</>-->s");
     });
 
     test("effects disposal", () => { // todo: improve me pleeeease
         const items = signal([1, 2, 3, 4, 5]);
         const node = <div>{items.value.map(value => (
-            <div key={value} data-value={() => value}>{() => <p data-txt={()=> value}>{value}</p>}</div>
+            <div key={value} data-value={() => value}>{() => <p data-txt={() => value}>{value}</p>}</div>
         ))}</div>;
         expect(node).to.eq(
             '<div>' +
-                '<div data-value="1"><p data-txt="1">1</p></div>' +
-                '<div data-value="2"><p data-txt="2">2</p></div>' +
-                '<div data-value="3"><p data-txt="3">3</p></div>' +
-                '<div data-value="4"><p data-txt="4">4</p></div>' +
-                '<div data-value="5"><p data-txt="5">5</p></div>' +
+            '<div data-value="1"><p data-txt="1">1</p></div>' +
+            '<div data-value="2"><p data-txt="2">2</p></div>' +
+            '<div data-value="3"><p data-txt="3">3</p></div>' +
+            '<div data-value="4"><p data-txt="4">4</p></div>' +
+            '<div data-value="5"><p data-txt="5">5</p></div>' +
             '</div>'
         );
         items.value = [1, 2, 3, 4, 6];
         expect(node).to.eq(
             '<div>' +
-                '<div data-value="1"><p data-txt="1">1</p></div>' +
-                '<div data-value="2"><p data-txt="2">2</p></div>' +
-                '<div data-value="3"><p data-txt="3">3</p></div>' +
-                '<div data-value="4"><p data-txt="4">4</p></div>' +
-                '<div data-value="6"><p data-txt="6">6</p></div>' +
+            '<div data-value="1"><p data-txt="1">1</p></div>' +
+            '<div data-value="2"><p data-txt="2">2</p></div>' +
+            '<div data-value="3"><p data-txt="3">3</p></div>' +
+            '<div data-value="4"><p data-txt="4">4</p></div>' +
+            '<div data-value="6"><p data-txt="6">6</p></div>' +
             '</div>'
         );
     });

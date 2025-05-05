@@ -11,13 +11,14 @@ const jsxPlugin = (options = { minified: true }) => ({
     name: "esbuild-jsx-plugin",
     setup({ onLoad }) {
         onLoad({ filter: /\.[jt]sx$/ }, async ({ path }) => {
-            let source = await (0, promises_1.readFile)(path, "utf8");
-            let { code, map } = (0, transpiler_1.default)(source, {
+            const source = await (0, promises_1.readFile)(path, "utf8");
+            const { code, map } = (0, transpiler_1.default)(source, {
                 ...options,
+                sourceMaps: true,
                 sourceFileName: path
             });
-            let data = Buffer.from(JSON.stringify(map), "utf-8").toString("base64");
-            let contents = `${code}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,${data}`;
+            const data = Buffer.from(JSON.stringify(map), "utf-8").toString("base64");
+            const contents = `${code}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,${data}`;
             return {
                 contents,
                 loader: path.at(-3) === "j" ? "js" : "ts"

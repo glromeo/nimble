@@ -9,6 +9,9 @@
     "build": "nimble build --watch"
   },
   "dependencies": {
+    "@nimble/toolkit": "1.0.0"
+  },
+  "devDependencies": {
     "@nimble/scripts": "1.0.0"
   }
 }

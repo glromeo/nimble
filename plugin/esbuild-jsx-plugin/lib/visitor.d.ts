@@ -8,6 +8,5 @@ export type State = {
         Fragment: Identifier;
     };
     isReactive?: boolean;
-    defaultExt?: string;
 };
 export declare const visitor: Visitor<State>;

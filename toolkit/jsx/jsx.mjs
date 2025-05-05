@@ -109,7 +109,7 @@ export function jsx(tag, props, key) {
         }
     }
     const owner = ownerContext();
-    let {prev, next} = owner;
+    let {prev} = owner;
     let state;
     if (owner.i < prev?.length && (state = prev[owner.i++]).key !== key) {
         (owner.cache ??= new Map()).set(state.key, state);
@@ -134,7 +134,7 @@ export function jsx(tag, props, key) {
         }
         state.key = key;
     }
-    next.push(state);
+    (owner.next ??= []).push(state);
     return state.node;
 }
 
@@ -553,6 +553,7 @@ class DynamicNode extends Observer {
 
     constructor(namespaceURI, observable) {
         super(observable);
+        this.next = undefined;
         const done = runWithOwner(this);
         try {
             this.node = typeof this.value !== "function"
@@ -572,6 +573,7 @@ class DynamicNode extends Observer {
                 if (this.node !== update) {
                     this.replaceWith(update);
                 }
+                return;
             }
             const type = typeof value;
             if (type === "object") {
@@ -633,6 +635,7 @@ class DynamicChildren extends Observer {
 
     constructor(node, observable) {
         super(observable);
+        this.next = undefined;
         const done = runWithOwner(this);
         try {
             this.sibling = node.__effects__;

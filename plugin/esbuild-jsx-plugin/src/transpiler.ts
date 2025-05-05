@@ -1,34 +1,28 @@
-import {parse} from "@babel/parser";
+import {parse as babelParse, ParseResult} from "@babel/parser";
 import __traverse from "@babel/traverse";
 import __generate, {GeneratorOptions} from "@babel/generator";
 import {State, visitor} from "./visitor";
 
-const traverse = (__traverse as any).default ?? __traverse;
-const generate = (__generate as any).default ?? __generate;
+const babelTraverse = (__traverse as any).default ?? __traverse;
+const babelGenerate = (__generate as any).default ?? __generate;
 
-export default (source: string, {
-    compact = false,
-    minified = false,
-    sourceMaps = true,
-    sourceFileName,
-    defaultExt
-}: Partial<GeneratorOptions & {defaultExt: string}> = {}) => {
+export default (source: string, options: Partial<GeneratorOptions> = {}) => {
+    return generate(traverse(parse(source)), options, source);
+};
 
-    const ast = parse(source, {
+export function parse(source: string): ParseResult {
+    return babelParse(source, {
         sourceType: "module",
         plugins: ["jsx", "typescript"]
     });
+}
 
-    traverse(ast, visitor, undefined, {defaultExt} as State);
+export function traverse(ast: ParseResult): ParseResult {
+    babelTraverse(ast, visitor, undefined, {} as State);
+    return ast;
+}
 
-    return generate(
-        ast,
-        {
-            compact,
-            minified,
-            sourceMaps,
-            sourceFileName
-        },
-        source
-    );
-};
+export function generate(ast: ParseResult, options: Partial<GeneratorOptions>, source: string) {
+    return babelGenerate(ast, options, source);
+}
+
