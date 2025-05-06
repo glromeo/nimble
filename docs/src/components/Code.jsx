@@ -17,19 +17,34 @@ document.adoptedStyleSheets.push(css`
         overflow: hidden;
         top: 0;
         right: 0;
-        opacity: .25;
+        background-color: #f4f8ff;
         color: rgb(var(--bs-white-rgb));
         display: flex;
         border-bottom-left-radius: var(--bs-border-radius);
         font-size: .875em;
     }
     .code-box-tab {
+        opacity: .33;
         border-right: var(--bs-border-width) var(--bs-border-style) var(--bs-border-color);
+    }
+    .code-box pre {
+        height: 128px;
+    }
+    .code-box iframe {
+        border: none;
+        width: 100%;
+        height: 138px;
     }
 `);
 
 function transpile(source, sourcefile) {
-    const ast = traverse(parse(source));
+    const ast = traverse(parse(source, false), {
+        enter(path) {
+            delete path.node.leadingComments;
+            delete path.node.trailingComments;
+            delete path.node.innerComments;
+        },
+    });
     console.log(ast);
     const {code, map} = generate(ast, {
         minified: false,
@@ -59,11 +74,15 @@ function iframeHTML(module) {
                 "chai": "../node_modules/@nimble/testing/node_modules/chai/chai.js",
                 "sinon": "../node_modules/@nimble/testing/node_modules/sinon/pkg/sinon-esm.js"
             }}</script>
+            <script type="module">${module}</script>
+            <style>
+                :root {
+                    font-family: sans-serif;
+                    font-size: 16px;
+                }
+            </style>
         </head>
-        <body style="padding-top: 56px;">
-        <script type="module">${module}
-        </script>
-        </body>
+        <body></body>
         </html>
     `;
 }
@@ -72,7 +91,7 @@ export function Code(props) {
 
     const source = computed(() => {
         const lines = (props.source || "").split("\n");
-        const indent = lines.at(-1).length;
+        const indent = lines[1].match(/^\s+/)?.[0].length ?? 0;
         return lines.slice(1).map(line => line.slice(indent)).join("\n");
     });
 
@@ -80,9 +99,9 @@ export function Code(props) {
         return transpile(source.value, props.filename || "unknown");
     });
 
-    function strip(...parts) {
-        return parts.pop().split("\n").filter(line => !parts.some(part => line.indexOf(part) >= 0)).join(`\n`);
-    }
+    const stripped = computed(() => {
+        return transformed.value.split("\n").filter(line => line.indexOf("import ") < 0 && line.indexOf("//# ") < 0).join(`\n`);
+    });
 
     const tab = signal("tsx");
 
@@ -93,14 +112,16 @@ export function Code(props) {
         </div>
     )
 
+    const highlight = code => hljs.highlight(code, { language: 'typescript' }).value;
+
     return (
         <div class="code-box">
             <slot type={tab.value}>{() => {
                 switch (tab.value) {
                     case "tsx":
-                        return <pre><code>{source.value}</code></pre>;
+                        return <pre><code ref={el => el.innerHTML = highlight(source.value)} /></pre>;
                     case "js":
-                        return <pre><code ref={el => el.innerHTML = strip("import ", "//# ", transformed.value)}/></pre>;
+                        return <pre><code ref={el => el.innerHTML = highlight(stripped.value)} /></pre>;
                     case "DOM":
                         return <iframe src="about:blank" srcdoc={iframeHTML(transformed.value)}/>;
                 }

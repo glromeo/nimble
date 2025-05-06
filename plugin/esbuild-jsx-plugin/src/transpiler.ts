@@ -17,8 +17,8 @@ export function parse(source: string): ParseResult {
     });
 }
 
-export function traverse(ast: ParseResult): ParseResult {
-    babelTraverse(ast, visitor, undefined, {} as State);
+export function traverse(ast: ParseResult, opt?: any): ParseResult {
+    babelTraverse(ast, opt ? {...opt, ...visitor} : visitor, undefined, {} as State);
     return ast;
 }
 

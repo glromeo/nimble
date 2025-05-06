@@ -99,9 +99,11 @@ document.body.append(<>
         <h2>JSX</h2>
         <p class="m-0">JSX expressions create DOM nodes</p>
         <Code language="javascript" source={`
-            const element = <div>Hello sailor!</div>;    // element is a HTMLDivElement
+            const el = <div>Hello sailor!</div>;    
             
-            document.body.append(element);
+            // el instanceof HTMLDivElement;
+            
+            document.body.append(el);
         `} />
     </div>
 </>);
