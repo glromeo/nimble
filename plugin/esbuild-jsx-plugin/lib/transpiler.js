@@ -21,8 +21,8 @@ function parse(source) {
         plugins: ["jsx", "typescript"]
     });
 }
-function traverse(ast) {
-    babelTraverse(ast, visitor_1.visitor, undefined, {});
+function traverse(ast, opt) {
+    babelTraverse(ast, opt ? { ...opt, ...visitor_1.visitor } : visitor_1.visitor, undefined, {});
     return ast;
 }
 function generate(ast, options, source) {

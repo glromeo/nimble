@@ -45555,8 +45555,8 @@ function parse(source) {
     plugins: ["jsx", "typescript"]
   });
 }
-function traverse(ast) {
-  babelTraverse(ast, visitor, void 0, {});
+function traverse(ast, opt) {
+  babelTraverse(ast, opt ? { ...opt, ...visitor } : visitor, void 0, {});
   return ast;
 }
 function generate(ast, options, source) {
