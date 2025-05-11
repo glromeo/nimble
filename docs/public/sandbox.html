@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sandbox</title>
+    <link href="https://unpkg.com/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha256-zzPh8NflvEInFbVSzLYGVMLOn0j0kfsjq/UlNeMBRYw=" crossorigin="anonymous">
+    <script type="importmap">{"imports":{
+        "@nimble/testing/": "/@nimble/node_modules/@nimble/testing/",
+        "@nimble/toolkit/": "/@nimble/node_modules/@nimble/toolkit/",
+        "@nimble/signals": "/@nimble/node_modules/@nimble/toolkit/signals/signals.mjs",
+        "@nimble/jsx-runtime": "/@nimble/node_modules/@nimble/toolkit/jsx-runtime.js",
+        "chai": "/@nimble/node_modules/@nimble/testing/node_modules/chai/chai.js",
+        "sinon": "/@nimble/node_modules/@nimble/testing/node_modules/sinon/pkg/sinon-esm.js"
+    }}</script>
+</head>
+<body class="m-0 p-4 w-100 h-100">
+<script type="text/javascript">
+    window.addEventListener("message", ({data}) => {
+        if (data.code !== undefined) {
+            const script = document.createElement('script');
+            script.setAttribute("type", "module");
+            script.textContent = data.code;
+            document.body.appendChild(script);
+        }
+    });
+</script>
+</body>
+</html>

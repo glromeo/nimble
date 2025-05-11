@@ -6,10 +6,12 @@
   "license": "MIT",
   "main": "index.html",
   "scripts": {
-    "build": "nimble build --watch"
+    "watch": "nimble build --watch"
   },
   "dependencies": {
-    "@nimble/toolkit": "1.0.0"
+    "@codemirror/lang-javascript": "^6.2.3",
+    "@nimble/toolkit": "1.0.0",
+    "codemirror": "^6.0.1"
   },
   "devDependencies": {
     "@nimble/scripts": "1.0.0"

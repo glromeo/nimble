@@ -7,6 +7,7 @@ export type State = {
         xhtml: Identifier;
         Fragment: Identifier;
     };
+    factory: Identifier;
     isReactive?: boolean;
 };
 export declare const visitor: Visitor<State>;

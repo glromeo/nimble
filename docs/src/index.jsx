@@ -90,20 +90,52 @@ document.body.append(<>
         </div>
     </nav>
     <div class="container">
-        <h1 class="p-2 display-1">Nimble</h1>
-        <p class="m-0">Nimble is a little reactive library meant to help create and manipulate the DOM.</p>
-        <p class="m-0">Nimble leaves you in control of your nodes, as much as possible,</p>
-        <p>and promotes writing modern web applications by leaving you as close as possible to the platform.</p>
+        <h1 class="p-1 display-1">Nimble</h1>
+        <p class="m-0 px-3">Nimble is a little reactive library meant to help create and manipulate the DOM.</p>
+        <p class="m-0 px-3">
+            Nimble leaves you in control of your nodes, as much as possible, and promotes writing modern web applications
+            by leaving you as close as possible to the platform.
+        </p>
     </div>
     <div class="container">
-        <h2>JSX</h2>
-        <p class="m-0">JSX expressions create DOM nodes</p>
+        <h2 class="p-2">JSX</h2>
+        <p class="m-0 px-3">
+            JSX Elements create DOM nodes that can be appended anywhere in the dom using vanilla Javascript.
+        </p>
         <Code language="javascript" source={`
-            const element = <div>Hello sailor!</div>;    // element is a HTMLDivElement
+            const element = <div>Hello sailor!</div>;  // NOTE: This is an HTMLDivElement
             
             document.body.append(element);
         `} />
+        <p class="m-0 px-3">
+            JSX expressions can be either plain or reactive, depending on whether they include function calls or
+            property access. If a signal is used within the expression, the corresponding property or attribute
+            will automatically update when the signal changes.
+        </p>
+        <Code language="javascript" source={`
+            import {signal} from "@nimble/signals"; 
+
+            const colors = ["red", "green", "blue"]; 
+            const color = signal(0);
+
+            document.body.append(
+                <div class="simple" style={\`color:\${colors[color.value]\}\`}>
+                    <h1>Hello {colors[color.value]} sailor!</h1>
+                    <button class="rounded-2" onclick={()=>color.value++}>
+                        {color.value < colors.length ? "click me" : "ahoy!"}
+                    </button>
+                </div>
+            );
+        `} />
+        <p class="m-0 px-3">
+            <b>colors</b> is a plain array of CSS color names.<br/>
+            <b>color</b> is a signal,
+            <div class="border-left-2 border-info">
+                you can read/write its with the <b>get/set</b> methods or the <b>value</b> property.
+            </div>
+        </p>
     </div>
-</>);
+</>
+);
 
 

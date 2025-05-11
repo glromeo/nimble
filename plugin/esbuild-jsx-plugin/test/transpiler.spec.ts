@@ -16,7 +16,7 @@ const ts = (source: TemplateStringsArray) => transpile(source).filter(line => li
 describe("transpiler tests", () => {
     it("fragment", () => {
         expect(tx`<></>`).to.eq(trim`
-            import { Fragment, jsx } from "@nimble/toolkit/jsx-runtime.js";
+            import { jsx, Fragment } from "@nimble/toolkit/jsx-runtime.js";
             jsx(Fragment, {});
         `);
         expect(ts`<> </>`).to.eq(trim`
@@ -74,12 +74,17 @@ describe("transpiler tests", () => {
         `);
         expect(ts`<>\t</>`).to.eq(trim`
             jsx(Fragment, {
-                children: "\\t"
+                children: " "
             });
         `);
-        expect(ts`<> \n \t {"\t"} \n \t </>`).to.eq(trim`
+        expect(ts`<> \n\t {"\t"} \n </>`).to.eq(trim`
             jsx(Fragment, {
                 children: [" ", "\t", " "]
+            });
+        `);
+        expect(ts`<> \na {"\t"} b\n </>`).to.eq(trim`
+            jsx(Fragment, {
+                children: [" a ", "\t", " b"]
             });
         `);
         expect(ts`<>Hello{}World</>`).to.eq(trim`
@@ -136,8 +141,8 @@ describe("transpiler tests", () => {
 
     it("fragments & signals", () => {
         expect(ts`<p>{}</p>`).to.eq(trim`jsx("p", {});`);
-        expect(ts`<p>{fn}</p>`).to.eq(trim`jsx("p", { 
-            children: fn 
+        expect(ts`<p>{fn}</p>`).to.eq(trim`jsx("p", {
+            children: fn
         });`);
         expect(ts`<><p/></>`).to.eq(trim`
             jsx(Fragment, {
@@ -155,7 +160,7 @@ describe("transpiler tests", () => {
                   children: ["NO", fn]
                 })
             });`);
-        expect(ts`<p>{fn()}</p>`).to.eq(trim`jsx("p", { 
+        expect(ts`<p>{fn()}</p>`).to.eq(trim`jsx("p", {
             children: () => fn()
         });`);
         expect(ts`<>{fn()}{fn()}</>`).to.eq(trim`
@@ -168,6 +173,7 @@ describe("transpiler tests", () => {
         expect(ts`<p>{0}{...fn()}{gn()}</p>`).to.eq(trim`jsx("p", { 
             children: () => [0, ...fn(), gn()]
         });`);
+        // actual jsx expressions are not reactive because they are created after the visit
         expect(ts`<><p>{jsx()}</p></>`).to.eq(trim`
             jsx(Fragment, {
                 children: jsx("p", {
@@ -307,7 +313,22 @@ describe("transpiler tests", () => {
         `);
     });
 
-    it("element", () => {
+    it("elements", () => {
+        expect(ts`<div>Hello Sailor!</div>`).to.eq(trim`
+            jsx("div", {
+                children: "Hello Sailor!"
+            });
+        `);
+        expect(ts`<div>Hello {"Great"} Sailor!</div>`).to.eq(trim`
+            jsx("div", {
+                children: ["Hello ", "Great", " Sailor!"]
+            });
+        `);
+        expect(ts`<div>\n\t  Hello {"Great"} Sailor!\n  </div>`).to.eq(trim`
+            jsx("div", {
+                children: ["Hello ", "Great", " Sailor!"]
+            });
+        `);
         expect(ts`<div el={<p>{fn()}</p>}/>`).to.eq(trim`
             jsx("div", {
                 el: () => jsx("p", {
@@ -436,6 +457,68 @@ describe("transpiler tests", () => {
                 get ["is:resizable"]() {
                     return axis.value;
                 }
+            });
+        `);
+    });
+
+    it("reactive props", () => {
+        expect(ts`
+            <div class="editor" style={\`display:\${mode.value === "source" ? "block" : "none"}\`} />
+        `).to.eq(trim`
+            jsx("div", {
+                class: "editor",
+                style: () => \`display:\${mode.value === "source" ? "block" : "none"}\`
+            });
+        `);
+    })
+
+    it("elements with xmlns", () => {
+        expect(ts`
+            <svg width="16" height="16" fill="currentColor" class="bi bi-eye" viewBox="0 0 16 16">
+                <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88
+                 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465
+                  1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/>
+            </svg>
+        `).to.eq(trim`
+            svg("svg", {
+                width: "16",
+                height: "16",
+                fill: "currentColor",
+                class: "bi bi-eye",
+                viewBox: "0 0 16 16",
+                children: svg("path", {
+                    d: "M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88
+                    3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465
+                    1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"
+                })
+            });
+        `);
+        expect(ts`
+            <svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
+              <foreignObject x="10" y="10" width="280" height="180">
+                <div xmlns="http://www.w3.org/1999/xhtml" 
+                     style="width: 100%; height: 100%">
+                  <strong>Hello from inside a div!</strong><br/>
+                  This is HTML content rendered inside an SVG.
+                </div>
+              </foreignObject>
+            </svg>
+        `).to.eq(trim`
+            svg("svg", {
+                width: "300",
+                height: "200",
+                children: svg("foreignObject", {
+                    x: "10",
+                    y: "10",
+                    width: "280",
+                    height: "180",
+                    children: xhtml("div", {
+                        style: "width: 100%; height: 100%",
+                        children: [xhtml("strong", {
+                            children: "Hello from inside a div!"
+                        }), xhtml("br", {}), "This is HTML content rendered inside an SVG."]
+                    })
+                })
             });
         `);
     });

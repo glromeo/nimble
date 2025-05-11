@@ -45307,6 +45307,8 @@ init_define_process_env();
 init_define_process_env_NODE_ENV();
 var import_types = __toESM(require_lib4());
 var import_template = __toESM(require_lib7());
+var SVG_NAMESPACE_URI = "http://www.w3.org/2000/svg";
+var XHTML_NAMESPACE_URI = "http://www.w3.org/1999/xhtml";
 var NIMBLE_MODULE = "@nimble/toolkit/index.mjs";
 var JSX_RUNTIME_MODULE = "@nimble/toolkit/jsx-runtime.js";
 var template = import_template.default.ast ? import_template.default : import_template.default.default;
@@ -45354,8 +45356,12 @@ function parseJSXMemberExpression({ object, property }) {
     (0, import_types.identifier)(property.name)
   );
 }
-function jsxExpression(callee, tag, props) {
-  return (0, import_types.callExpression)(callee, [tag, (0, import_types.objectExpression)(props)]);
+function jsxExpression(callee, tag, props, key) {
+  const args = [tag, (0, import_types.objectExpression)(props)];
+  if (key !== void 0) {
+    args.push(key);
+  }
+  return (0, import_types.callExpression)(callee, args);
 }
 function reactiveProperty(useArrow, key, expression) {
   if (useArrow) {
@@ -45365,52 +45371,84 @@ function reactiveProperty(useArrow, key, expression) {
   }
 }
 var nodeVisitor = {
-  exit(path, { imports }) {
+  enter(path, state) {
+    const { imports } = state;
     const props = [];
-    let transpiled;
-    let isIntrinsic = true;
+    let factory = state.factory, ns, tagName, key;
     if (path.node.type === "JSXElement") {
       const { name: tag, attributes } = path.node.openingElement;
       if (tag.type === "JSXNamespacedName") {
         const { namespace, name } = tag;
-        const callee = imports[namespace.name] ?? (0, import_types.identifier)(namespace.name);
-        transpiled = jsxExpression(callee, (0, import_types.stringLiteral)(name.name), props);
+        factory = imports[ns = namespace.name] ?? (0, import_types.identifier)(namespace.name);
+        tagName = (0, import_types.stringLiteral)(name.name);
       } else {
-        const tagName = tagIdentifier(tag);
-        transpiled = jsxExpression(imports.jsx, tagName, props);
-        isIntrinsic = (0, import_types.isStringLiteral)(tagName);
+        tagName = tagIdentifier(tag);
       }
       for (const attr of attributes) {
         if (attr.type === "JSXSpreadAttribute") {
           props.push((0, import_types.spreadElement)(attr.argument));
         } else {
-          let key;
+          let key2;
           let { name, value } = attr;
           if (name.type === "JSXNamespacedName") {
-            key = (0, import_types.stringLiteral)(`${name.namespace.name}:${name.name.name}`);
+            key2 = (0, import_types.stringLiteral)(`${name.namespace.name}:${name.name.name}`);
           } else {
             name = name.name;
             if (name === "key") {
-              transpiled.arguments.push(attr.value?.expression ?? attr.value);
+              key2 = attr.value?.expression ?? attr.value;
               continue;
             }
-            key = name === "class" || name === "style" || (0, import_types.isValidIdentifier)(name) ? (0, import_types.identifier)(name) : (0, import_types.stringLiteral)(name);
+            if (name === "xmlns") {
+              const { type, value: xmlns } = value;
+              if (type === "StringLiteral") {
+                if (xmlns === SVG_NAMESPACE_URI) {
+                  factory = imports[ns = "svg"];
+                } else if (xmlns === XHTML_NAMESPACE_URI) {
+                  factory = imports[ns = "xhtml"];
+                } else {
+                  throw path.buildCodeFrameError(`invalid xmlns value: "${xmlns}"`);
+                }
+              } else {
+                throw path.buildCodeFrameError(`invalid xmlns type: ${type}`);
+              }
+            }
+            key2 = name === "class" || name === "style" || (0, import_types.isValidIdentifier)(name) ? (0, import_types.identifier)(name) : (0, import_types.stringLiteral)(name);
           }
           if (value?.type === "JSXExpressionContainer") {
             const expression = value.expression;
-            if (value.isReactive && !isHandler(key)) {
-              props.push(reactiveProperty(isIntrinsic && !isDirective(key), key, expression));
+            if (value.isReactive && !isHandler(key2)) {
+              props.push(reactiveProperty(isIntrinsic && !isDirective(key2), key2, expression));
             } else {
-              props.push((0, import_types.objectProperty)(key, expression));
+              props.push((0, import_types.objectProperty)(key2, expression));
             }
           } else {
-            props.push((0, import_types.objectProperty)(key, value));
+            props.push((0, import_types.objectProperty)(key2, value));
           }
         }
       }
     } else {
-      transpiled = jsxExpression(imports.jsx, imports.Fragment, props);
+      tagName = imports.Fragment;
     }
+    path.setData("factory", factory);
+    path.setData("tagName", tagName);
+    path.setData("key", key);
+    path.setData("props", props);
+    if (ns === void 0) {
+      if (tagName.type === "StringLiteral" && (tagName.value === "svg" || tagName.value === "xhtml")) {
+        factory = imports[ns = tagName.value];
+      }
+    }
+    if (ns !== void 0) {
+      path.setData("restore", state.factory);
+      state.factory = factory;
+    }
+  },
+  exit(path, state) {
+    const factory = path.getData("factory");
+    const tagName = path.getData("tagName");
+    const key = path.getData("key");
+    const props = path.getData("props");
+    const isIntrinsic2 = (0, import_types.isStringLiteral)(tagName);
     const children = [];
     const reactive = [];
     for (const child of path.node.children) {
@@ -45421,13 +45459,9 @@ var nodeVisitor = {
       if (type === "CallExpression") {
         children.push(child);
       } else if (type === "JSXText") {
-        const lines = child.value.split("\n");
-        let value = lines[0];
-        for (let l = 1; l < lines.length; l++) {
-          value += lines[l].trim();
-        }
-        if (value) {
-          children.push((0, import_types.stringLiteral)(value));
+        const text = child.value.replace(/^\n\s+/, "").replace(/\n\s+$/, "").replace(/\s+/g, " ");
+        if (text) {
+          children.push((0, import_types.stringLiteral)(text));
         }
       } else if (type === "JSXExpressionContainer") {
         if (child.expression.type !== "JSXEmptyExpression") {
@@ -45440,16 +45474,20 @@ var nodeVisitor = {
     if (children.length) {
       const isSpread = children.some(({ type }) => type === "SpreadElement");
       const value = children.length > 1 || isSpread ? (0, import_types.arrayExpression)(children) : children[0];
-      if (reactive.length === 0 || isIntrinsic && children.length > 1 && !isSpread) {
+      if (reactive.length === 0 || isIntrinsic2 && children.length > 1 && !isSpread) {
         for (const i of reactive) {
           children[i] = (0, import_types.arrowFunctionExpression)([], children[i]);
         }
         props.push((0, import_types.objectProperty)(CHILDREN, value));
       } else {
-        props.push(reactiveProperty(isIntrinsic, CHILDREN, value));
+        props.push(reactiveProperty(isIntrinsic2, CHILDREN, value));
       }
     }
-    path.replaceWith(transpiled);
+    const restore = path.getData("restore");
+    if (restore !== void 0) {
+      state.factory = restore;
+    }
+    path.replaceWith(jsxExpression(factory, tagName, props, key));
     path.skip();
   }
 };
@@ -45488,6 +45526,7 @@ var visitor = {
         return importIdentifier.call(this, root, "Fragment", JSX_RUNTIME_MODULE);
       }
     };
+    state.factory = state.imports.jsx;
   },
   ImportDeclaration(path) {
     if (path.node.source.value === "nimble") {

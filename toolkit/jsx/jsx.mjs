@@ -4,20 +4,24 @@ import {directives} from "./directives.mjs";
 export const SVG_NAMESPACE_URI = "http://www.w3.org/2000/svg";
 export const XHTML_NAMESPACE_URI = "http://www.w3.org/1999/xhtml";
 
-let namespaceURI = XHTML_NAMESPACE_URI;
+let namespaceURI = undefined;
 
-function ns(tag, props, key) {
-    const outerNamespaceURI = namespaceURI;
-    namespaceURI = this;
-    try {
+function nsjsx(tag, props, key) {
+    if (namespaceURI !== this) {
+        const outerNamespaceURI = namespaceURI;
+        namespaceURI = this;
+        try {
+            return jsx(tag, props, key);
+        } finally {
+            namespaceURI = outerNamespaceURI;
+        }
+    } else {
         return jsx(tag, props, key);
-    } finally {
-        namespaceURI = outerNamespaceURI;
     }
 }
 
-export const svg = ns.bind(SVG_NAMESPACE_URI);
-export const xhtml = ns.bind(XHTML_NAMESPACE_URI);
+export const svg = nsjsx.bind(SVG_NAMESPACE_URI);
+export const xhtml = nsjsx.bind(XHTML_NAMESPACE_URI);
 
 class FragmentState {
     constructor(props) {
@@ -97,7 +101,7 @@ class ElementState {
  * @returns {HTMLElement|NodeGroup|*}
  */
 export function jsx(tag, props, key) {
-    if (arguments.length < 3) {
+    if (key === undefined) {
         if (typeof tag === "function") {
             if (tag === Fragment) {
                 return Fragment(props);
@@ -269,13 +273,10 @@ function createFC(tag, props, writable) {
  * @returns {HTMLElement}
  */
 export function createElement(tag, props) {
-    const {
-        xmlns = tag === "svg" ? SVG_NAMESPACE_URI : namespaceURI
-    } = props;
-
-    const node = xmlns === XHTML_NAMESPACE_URI
+    const xmlns = props.xmlns ?? namespaceURI;
+    const node = xmlns === undefined
         ? document.createElement(tag)
-        : document.createElementNS(SVG_NAMESPACE_URI, tag);
+        : document.createElementNS(xmlns, tag);
 
     for (const name of Object.keys(props)) {
         if (name[0] === "i" && name[1] === "s" && name[2] === ":") {
