@@ -14252,7 +14252,7 @@ var require_virtual_types = __commonJS({
     var ReferencedMemberExpression = exports.ReferencedMemberExpression = ["MemberExpression"];
     var BindingIdentifier = exports.BindingIdentifier = ["Identifier"];
     var Statement = exports.Statement = ["Statement"];
-    var Expression = exports.Expression = ["Expression"];
+    var Expression2 = exports.Expression = ["Expression"];
     var Scope = exports.Scope = ["Scopable", "Pattern"];
     var Referenced = exports.Referenced = null;
     var BlockScoped = exports.BlockScoped = null;
@@ -30366,8 +30366,8 @@ var require_visitors = __commonJS({
           if (state || wrapper) {
             typeVisitor = wrapWithStateOrWrapper(typeVisitor, state, wrapper);
           }
-          const nodeVisitor2 = mergedVisitor[key] || (mergedVisitor[key] = {});
-          mergePair(nodeVisitor2, typeVisitor);
+          const nodeVisitor = mergedVisitor[key] || (mergedVisitor[key] = {});
+          mergePair(nodeVisitor, typeVisitor);
         }
       }
       return mergedVisitor;
@@ -37402,7 +37402,7 @@ var require_types = __commonJS({
     exports.RecordExpression = RecordExpression;
     exports.RegExpLiteral = RegExpLiteral;
     exports.SpreadElement = exports.RestElement = RestElement;
-    exports.StringLiteral = StringLiteral;
+    exports.StringLiteral = StringLiteral2;
     exports.TopicReference = TopicReference;
     exports.TupleExpression = TupleExpression;
     exports._getRawIdentifier = _getRawIdentifier;
@@ -37582,7 +37582,7 @@ var require_types = __commonJS({
         this.number(raw, value);
       }
     }
-    function StringLiteral(node) {
+    function StringLiteral2(node) {
       const raw = this.getPossibleRaw(node);
       if (!this.format.minified && raw !== void 0) {
         this.token(raw);
@@ -38414,29 +38414,29 @@ var require_jsx2 = __commonJS({
     Object.defineProperty(exports, "__esModule", {
       value: true
     });
-    exports.JSXAttribute = JSXAttribute;
+    exports.JSXAttribute = JSXAttribute2;
     exports.JSXClosingElement = JSXClosingElement;
     exports.JSXClosingFragment = JSXClosingFragment;
-    exports.JSXElement = JSXElement;
+    exports.JSXElement = JSXElement2;
     exports.JSXEmptyExpression = JSXEmptyExpression;
-    exports.JSXExpressionContainer = JSXExpressionContainer;
-    exports.JSXFragment = JSXFragment;
-    exports.JSXIdentifier = JSXIdentifier;
-    exports.JSXMemberExpression = JSXMemberExpression;
+    exports.JSXExpressionContainer = JSXExpressionContainer2;
+    exports.JSXFragment = JSXFragment2;
+    exports.JSXIdentifier = JSXIdentifier2;
+    exports.JSXMemberExpression = JSXMemberExpression2;
     exports.JSXNamespacedName = JSXNamespacedName;
-    exports.JSXOpeningElement = JSXOpeningElement;
-    exports.JSXOpeningFragment = JSXOpeningFragment;
-    exports.JSXSpreadAttribute = JSXSpreadAttribute;
-    exports.JSXSpreadChild = JSXSpreadChild;
+    exports.JSXOpeningElement = JSXOpeningElement2;
+    exports.JSXOpeningFragment = JSXOpeningFragment2;
+    exports.JSXSpreadAttribute = JSXSpreadAttribute2;
+    exports.JSXSpreadChild = JSXSpreadChild2;
     exports.JSXText = JSXText;
-    function JSXAttribute(node) {
+    function JSXAttribute2(node) {
       this.print(node.name);
       if (node.value) {
         this.tokenChar(61);
         this.print(node.value);
       }
     }
-    function JSXIdentifier(node) {
+    function JSXIdentifier2(node) {
       this.word(node.name);
     }
     function JSXNamespacedName(node) {
@@ -38444,23 +38444,23 @@ var require_jsx2 = __commonJS({
       this.tokenChar(58);
       this.print(node.name);
     }
-    function JSXMemberExpression(node) {
+    function JSXMemberExpression2(node) {
       this.print(node.object);
       this.tokenChar(46);
       this.print(node.property);
     }
-    function JSXSpreadAttribute(node) {
+    function JSXSpreadAttribute2(node) {
       this.tokenChar(123);
       this.token("...");
       this.print(node.argument);
       this.rightBrace(node);
     }
-    function JSXExpressionContainer(node) {
+    function JSXExpressionContainer2(node) {
       this.tokenChar(123);
       this.print(node.expression);
       this.rightBrace(node);
     }
-    function JSXSpreadChild(node) {
+    function JSXSpreadChild2(node) {
       this.tokenChar(123);
       this.token("...");
       this.print(node.expression);
@@ -38474,7 +38474,7 @@ var require_jsx2 = __commonJS({
         this.token(node.value, true);
       }
     }
-    function JSXElement(node) {
+    function JSXElement2(node) {
       const open = node.openingElement;
       this.print(open);
       if (open.selfClosing) return;
@@ -38488,7 +38488,7 @@ var require_jsx2 = __commonJS({
     function spaceSeparator() {
       this.space();
     }
-    function JSXOpeningElement(node) {
+    function JSXOpeningElement2(node) {
       this.tokenChar(60);
       this.print(node.name);
       this.print(node.typeParameters);
@@ -38513,7 +38513,7 @@ var require_jsx2 = __commonJS({
     function JSXEmptyExpression() {
       this.printInnerComments();
     }
-    function JSXFragment(node) {
+    function JSXFragment2(node) {
       this.print(node.openingFragment);
       this.indent();
       for (const child of node.children) {
@@ -38522,7 +38522,7 @@ var require_jsx2 = __commonJS({
       this.dedent();
       this.print(node.closingFragment);
     }
-    function JSXOpeningFragment() {
+    function JSXOpeningFragment2() {
       this.tokenChar(60);
       this.tokenChar(62);
     }
@@ -40641,7 +40641,7 @@ var require_inferers = __commonJS({
     exports.RegExpLiteral = RegExpLiteral;
     exports.RestElement = RestElement;
     exports.SequenceExpression = SequenceExpression;
-    exports.StringLiteral = StringLiteral;
+    exports.StringLiteral = StringLiteral2;
     exports.TSAsExpression = TSAsExpression;
     exports.TSNonNullExpression = TSNonNullExpression;
     exports.TaggedTemplateExpression = TaggedTemplateExpression;
@@ -40748,7 +40748,7 @@ var require_inferers = __commonJS({
         return numberTypeAnnotation();
       }
     }
-    function StringLiteral() {
+    function StringLiteral2() {
       return stringTypeAnnotation();
     }
     function NumericLiteral() {
@@ -45333,7 +45333,6 @@ function importIdentifier(root, name, module) {
 function getterMethod(prop, expression) {
   return (0, import_types.objectMethod)("get", prop, [], (0, import_types.blockStatement)([(0, import_types.returnStatement)(expression)]), prop.type === "StringLiteral");
 }
-var CHILDREN = (0, import_types.identifier)("children");
 function isHandler(id) {
   const name = id.name ?? id.value;
   return name[0] === "o" && name[1] === "n";
@@ -45356,7 +45355,7 @@ function parseJSXMemberExpression({ object, property }) {
     (0, import_types.identifier)(property.name)
   );
 }
-function jsxExpression(callee, tag, props, key) {
+function jsxCallExpression(callee, tag, props, key) {
   const args = [tag, (0, import_types.objectExpression)(props)];
   if (key !== void 0) {
     args.push(key);
@@ -45370,163 +45369,107 @@ function reactiveProperty(useArrow, key, expression) {
     return getterMethod(key, expression);
   }
 }
-var nodeVisitor = {
+var isReactive = /* @__PURE__ */ (() => {
+  const skipSubTree = (path) => {
+    path.skip();
+  };
+  const markReactive = (path, state) => {
+    state.isReactive = true;
+    path.stop();
+  };
+  const jsxExpressionVisitor = {
+    CallExpression: markReactive,
+    MemberExpression: markReactive,
+    NewExpression: skipSubTree,
+    ArrowFunctionExpression: skipSubTree,
+    FunctionExpression: skipSubTree
+  };
+  return (path) => {
+    const state = { isReactive: false };
+    path.traverse(jsxExpressionVisitor, state);
+    return state.isReactive;
+  };
+})();
+var CHILDREN = (0, import_types.identifier)("children");
+function isIntrinsic(tagName) {
+  return (0, import_types.isStringLiteral)(tagName) || tagName.name === "Fragment";
+}
+var jsxNodeVisitor = {
   enter(path, state) {
-    const { imports } = state;
-    const props = [];
-    let factory = state.factory, ns, tagName, key;
-    if (path.node.type === "JSXElement") {
-      const { name: tag, attributes } = path.node.openingElement;
-      if (tag.type === "JSXNamespacedName") {
-        const { namespace, name } = tag;
-        factory = imports[ns = namespace.name] ?? (0, import_types.identifier)(namespace.name);
-        tagName = (0, import_types.stringLiteral)(name.name);
-      } else {
-        tagName = tagIdentifier(tag);
-      }
-      for (const attr of attributes) {
-        if (attr.type === "JSXSpreadAttribute") {
-          props.push((0, import_types.spreadElement)(attr.argument));
-        } else {
-          let key2;
-          let { name, value } = attr;
-          if (name.type === "JSXNamespacedName") {
-            key2 = (0, import_types.stringLiteral)(`${name.namespace.name}:${name.name.name}`);
-          } else {
-            name = name.name;
-            if (name === "key") {
-              key2 = attr.value?.expression ?? attr.value;
-              continue;
-            }
-            if (name === "xmlns") {
-              const { type, value: xmlns } = value;
-              if (type === "StringLiteral") {
-                if (xmlns === SVG_NAMESPACE_URI) {
-                  factory = imports[ns = "svg"];
-                } else if (xmlns === XHTML_NAMESPACE_URI) {
-                  factory = imports[ns = "xhtml"];
-                } else {
-                  throw path.buildCodeFrameError(`invalid xmlns value: "${xmlns}"`);
-                }
-              } else {
-                throw path.buildCodeFrameError(`invalid xmlns type: ${type}`);
-              }
-            }
-            key2 = name === "class" || name === "style" || (0, import_types.isValidIdentifier)(name) ? (0, import_types.identifier)(name) : (0, import_types.stringLiteral)(name);
-          }
-          if (value?.type === "JSXExpressionContainer") {
-            const expression = value.expression;
-            if (value.isReactive && !isHandler(key2)) {
-              props.push(reactiveProperty(isIntrinsic && !isDirective(key2), key2, expression));
-            } else {
-              props.push((0, import_types.objectProperty)(key2, expression));
-            }
-          } else {
-            props.push((0, import_types.objectProperty)(key2, value));
-          }
-        }
-      }
-    } else {
-      tagName = imports.Fragment;
-    }
-    path.setData("factory", factory);
-    path.setData("tagName", tagName);
-    path.setData("key", key);
-    path.setData("props", props);
-    if (ns === void 0) {
-      if (tagName.type === "StringLiteral" && (tagName.value === "svg" || tagName.value === "xhtml")) {
-        factory = imports[ns = tagName.value];
-      }
-    }
-    if (ns !== void 0) {
-      path.setData("restore", state.factory);
-      state.factory = factory;
-    }
+    state.ctx = {
+      __proto__: state.ctx,
+      tagName: void 0,
+      key: void 0,
+      props: []
+    };
   },
   exit(path, state) {
-    const factory = path.getData("factory");
-    const tagName = path.getData("tagName");
-    const key = path.getData("key");
-    const props = path.getData("props");
-    const isIntrinsic2 = (0, import_types.isStringLiteral)(tagName);
+    const { factory = state.factories.jsx, tagName, key, props } = state.ctx;
+    state.ctx = state.ctx.__proto__;
+    const childrenPath = path.get("children");
     const children = [];
     const reactive = [];
-    for (const child of path.node.children) {
-      const { type, isReactive } = child;
-      if (isReactive) {
-        reactive.push(children.length);
-      }
-      if (type === "CallExpression") {
-        children.push(child);
-      } else if (type === "JSXText") {
+    path.node.children.forEach((child, index) => {
+      const { type } = child;
+      if (type === "JSXText") {
         const text = child.value.replace(/^\n\s+/, "").replace(/\n\s+$/, "").replace(/\s+/g, " ");
         if (text) {
           children.push((0, import_types.stringLiteral)(text));
         }
       } else if (type === "JSXExpressionContainer") {
         if (child.expression.type !== "JSXEmptyExpression") {
+          if (isReactive(childrenPath[index])) {
+            reactive.push(children.length);
+          }
           children.push(child.expression);
         }
       } else if (type === "JSXSpreadChild") {
+        if (isReactive(childrenPath[index])) {
+          reactive.push(children.length);
+        }
         children.push((0, import_types.spreadElement)(child.expression));
+      } else {
+        children.push(child);
       }
-    }
+    });
     if (children.length) {
       const isSpread = children.some(({ type }) => type === "SpreadElement");
       const value = children.length > 1 || isSpread ? (0, import_types.arrayExpression)(children) : children[0];
-      if (reactive.length === 0 || isIntrinsic2 && children.length > 1 && !isSpread) {
+      if (reactive.length === 0 || isIntrinsic(tagName) && children.length > 1 && !isSpread) {
         for (const i of reactive) {
           children[i] = (0, import_types.arrowFunctionExpression)([], children[i]);
         }
         props.push((0, import_types.objectProperty)(CHILDREN, value));
       } else {
-        props.push(reactiveProperty(isIntrinsic2, CHILDREN, value));
+        props.push(reactiveProperty(isIntrinsic(tagName), CHILDREN, value));
       }
     }
-    const restore = path.getData("restore");
-    if (restore !== void 0) {
-      state.factory = restore;
-    }
-    path.replaceWith(jsxExpression(factory, tagName, props, key));
+    path.replaceWith(jsxCallExpression(factory, tagName, props, key));
     path.skip();
-  }
-};
-var skipSubTree = (path) => {
-  path.skip();
-};
-var markReactive = (path, rootNode) => {
-  rootNode.isReactive = true;
-  path.stop();
-};
-var jsxExpressionVisitor = {
-  CallExpression: markReactive,
-  MemberExpression: markReactive,
-  NewExpression: skipSubTree,
-  ArrowFunctionExpression: skipSubTree,
-  FunctionExpression: skipSubTree
-};
-var jsxContainerVisitor = {
-  exit(path) {
-    path.traverse(jsxExpressionVisitor, path.node);
   }
 };
 var visitor = {
   Program(root, state) {
-    state.imports = {
-      get jsx() {
-        return importIdentifier.call(this, root, "jsx", JSX_RUNTIME_MODULE);
-      },
-      get svg() {
-        return importIdentifier.call(this, root, "svg", JSX_RUNTIME_MODULE);
-      },
-      get xhtml() {
-        return importIdentifier.call(this, root, "xhtml", JSX_RUNTIME_MODULE);
-      },
-      get Fragment() {
-        return importIdentifier.call(this, root, "Fragment", JSX_RUNTIME_MODULE);
+    Object.defineProperty(state, "factories", {
+      enumerable: false,
+      value: {
+        get jsx() {
+          return importIdentifier.call(this, root, "jsx", JSX_RUNTIME_MODULE);
+        },
+        get svg() {
+          return importIdentifier.call(this, root, "svg", JSX_RUNTIME_MODULE);
+        },
+        get xhtml() {
+          return importIdentifier.call(this, root, "xhtml", JSX_RUNTIME_MODULE);
+        },
+        get Fragment() {
+          return importIdentifier.call(this, root, "Fragment", JSX_RUNTIME_MODULE);
+        }
       }
+    });
+    state.ctx = {
+      xmlns: XHTML_NAMESPACE_URI
     };
-    state.factory = state.imports.jsx;
   },
   ImportDeclaration(path) {
     if (path.node.source.value === "nimble") {
@@ -45536,11 +45479,85 @@ var visitor = {
       path.node.source.value = JSX_RUNTIME_MODULE;
     }
   },
-  JSXFragment: nodeVisitor,
-  JSXElement: nodeVisitor,
-  JSXExpressionContainer: jsxContainerVisitor,
-  JSXSpreadAttribute: jsxContainerVisitor,
-  JSXSpreadChild: jsxContainerVisitor
+  JSXFragment: jsxNodeVisitor,
+  JSXElement: jsxNodeVisitor,
+  JSXOpeningElement(path, { factories, ctx }) {
+    const tag = path.node.name;
+    if (tag.type === "JSXNamespacedName") {
+      const { namespace, name } = tag;
+      switch (namespace.name) {
+        case "svg":
+          ctx.xmlns = SVG_NAMESPACE_URI;
+          ctx.factory = factories.svg;
+          break;
+        case "xhtml":
+          ctx.xmlns = XHTML_NAMESPACE_URI;
+          ctx.factory = factories.xhtml;
+          break;
+        default:
+          ctx.factory = (0, import_types.identifier)(namespace.name);
+      }
+      ctx.tagName = (0, import_types.stringLiteral)(name.name);
+    } else {
+      ctx.tagName = tagIdentifier(tag);
+      if (ctx.tagName.value === "svg") {
+        ctx.xmlns = SVG_NAMESPACE_URI;
+        ctx.factory = factories.svg;
+      }
+    }
+  },
+  JSXOpeningFragment(path, { factories, ctx }) {
+    ctx.tagName = factories.Fragment;
+  },
+  JSXSpreadAttribute(path, { ctx }) {
+    ctx.props.push((0, import_types.spreadElement)(path.node.argument));
+  },
+  JSXAttribute: {
+    enter(path, { factories, ctx }) {
+      if (path.node.name.type === "JSXNamespacedName") {
+        const { namespace, name } = path.node.name;
+        ctx.attr = (0, import_types.stringLiteral)(`${namespace.name}:${name.name}`);
+      } else {
+        const { name: { name }, value } = path.node;
+        if (name === "key") {
+          ctx.key = value?.expression ?? value;
+          path.skip();
+        }
+        if (name === "xmlns") {
+          const { type, value: xmlns } = value;
+          if (type === "StringLiteral") {
+            ctx.xmlns = xmlns;
+            if (xmlns === SVG_NAMESPACE_URI) {
+              ctx.factory = factories.svg;
+            } else if (xmlns === XHTML_NAMESPACE_URI) {
+              ctx.factory = factories.xhtml;
+            } else {
+              throw path.buildCodeFrameError(`invalid xmlns value: "${xmlns}"`);
+            }
+          } else {
+            throw path.buildCodeFrameError(`invalid xmlns type: ${type}`);
+          }
+          path.skip();
+        }
+        ctx.attr = name === "class" || name === "style" || (0, import_types.isValidIdentifier)(name) ? (0, import_types.identifier)(name) : (0, import_types.stringLiteral)(name);
+      }
+    },
+    exit(path, { ctx }) {
+      const key = ctx.attr;
+      const value = path.node.value;
+      if (value?.type === "JSXExpressionContainer") {
+        const expression = value.expression;
+        if (!isHandler(key) && isReactive(path.get("value"))) {
+          const useArrow = isIntrinsic(ctx.tagName) && !isDirective(key);
+          ctx.props.push(reactiveProperty(useArrow, key, expression));
+        } else {
+          ctx.props.push((0, import_types.objectProperty)(key, expression));
+        }
+      } else {
+        ctx.props.push((0, import_types.objectProperty)(key, value));
+      }
+    }
+  }
 };
 
 // src/transpiler.ts
