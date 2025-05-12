@@ -1,5 +1,4 @@
 import {signal} from "@nimble/toolkit/signals/signals.mjs";
-import dog from "./dog.svg.jsx";
 import {css} from "@nimble/toolkit";
 import {Code} from "./components/Code";
 
@@ -118,7 +117,7 @@ document.body.append(<>
             const colors = ["red", "green", "blue"]; 
             const color = signal(0);
 
-            document.body.append(
+            document.body.replaceChildren(
                 <div class="simple" style={\`color:\${colors[color.value]\}\`}>
                     <h1>Hello {colors[color.value]} sailor!</h1>
                     <button class="rounded-2" onclick={()=>color.value++}>

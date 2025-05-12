@@ -685,14 +685,18 @@ const effectsWalker = document.createTreeWalker(document.body, NodeFilter.SHOW_E
     acceptNode: node => node.__effects__ !== undefined ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
 });
 
+export function unMount(...nodes) {
+    if (pendingUnmount.length === 0) {
+        setTimeout(performUnmount);
+    }
+    pendingUnmount.push(...nodes);
+}
+
 let pendingUnmount = [];
 
 export function removeNode(node) {
     node.remove();
-    if (pendingUnmount.length === 0) {
-        setTimeout(performUnmount);
-    }
-    pendingUnmount.push(node);
+    unMount(node);
 }
 
 function performUnmount() {
@@ -717,7 +721,7 @@ function disposeEffects(node) {
 }
 
 export function checkJsx() {
-    if (namespaceURI !== XHTML_NAMESPACE_URI) {
+    if (namespaceURI !== undefined) {
         throw new Error(`unexpected namespaceURI: ${XHTML_NAMESPACE_URI}`);
     }
     // if (pendingUnmount !== null) {
