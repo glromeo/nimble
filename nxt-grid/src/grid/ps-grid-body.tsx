@@ -1,3 +1,4 @@
+import { computed } from "@nimble/toolkit";
 import {PsGridCell} from "./ps-grid-cell";
 import {PsGridRow} from "./state/rows";
 import {PsgFC} from "./types";
@@ -34,7 +35,7 @@ export const PsGridScrollBody:PsgFC = ({store}) => {
         <div class="psg-body psg-scroll"
              onMouseOver={hover.onMouseOver}
              onMouseOut={hover.onMouseOut}>
-            {rows.visible.map(row => <PsGridBodyRow key={row.index} store={store} row={row} section="visible"/>)}
+            {rows.visible.map(row => <PsGridBodyRow key={"row" + row.index} store={store} row={row} section="visible"/>)}
         </div>
     );
 }

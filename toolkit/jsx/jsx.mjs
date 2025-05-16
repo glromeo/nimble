@@ -1,4 +1,10 @@
-import {batch, Computed, Observer, ownerContext, runWithOwner, Signal} from "../signals/signals.mjs";
+import {
+    batch,
+    Computed,
+    Observer,
+    contextScope,
+    Signal
+} from "../signals/signals.mjs";
 import {directives} from "./directives.mjs";
 
 export const SVG_NAMESPACE_URI = "http://www.w3.org/2000/svg";
@@ -112,24 +118,33 @@ export function jsx(tag, props, key) {
             return createElement(tag, props);
         }
     }
-    const owner = ownerContext();
-    let {prev} = owner;
+    const scope = contextScope();
     let state;
-    if (owner.i < prev?.length && (state = prev[owner.i++]).key !== key) {
-        (owner.cache ??= new Map()).set(state.key, state);
-        while (owner.i < prev.length && (state = prev[owner.i++]).key !== key) {
-            owner.cache.set(state.key, state);
+    if (scope.live !== undefined) {
+        let {i, live, cache} = scope;
+        if (i < live.length) {
+            if ((state = live[i++]).key !== key) {
+                if (cache === undefined) {
+                    cache = scope.cache = new Map();
+                }
+                cache.set(state.key, state);
+                while (i < live.length && (state = live[i++]).key !== key) {
+                    cache.set(state.key, state);
+                }
+                if (i === live.length) {
+                    state = undefined;
+                }
+            }
+            scope.i = i;
         }
-        if (owner.i === prev.length) {
-            state = undefined;
-        }
+        state ??= cache?.get(key);
     }
-    if ((state ??= owner.cache?.get(key)) !== undefined) {
+    if (state !== undefined) {
         batch(() => state.update(props), true);
     } else {
         if (typeof tag === "function") {
             if (tag === Fragment) {
-                state = new FragmentState(props);
+                state = new FragmentState(props);c
             } else {
                 state = new ComponentState(tag, props);
             }
@@ -138,7 +153,11 @@ export function jsx(tag, props, key) {
         }
         state.key = key;
     }
-    (owner.next ??= []).push(state);
+    if (scope.next === undefined) {
+        scope.next = [state];
+    } else {
+        scope.next.push(state);
+    }
     return state.node;
 }
 
@@ -550,22 +569,41 @@ export function createNode(namespaceURI, value = null) {
     return new Comment(value);
 }
 
+function linkNode(effect, node) {
+    effect.sibling = node.__effects__;
+    node.__effects__ = effect;
+}
+
+function cleanupScope() {
+    const {scope} = this;
+    if (scope !== undefined) {
+        scope.i = 0;
+        scope.live = scope.next;
+        scope.next = undefined;
+        scope.cache = undefined;
+    }
+}
+
 class DynamicNode extends Observer {
 
     constructor(namespaceURI, observable) {
         super(observable);
-        this.next = undefined;
-        const done = runWithOwner(this);
+        const finish = this.start();
         try {
-            this.node = typeof this.value !== "function"
-                ? createNode(namespaceURI, this.value)
-                : new Comment(`[function ${this.value.name}]`)
-            this.sibling = this.node.__effects__;
-            this.node.__effects__ = this;
+            linkNode(
+                this,
+                this.node = typeof (this.value = this.callback()) !== "function"
+                    ? createNode(namespaceURI, this.value)
+                    : new Comment(`[function ${this.value.name}]`)
+            );
+            this.next = undefined;
+            this.scope = undefined;
         } finally {
-            done();
+            finish();
         }
     }
+
+    cleanup = cleanupScope;
 
     onChange(value, prev) {
         if (value != null) {
@@ -578,32 +616,27 @@ class DynamicNode extends Observer {
             }
             const type = typeof value;
             if (type === "object") {
-                const done = runWithOwner(this);
-                try {
-                    if (value.constructor === Array) {
-                        if (this.node.constructor === NodeGroup) {
-                            updateChildren(this.node, value, prev);
-                            return;
-                        }
-                        const nodeGroup = new NodeGroup(this.node.namespaceURI);
-                        appendChildren(nodeGroup, value);
-                        this.replaceWith(nodeGroup)
+                if (value.constructor === Array) {
+                    if (this.node.constructor === NodeGroup) {
+                        updateChildren(this.node, value, prev);
                         return;
                     }
-                    if (value.tag !== undefined) {
-                        this.replaceWith(
-                            jsx(value.tag, {
-                                xmlns: value.xmlns ?? this.node.namespaceURI,
-                                children: value.children,
-                                ...value.attrs
-                            }, value.key)
-                        );
-                        return;
-                    }
-                    value = value.toString();
-                } finally {
-                    done();
+                    const nodeGroup = new NodeGroup(this.node.namespaceURI);
+                    appendChildren(nodeGroup, value);
+                    this.replaceWith(nodeGroup)
+                    return;
                 }
+                if (value.tag !== undefined) {
+                    this.replaceWith(
+                        jsx(value.tag, {
+                            xmlns: value.xmlns ?? this.node.namespaceURI,
+                            children: value.children,
+                            ...value.attrs
+                        }, value.key)
+                    );
+                    return;
+                }
+                value = value.toString();
             } else if (type === "string" || type === "number" || type === "bigint") {
                 if (this.node.nodeType === Node.TEXT_NODE) {
                     this.node.data = value;
@@ -625,8 +658,7 @@ class DynamicNode extends Observer {
     }
 
     replaceWith(node) {
-        this.sibling = node.__effects__;
-        node.__effects__ = this;
+        linkNode(this, node);
         this.node.__effects__ = undefined;
         this.node.replaceWith(this.node = node);
     }
@@ -636,27 +668,21 @@ class DynamicChildren extends Observer {
 
     constructor(node, observable) {
         super(observable);
-        this.next = undefined;
-        const done = runWithOwner(this);
+        const finish = this.start();
         try {
-            this.sibling = node.__effects__;
-            node.__effects__ = this;
-            appendChildren(
-                this.node = node,
-                this.value
-            );
+            appendChildren(node, this.value = this.callback());
+            linkNode(this, this.node = node);
+            this.next = undefined;
+            this.scope = undefined;
         } finally {
-            done();
+            finish();
         }
     }
 
+    cleanup = cleanupScope;
+
     onChange(value, prev) {
-        const done = runWithOwner(this);
-        try {
-            updateChildren(this.node, value, prev);
-        } finally {
-            done();
-        }
+        updateChildren(this.node, value, prev);
     }
 }
 
@@ -664,13 +690,15 @@ class DynamicProperty extends Observer {
 
     constructor(node, name, observable) {
         super(observable);
-        this.sibling = node.__effects__;
-        node.__effects__ = this;
-        setProperty(
-            this.node = node,
-            this.name = name,
-            this.value
-        );
+        const finish = this.start();
+        try {
+            setProperty(node, name, this.value = this.callback());
+            linkNode(this, this.node = node);
+            this.next = undefined;
+            this.name = name;
+        } finally {
+            finish();
+        }
     }
 
     onChange(value, prev) {

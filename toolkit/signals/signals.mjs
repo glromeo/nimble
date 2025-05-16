@@ -414,24 +414,21 @@ export function computed(callback) {
     return new Computed(callback);
 }
 
-function cleanupEffect(effect) {
-    const cleanup = effect.cleanup;
-    effect.cleanup = undefined;
-    if (typeof cleanup === "function") {
-        startBatch();
-        const prevContext = evalContext;
-        evalContext = undefined;
-        try {
-            cleanup();
-        } catch (err) {
-            effect.flags &= ~RUNNING;
-            effect.flags |= DISPOSED;
-            disposeEffect(effect);
-            throw err;
-        } finally {
-            evalContext = prevContext;
-            endBatch();
-        }
+function cleanupEffect(cleanup) {
+    startBatch();
+    const prevContext = evalContext;
+    evalContext = undefined;
+    try {
+        this.cleanup = undefined;
+        cleanup();
+    } catch (err) {
+        this.flags &= ~RUNNING;
+        this.flags |= DISPOSED;
+        disposeEffect(this);
+        throw err;
+    } finally {
+        evalContext = prevContext;
+        endBatch();
     }
 }
 
@@ -442,7 +439,7 @@ function disposeEffect(effect) {
     effect.callback = undefined;
     effect.sources = undefined;
 
-    cleanupEffect(effect);
+    effect.cleanup?.();
 }
 
 function endEffect(prevContext) {
@@ -472,12 +469,11 @@ export class Effect {
     invoke() {
         const finish = this.start();
         try {
-            if (this.flags & DISPOSED) return;
-            if (this.callback === undefined) return;
+            if (this.flags & DISPOSED || this.callback === undefined) return;
 
             const cleanup = this.callback();
             if (typeof cleanup === "function") {
-                this.cleanup = cleanup;
+                this.cleanup = cleanupEffect.bind(this, cleanup);
             }
         } finally {
             finish();
@@ -490,7 +486,9 @@ export class Effect {
         }
         this.flags |= RUNNING;
         this.flags &= ~DISPOSED;
-        cleanupEffect(this);
+
+        this.cleanup?.();
+
         prepareSources(this);
 
         startBatch();
@@ -509,7 +507,7 @@ export class Effect {
     }
 
     dispose() {
-        if ((this.flags |= DISPOSED) & RUNNING) {
+        if ((this.flags |= DISPOSED) & RUNNING) { // if running dispose it later...
             return;
         }
         disposeEffect(this);
@@ -534,42 +532,19 @@ export function tracked(ctx, callback) {
     try {
         return callback();
     } finally {
-        evalContext = prevContext;
         cleanupSources(ctx);
-    }
-}
-
-export function ownerContext() {
-    return evalContext;
-}
-
-export function runWithOwner(owner) {
-    const prevContext = evalContext;
-    evalContext = owner;
-    owner.i = 0;
-    owner.prev = owner.next;
-    owner.next = undefined;
-    owner.cache = undefined;
-    return () => {
         evalContext = prevContext;
-        owner.prev = undefined;
-        owner.cache = undefined;
-    };
+    }
 }
 
+export function contextScope() {
+    return evalContext.scope ??= {};
+}
 
-export class Observer {
+export class Observer extends Effect {
 
-    constructor(observable) {
-        this.flags = TRACKING;
-        this.nextEffect = undefined;
-        this.observable = observable;
-        this.sources = undefined;
-        this.value = tracked(this, this.observable);
-    }
-
-    observe(observable) {
-        this.observable = typeof observable === "function" ? observable : () => observable;
+    observe(callback) {
+        this.callback = typeof callback === "function" ? callback : () => callback;
         this.notify();
     }
 
@@ -577,50 +552,21 @@ export class Observer {
     }
 
     invoke() {
-        this.flags |= RUNNING;
-        this.flags &= ~DISPOSED;
-        prepareSources(this);
-        startBatch();
-        const prevContext = evalContext;
-        evalContext = this;
+        const finish = this.start();
         try {
-            if (this.observable !== undefined) {
-                const value = this.observable();
-                if (value !== this.value) {
-                    this.onChange(value, this.value);
-                    this.value = value;
-                }
+            if (this.flags & DISPOSED || this.callback === undefined) return;
+
+            const value = this.callback();
+            if (value !== this.value) {
+                this.onChange(value, this.value);
+                this.value = value;
             }
         } catch (err) {
             console.error("unhandled error in mutation callback", err);
         } finally {
-            evalContext = prevContext;
-            cleanupSources(this);
-            this.flags &= ~RUNNING;
-            if (this.flags & DISPOSED) {
-                this.dispose();
-            }
-            endBatch();
+            finish();
         }
     }
 
-    notify() {
-        if (!(this.flags & NOTIFIED)) {
-            this.flags |= NOTIFIED;
-            this.nextEffect = batchedEffect;
-            batchedEffect = this;
-        }
-    }
-
-    dispose() {
-        if (!((this.flags |= DISPOSED) & RUNNING)) {
-            for (let node = this.sources; node !== undefined; node = node.nextSource) {
-                node.source.unsubscribe(node);
-            }
-            this.observable = undefined;
-            this.sources = undefined;
-        }
-        return this.value;
-    }
 }
 

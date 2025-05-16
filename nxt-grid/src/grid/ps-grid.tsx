@@ -1,5 +1,5 @@
 import {PsGridContainer} from "./ps-grid-container";
-import {createPsGridStore, DEFAULT_PROPS} from "./state/store";
+import {createPsGridStore, DEFAULT_PROPS, PsGridStore} from "./state/store";
 import {PsColumnTotals, PsGridSelection} from "./types";
 import {PsGridColumn} from "./state/columns";
 import {PsGridRow} from "./state/rows";
@@ -119,7 +119,7 @@ export function PsGrid<T extends DataItem>({columnDefs, onSort, ...props}: Parti
         (store.props as any)[key] = value === undefined ? (DEFAULT_PROPS as any)[key] : value;
     }
 
-    return <PsGridContainer store={store} />;
+    return <PsGridContainer store={store as PsGridStore<DataItem>} />;
 }
 
 PsGrid.CellFormatter = DEFAULT_CELL_FORMATTER;
