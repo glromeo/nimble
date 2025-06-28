@@ -140,11 +140,13 @@ export function jsx(tag, props, key) {
         state ??= cache?.get(key);
     }
     if (state !== undefined) {
+        console.log("hit", key)
         batch(() => state.update(props), true);
     } else {
+        console.log("miss", key)
         if (typeof tag === "function") {
             if (tag === Fragment) {
-                state = new FragmentState(props);c
+                state = new FragmentState(props);
             } else {
                 state = new ComponentState(tag, props);
             }

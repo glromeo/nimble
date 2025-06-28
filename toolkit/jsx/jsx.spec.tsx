@@ -3,7 +3,7 @@ import type Sinon from "sinon";
 import sinon from "sinon";
 import {checkJsx, Fragment, NodeGroup} from "./jsx.mjs";
 import {createDirective} from "./directives.mjs";
-import {computed, Effect, signal, tracked, ownerContext, runWithOwner} from "../signals/signals.mjs";
+import {computed, Effect, signal, tracked, contextScope, currentContext} from "../signals/signals.mjs";
 import {vsync} from "@nimble/testing";
 
 declare module "@nimble/toolkit" {
@@ -23,8 +23,8 @@ function outerHTML(node: Node) {
 suite("Nimble JSX", ({before}) => {
 
     before.each(async () => {
-        if (ownerContext() != undefined) {
-            assert.fail("invalid signals state: " + ownerContext());
+        if (currentContext() != undefined) {
+            assert.fail("invalid signals state: " + currentContext());
         }
         checkJsx();
     });
@@ -102,14 +102,20 @@ suite("Nimble JSX", ({before}) => {
     });
 
     test("fragments can have keys", async () => {
-        const done = runWithOwner({});
-        try {
-            let inner, f;
+        let outer;
+        tracked({}, ()=>{
+
+            outer = contextScope();
+
+            let inner;
+            let f;
+
             expect(<p key="P">{(() => {
-                inner = ownerContext();
+                inner = contextScope();
                 return f = <Fragment key="F"></Fragment>
             })()}</p>).eq("<p><!--<>--><!--</>--></p>");
-            const {next} = ownerContext();
+
+            const {next} = outer;
             expect(next.constructor.name).to.eq("Array");
             expect(next.length).to.eq(1);
             expect(next[0].key).to.eq("P"); // P ends up in global scope here
@@ -117,11 +123,9 @@ suite("Nimble JSX", ({before}) => {
 
             expect(inner.next[0].node).to.eq(f);
             inner.next[0].update({children: "Hello"});
-        } finally {
-            done();
-        }
+        });
         await vsync();
-        expect(ownerContext().next[0].node).eq("<p><!--<>-->Hello<!--</>--></p>");
+        expect(outer.next[0].node).eq("<p><!--<>-->Hello<!--</>--></p>");
     });
 
     test("directives", () => {
@@ -175,8 +179,7 @@ suite("Nimble JSX", ({before}) => {
 
         const counter = signal(0);
 
-        const ctx = new Effect(() => {
-        });
+        const ctx = {scope: {i:0, live: []}};
 
         const node = tracked(ctx, () => <FC key="0" letter={"A"} counter={counter.value}/>);
         expect(node).eq(`<div>A:0</div>`);

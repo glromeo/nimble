@@ -537,6 +537,10 @@ export function tracked(ctx, callback) {
     }
 }
 
+export function currentContext() {
+    return evalContext;
+}
+
 export function contextScope() {
     return evalContext.scope ??= {};
 }
