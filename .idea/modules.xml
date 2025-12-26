@@ -12,7 +12,6 @@
       <module fileurl="file://$PROJECT_DIR$/stories/stories.iml" filepath="$PROJECT_DIR$/stories/stories.iml" />
       <module fileurl="file://$PROJECT_DIR$/testing.iml" filepath="$PROJECT_DIR$/testing.iml" />
       <module fileurl="file://$PROJECT_DIR$/toolkit/toolkit.iml" filepath="$PROJECT_DIR$/toolkit/toolkit.iml" />
-      <module fileurl="file://$PROJECT_DIR$/../udomdiff/udomdiff.iml" filepath="$PROJECT_DIR$/../udomdiff/udomdiff.iml" />
     </modules>
   </component>
 </project>

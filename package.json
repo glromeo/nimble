@@ -14,8 +14,7 @@
     "scripts",
     "stories",
     "testing",
-    "toolkit",
-    "my-1st"
+    "toolkit"
   ],
   "devDependencies": {
     "@types/node": "^22.7.5",

@@ -59,4 +59,10 @@ declare module "@nimble/testing" {
     export const expect: Chai.ExpectStatic;
     export function vsync(): Promise<void>;
     export function outerHTML(node: Node): string;
+
+    // Mocha TDD-style hooks
+    export function setup(fn: () => void | Promise<void>): void;
+    export function teardown(fn: () => void | Promise<void>): void;
+    export function suiteSetup(fn: () => void | Promise<void>): void;
+    export function suiteTeardown(fn: () => void | Promise<void>): void;
 }

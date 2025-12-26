@@ -4,7 +4,7 @@ import {
     effect,
     batch,
     Signal,
-    untracked
+    untracked, Effect
 } from "./signals.mjs";
 
 import {expect, use} from "chai";
@@ -2038,5 +2038,320 @@ describe("untracked", () => {
         c.value;
         expect(spy).to.be.calledOnce;
         expect(c.value).to.equal(3);
+    });
+});
+
+describe("ownership and disposal", () => {
+    it("should dispose owned children when parent effect re-runs", () => {
+        const show = signal(true);
+        const childACleanup = sinon.spy();
+        const childBCleanup = sinon.spy();
+
+        effect(() => {
+            if (show.value) {
+                effect(() => {
+                    return childACleanup;
+                });
+            } else {
+                effect(() => {
+                    return childBCleanup;
+                });
+            }
+        });
+
+        expect(childACleanup).not.to.be.called;
+        expect(childBCleanup).not.to.be.called;
+
+        show.value = false;  // Re-run parent, should dispose child A
+
+        expect(childACleanup).to.be.calledOnce;
+        expect(childBCleanup).not.to.be.called;
+    });
+
+    it("should dispose nested ownership hierarchy", () => {
+        const grandchildCleanup = sinon.spy();
+        const childCleanup = sinon.spy();
+
+        const dispose = effect(() => {
+            effect(() => {
+                effect(() => {
+                    return grandchildCleanup;
+                });
+                return childCleanup;
+            });
+        });
+
+        expect(childCleanup).not.to.be.called;
+        expect(grandchildCleanup).not.to.be.called;
+
+        dispose();  // Should dispose child, which disposes grandchild
+
+        expect(childCleanup).to.be.calledOnce;
+        expect(grandchildCleanup).to.be.calledOnce;
+    });
+
+    it("should dispose owned children when parent creates different children", () => {
+        const content = signal('first');
+        const firstCleanup = sinon.spy();
+        const secondCleanup = sinon.spy();
+
+        effect(() => {
+            const value = content.value;
+
+            if (value === 'first') {
+                effect(() => {
+                    return firstCleanup;
+                });
+            } else {
+                effect(() => {
+                    return secondCleanup;
+                });
+            }
+        });
+
+        expect(firstCleanup).not.to.be.called;
+
+        content.value = 'second';  // Should dispose first child, create second
+
+        expect(firstCleanup).to.be.calledOnce;
+        expect(secondCleanup).not.to.be.called;
+
+        content.value = 'third';  // Should dispose second child
+
+        expect(secondCleanup).to.be.calledOnce;
+    });
+
+    it("should dispose multiple owned children", () => {
+        const cleanups = [sinon.spy(), sinon.spy(), sinon.spy(), sinon.spy(), sinon.spy()];
+
+        const dispose = effect(() => {
+            for (let i = 0; i < 5; i++) {
+                effect(() => {
+                    return cleanups[i];
+                });
+            }
+        });
+
+        cleanups.forEach(cleanup => {
+            expect(cleanup).not.to.be.called;
+        });
+
+        dispose();
+
+        cleanups.forEach(cleanup => {
+            expect(cleanup).to.be.calledOnce;
+        });
+    });
+
+    it("should handle conditional branches (like Show component)", () => {
+        const condition = signal(true);
+        const branchACleanup = sinon.spy();
+        const branchBCleanup = sinon.spy();
+
+        effect(() => {
+            if (condition.value) {
+                effect(() => {
+                    return branchACleanup;
+                });
+            } else {
+                effect(() => {
+                    return branchBCleanup;
+                });
+            }
+        });
+
+        expect(branchACleanup).not.to.be.called;
+        expect(branchBCleanup).not.to.be.called;
+
+        condition.value = false;  // Switch branches
+
+        expect(branchACleanup).to.be.calledOnce;
+        expect(branchBCleanup).not.to.be.called;
+
+        condition.value = true;  // Switch back
+
+        expect(branchBCleanup).to.be.calledOnce;
+        expect(branchACleanup).to.be.calledOnce;  // Still once from first switch
+    });
+
+    it("should dispose children before user cleanup", () => {
+        const executionOrder = [];
+
+        const dispose = effect(() => {
+            effect(() => {
+                return () => {
+                    executionOrder.push('child');
+                };
+            });
+            return () => {
+                executionOrder.push('parent');
+            };
+        });
+
+        dispose();
+
+        expect(executionOrder).to.deep.equal(['child', 'parent']);
+    });
+
+    it("should not create owned children when effect runs outside reactive context", () => {
+        const cleanup = sinon.spy();
+
+        const child = new Effect(() => {
+            return cleanup;
+        });
+
+        // Child has no owner since it was created outside any effect
+        expect(child.owner).to.be.undefined;
+
+        child.invoke();
+        expect(cleanup).not.to.be.called;
+
+        child.dispose();
+        expect(cleanup).to.be.calledOnce;
+    });
+
+    it("should dispose owned children even when parent effect is disposed during execution", () => {
+        const a = signal(0);
+        const childCleanup = sinon.spy();
+
+        const dispose = effect(() => {
+            if (a.value === 1) {
+                dispose();
+            }
+            effect(() => {
+                return childCleanup;
+            });
+        });
+
+        expect(childCleanup).not.to.be.called;
+
+        a.value = 1;
+
+        expect(childCleanup).to.be.calledOnce;
+    });
+
+    it("should handle deeply nested ownership chains", () => {
+        const cleanups = [];
+        const depth = 10;
+
+        for (let i = 0; i < depth; i++) {
+            cleanups.push(sinon.spy());
+        }
+
+        const dispose = effect(() => {
+            let currentDepth = 0;
+            const createNested = () => {
+                if (currentDepth < depth) {
+                    const cleanup = cleanups[currentDepth];
+                    currentDepth++;
+                    effect(() => {
+                        createNested();
+                        return cleanup;
+                    });
+                }
+            };
+            createNested();
+        });
+
+        cleanups.forEach(cleanup => {
+            expect(cleanup).not.to.be.called;
+        });
+
+        dispose();
+
+        cleanups.forEach(cleanup => {
+            expect(cleanup).to.be.calledOnce;
+        });
+    });
+
+    it("should dispose children created by computed signals", () => {
+        const a = signal(0);
+        const childEffect = sinon.spy();
+        const childCleanup = sinon.spy();
+
+        const c = computed(() => {
+            effect(() => {
+                childEffect();
+                return childCleanup;
+            });
+            return a.value;
+        });
+
+        const dispose = effect(() => {
+            c.value;
+        });
+
+        expect(childEffect).to.be.calledOnce;
+        expect(childCleanup).not.to.be.called;
+
+        a.value = 1;
+
+        expect(childEffect).to.be.calledTwice;
+        expect(childCleanup).to.be.calledOnce;
+
+        dispose();
+
+        expect(childCleanup).to.be.calledTwice;
+    });
+
+    it("should not leak owned children when effect re-runs multiple times", () => {
+        const counter = signal(0);
+        const cleanups = [];
+
+        effect(() => {
+            counter.value;
+            const cleanup = sinon.spy();
+            cleanups.push(cleanup);
+            effect(() => {
+                return cleanup;
+            });
+        });
+
+        expect(cleanups).to.have.length(1);
+        expect(cleanups[0]).not.to.be.called;
+
+        counter.value = 1;
+        expect(cleanups).to.have.length(2);
+        expect(cleanups[0]).to.be.calledOnce;
+        expect(cleanups[1]).not.to.be.called;
+
+        counter.value = 2;
+        expect(cleanups).to.have.length(3);
+        expect(cleanups[0]).to.be.calledOnce;
+        expect(cleanups[1]).to.be.calledOnce;
+        expect(cleanups[2]).not.to.be.called;
+    });
+
+    it("should dispose children in correct order (depth-first)", () => {
+        const order = [];
+
+        const dispose = effect(() => {
+            effect(() => {
+                effect(() => {
+                    return () => order.push('grandchild-1');
+                });
+                return () => order.push('child-1');
+            });
+
+            effect(() => {
+                effect(() => {
+                    return () => order.push('grandchild-2');
+                });
+                return () => order.push('child-2');
+            });
+
+            return () => order.push('parent');
+        });
+
+        dispose();
+
+        // Child effects dispose their owned children first, then their own cleanup
+        expect(order).to.deep.equal([
+            'grandchild-1',
+            'child-1',
+            'grandchild-2',
+            'child-2',
+            'parent'
+        ]);
     });
 });

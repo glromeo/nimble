@@ -1,9 +1,12 @@
 import {
     batch,
     Computed,
+    currentContext,
+    increaseGlobalVersion,
     Observer,
-    contextScope,
-    Signal
+    Scope,
+    Signal,
+    tracked
 } from "../signals/signals.mjs";
 import {directives} from "./directives.mjs";
 
@@ -12,10 +15,16 @@ export const XHTML_NAMESPACE_URI = "http://www.w3.org/1999/xhtml";
 
 let namespaceURI = undefined;
 
-function nsjsx(tag, props, key) {
-    if (namespaceURI !== this) {
+export const [
+    svg,
+    xhtml
+] = [
+    SVG_NAMESPACE_URI,
+    XHTML_NAMESPACE_URI
+].map(nsURI => (tag, props, key) => {
+    if (namespaceURI !== nsURI) {
         const outerNamespaceURI = namespaceURI;
-        namespaceURI = this;
+        namespaceURI = nsURI;
         try {
             return jsx(tag, props, key);
         } finally {
@@ -24,48 +33,60 @@ function nsjsx(tag, props, key) {
     } else {
         return jsx(tag, props, key);
     }
-}
+});
 
-export const svg = nsjsx.bind(SVG_NAMESPACE_URI);
-export const xhtml = nsjsx.bind(XHTML_NAMESPACE_URI);
+class KeyedFragment {
+    constructor(key, props) {
+        this.key = key;
+        this.owned = undefined;
 
-class FragmentState {
-    constructor(props) {
-        this.node = Fragment(props);
-        this.children = props.children;
+        tracked(this, () => {
+            this.node = Fragment(props);
+            this.children = props.children;
+        });
     }
 
     update({children}) {
-        if (typeof this.children?.observe === "function") {
+        if (this.children instanceof Observer) {
             this.children.observe(children);
             return;
         }
         if (typeof children === "function") {
-            this.children = new DynamicChildren(this.node, this.children);
+            this.children = new DynamicChildren(this.node, children);
         } else {
             updateChildren(this.node, children, this.children);
         }
     }
 }
 
-class ComponentState {
-    constructor(tag, props) {
-        this.node = createFC(tag, props, true);
+class KeyedFC {
+    constructor(key, tag, props) {
+        this.key = key;
         this.props = props;
+        this.owned = undefined;
+
+        tracked(this, () => {
+            this.node = createFC(tag, props, true);
+        });
     }
 
     update(props) {
-        for (const name of Object.keys(props)) {
+        for (const name of Object.keys(this.props)) {
             const desc = Object.getOwnPropertyDescriptor(props, name);
             this.props[name] = desc.get ?? desc.value;
         }
     }
 }
 
-class ElementState {
-    constructor(tag, props) {
-        this.node = createElement(tag, props);
-        this.props = props;
+class KeyedElement {
+    constructor(key, tag, props) {
+        this.key = key;
+        this.owned = undefined;
+
+        tracked(this, () => {
+            this.node = createElement(tag, props);
+            this.props = props;
+        });
     }
 
     update(props) {
@@ -82,7 +103,7 @@ class ElementState {
                 this.node.addEventListener(event, this.props[name] = value);
                 continue;
             }
-            if (typeof prev.observe === "function") {
+            if (prev instanceof Observer) {
                 prev.observe(value);
                 continue;
             }
@@ -93,10 +114,18 @@ class ElementState {
             } else if (name === "children") {
                 updateChildren(this.node, this.props[name] = value, prev);
             } else {
-                setProperty(this.node, this.props[name] = value, prev);
+                setProperty(this.node, name, this.props[name] = value);
             }
         }
     }
+}
+
+export function contextScope() {
+    const ctx = currentContext();
+    if (ctx === undefined) {
+        throw new Error("no reactive context");
+    }
+    return ctx.scope ??= new Scope();
 }
 
 /**
@@ -118,48 +147,29 @@ export function jsx(tag, props, key) {
             return createElement(tag, props);
         }
     }
-    const scope = contextScope();
-    let state;
-    if (scope.live !== undefined) {
-        let {i, live, cache} = scope;
-        if (i < live.length) {
-            if ((state = live[i++]).key !== key) {
-                if (cache === undefined) {
-                    cache = scope.cache = new Map();
-                }
-                cache.set(state.key, state);
-                while (i < live.length && (state = live[i++]).key !== key) {
-                    cache.set(state.key, state);
-                }
-                if (i === live.length) {
-                    state = undefined;
-                }
-            }
-            scope.i = i;
-        }
-        state ??= cache?.get(key);
+    const ctx = currentContext();
+    if (ctx === undefined) {
+        throw new Error("no reactive context");
     }
+    const scope = ctx.scope ??= new Scope();
+    let state = scope.get(key);
     if (state !== undefined) {
-        console.log("hit", key)
-        batch(() => state.update(props), true);
+        batch(() => {
+            state.update(props);
+            increaseGlobalVersion();
+        });
     } else {
-        console.log("miss", key)
         if (typeof tag === "function") {
             if (tag === Fragment) {
-                state = new FragmentState(props);
+                state = new KeyedFragment(key, props);
             } else {
-                state = new ComponentState(tag, props);
+                state = new KeyedFC(key, tag, props);
             }
         } else {
-            state = new ElementState(tag, props);
+            state = new KeyedElement(key, tag, props);
         }
-        state.key = key;
     }
-    if (scope.next === undefined) {
-        scope.next = [state];
-    } else {
-        scope.next.push(state);
-    }
+    scope.set(state.key, state);
     return state.node;
 }
 
@@ -209,9 +219,9 @@ export class NodeGroup extends DocumentFragment {
         if (this.childElementCount === 0) {
             let {groupStart: node, groupEnd} = this;
             while (node !== groupEnd) {
-                const next = node.nextSibling;
+                const nextSibling = node.nextSibling;
                 super.appendChild(node);
-                node = next;
+                node = nextSibling;
             }
             super.appendChild(groupEnd);
         }
@@ -248,8 +258,6 @@ export class NodeGroup extends DocumentFragment {
         }
     }
 }
-
-let effects = undefined;
 
 /**
  *
@@ -367,7 +375,7 @@ export function setProperty(node, name, value) {
                     if (value[key]) parts.push(key);
                 }
             }
-            if (node.namespaceURI === xhtml) {
+            if (node.namespaceURI === XHTML_NAMESPACE_URI) {
                 node.className = parts.join(" ");
             } else {
                 node.setAttribute("class", parts.join(" "));
@@ -489,16 +497,16 @@ export function updateChildNodes(owner, b, a) {
                         }
                     } else {
                         head = insertBefore(parent, b[bStart++], live[aStart]);
-                        removeNode(live[aStart++]);
+                        live[aStart++].remove();
                     }
                 } else {
                     if (a[aStart] !== live[aStart]) {
-                        removeNode(live[aStart]);
+                        live[aStart].remove();
                     }
                     aStart++;
                 }
             } else {
-                removeNode(live[aStart++]);
+                live[aStart++].remove();
             }
         }
     }
@@ -516,7 +524,7 @@ export function updateChildNodes(owner, b, a) {
 
     while (aStart < aEnd) {
         if (map === undefined || !map.has(a[aStart])) {
-            removeNode(live[aStart]);
+            live[aStart].remove();
         }
         aStart++;
     }
@@ -571,41 +579,19 @@ export function createNode(namespaceURI, value = null) {
     return new Comment(value);
 }
 
-function linkNode(effect, node) {
-    effect.sibling = node.__effects__;
-    node.__effects__ = effect;
-}
-
-function cleanupScope() {
-    const {scope} = this;
-    if (scope !== undefined) {
-        scope.i = 0;
-        scope.live = scope.next;
-        scope.next = undefined;
-        scope.cache = undefined;
-    }
-}
-
 class DynamicNode extends Observer {
 
     constructor(namespaceURI, observable) {
         super(observable);
         const finish = this.start();
         try {
-            linkNode(
-                this,
-                this.node = typeof (this.value = this.callback()) !== "function"
-                    ? createNode(namespaceURI, this.value)
-                    : new Comment(`[function ${this.value.name}]`)
-            );
-            this.next = undefined;
-            this.scope = undefined;
+            this.node = typeof (this.value = this.callback()) !== "function"
+                ? createNode(namespaceURI, this.value)
+                : new Comment(`[function ${this.value.name}]`);
         } finally {
             finish();
         }
     }
-
-    cleanup = cleanupScope;
 
     onChange(value, prev) {
         if (value != null) {
@@ -659,29 +645,23 @@ class DynamicNode extends Observer {
         this.replaceWith(new Comment(value));
     }
 
-    replaceWith(node) {
-        linkNode(this, node);
-        this.node.__effects__ = undefined;
-        this.node.replaceWith(this.node = node);
+    replaceWith(newNode) {
+        this.node.replaceWith(this.node = newNode);
     }
 }
 
 class DynamicChildren extends Observer {
 
-    constructor(node, observable) {
-        super(observable);
+    constructor(node, callback) {
+        super(callback);
         const finish = this.start();
         try {
             appendChildren(node, this.value = this.callback());
-            linkNode(this, this.node = node);
-            this.next = undefined;
-            this.scope = undefined;
+            this.node = node;
         } finally {
             finish();
         }
     }
-
-    cleanup = cleanupScope;
 
     onChange(value, prev) {
         updateChildren(this.node, value, prev);
@@ -694,10 +674,8 @@ class DynamicProperty extends Observer {
         super(observable);
         const finish = this.start();
         try {
-            setProperty(node, name, this.value = this.callback());
-            linkNode(this, this.node = node);
-            this.next = undefined;
-            this.name = name;
+            setProperty(node, this.name = name, this.value = this.callback());
+            this.node = node;
         } finally {
             finish();
         }
@@ -710,54 +688,26 @@ class DynamicProperty extends Observer {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-const effectsWalker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, {
-    acceptNode: node => node.__effects__ !== undefined ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
-});
-
-export function unMount(...nodes) {
-    if (pendingUnmount.length === 0) {
-        setTimeout(performUnmount);
-    }
-    pendingUnmount.push(...nodes);
+/**
+ * Create a root rendering scope with its own ownership tree
+ * Returns a dispose function to clean up all effects
+ */
+export function createRoot(fn) {
+    const owner = new Effect(() => {});
+    let result;
+    tracked(owner, () => {
+        result = fn(() => owner.dispose());
+    });
+    return result;
 }
 
-let pendingUnmount = [];
-
-export function removeNode(node) {
-    node.remove();
-    unMount(node);
-}
-
-function performUnmount() {
-    for (let node of pendingUnmount) {
-        if (node.__effects__ !== undefined) {
-            disposeEffects(node);
-        }
-        effectsWalker.currentNode = node;
-        while (effectsWalker.nextNode()) {
-            disposeEffects(effectsWalker.currentNode);
-        }
-    }
-    pendingUnmount = [];
-}
-
-function disposeEffects(node) {
-    let next = node.__effects__;
-    do {
-        next.dispose();
-    } while ((next = next.sibling) !== undefined);
-    node.__effects__ = undefined;
-}
-
-export function checkJsx() {
-    if (namespaceURI !== undefined) {
-        throw new Error(`unexpected namespaceURI: ${XHTML_NAMESPACE_URI}`);
-    }
-    // if (pendingUnmount !== null) {
-    //     throw new Error(`pending nextUnmount: ${pendingUnmount.toString()}`);
-    // }
-    // if (pendingUpdate !== null) {
-    //     throw new Error(`pending nextUpdate: ${pendingUpdate.toString()}`);
-    // }
+/**
+ * Mount a component to a DOM node
+ */
+export function mount(parent, fn) {
+    return createRoot((dispose) => {
+        const node = fn();
+        parent.appendChild(node);
+        return dispose;
+    });
 }

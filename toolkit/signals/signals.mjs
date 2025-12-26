@@ -3,7 +3,6 @@ const NOTIFIED = 1 << 1;
 const OUTDATED = 1 << 2;
 const DISPOSED = 1 << 3;
 const ERRORED = 1 << 4;
-const TRACKING = 1 << 5;
 
 function startBatch() {
     batchDepth++;
@@ -41,7 +40,11 @@ function endBatch() {
     }
 }
 
-export function batch(callback, force = false) {
+export function increaseGlobalVersion() {
+    globalVersion++;
+}
+
+export function batch(callback) {
     if (batchDepth > 0) {
         return callback();
     }
@@ -49,7 +52,6 @@ export function batch(callback, force = false) {
     try {
         return callback();
     } finally {
-        if (force) globalVersion++;
         endBatch();
     }
 }
@@ -66,6 +68,16 @@ export function untracked(callback) {
     }
 }
 
+export function tracked(owner, fn) {
+    const prevContext = evalContext;
+    evalContext = owner;
+    try {
+        return fn();
+    } finally {
+        evalContext = prevContext;
+    }
+}
+
 let batchedEffect = undefined;
 let batchDepth = 0;
 let batchIteration = 0;
@@ -74,87 +86,101 @@ let globalVersion = 0;
 
 function link(target, source) {
     if (target === undefined) {
-        return undefined
+        return -1;
     }
-    let node = source.node;
-    if (node === undefined || node.target !== target) {
-        node = {
-            version: 0,
-            source: source,
-            prevSource: target.sources,
-            nextSource: undefined,
-            target: target,
-            prevTarget: undefined,
-            nextTarget: undefined,
-            rollbackNode: node,
-        };
-        if (target.sources !== undefined) {
-            target.sources.nextSource = node;
-        }
-        target.sources = node;
-        source.node = node;
-        if (target.flags & TRACKING) {
-            source.subscribe(node);
-        }
-        return node;
-    } else if (node.version === -1) {
-        node.version = 0;
-        if (node.nextSource !== undefined) {
-            node.nextSource.prevSource = node.prevSource;
 
-            if (node.prevSource !== undefined) {
-                node.prevSource.nextSource = node.nextSource;
-            }
-
-            node.prevSource = target.sources;
-            node.nextSource = undefined;
-
-            target.sources.nextSource = node;
-            target.sources = node;
-        }
-        return node;
+    // Initialize arrays if needed
+    if (target.sources === undefined) {
+        target.sources = [];
+        target.versions = [];
+        target.sourceSlots = [];
     }
-    return undefined;
+    if (source.targets === undefined) {
+        source.targets = [];
+        source.targetSlots = [];
+    }
+
+    // Check if already linked
+    const existingIndex = target.sources.indexOf(source);
+
+    if (existingIndex === -1) {
+        // Create new link - always subscribe immediately
+        const sourceIndex = target.sources.length;
+        const targetIndex = source.targets.length;
+
+        target.sources.push(source);
+        target.versions.push(source.version);
+        target.sourceSlots.push(targetIndex);
+
+        source.targets.push(target);
+        source.targetSlots.push(sourceIndex);
+
+        return sourceIndex;
+    } else if (target.versions[existingIndex] === -1) {
+        // Reactivate - update version
+        target.versions[existingIndex] = source.version;
+
+        // Move to end for cleanup tracking
+        if (existingIndex < target.sources.length - 1) {
+            const lastIndex = target.sources.length - 1;
+
+            // Swap
+            const source = target.sources[existingIndex];
+            const version = target.versions[existingIndex];
+            const slot = target.sourceSlots[existingIndex];
+
+            target.sources[existingIndex] = target.sources[lastIndex];
+            target.versions[existingIndex] = target.versions[lastIndex];
+            target.sourceSlots[existingIndex] = target.sourceSlots[lastIndex];
+
+            target.sources[lastIndex] = source;
+            target.versions[lastIndex] = version;
+            target.sourceSlots[lastIndex] = slot;
+
+            // Update back-reference
+            const swappedSource = target.sources[existingIndex];
+            const swappedSlot = target.sourceSlots[existingIndex];
+            swappedSource.targetSlots[swappedSlot] = existingIndex;
+        }
+
+        return target.sources.length - 1;
+    }
+
+    return existingIndex;
 }
 
 export class Signal {
-
     constructor(value) {
         this.__value__ = value;
         this.version = 0;
-        this.node = undefined;
         this.targets = undefined;
+        this.targetSlots = undefined;
     }
 
     refresh() {
         return true;
     }
 
-    subscribe(node) {
-        if (this.targets !== node && node.prevTarget === undefined) {
-            node.nextTarget = this.targets;
-            if (this.targets !== undefined) {
-                this.targets.prevTarget = node;
-            }
-            this.targets = node;
-        }
-    }
+    unsubscribe(targetIndex) {
+        if (this.targets === undefined) return;
 
-    unsubscribe(node) {
-        if (this.targets !== undefined) {
-            const prev = node.prevTarget;
-            const next = node.nextTarget;
-            if (prev !== undefined) {
-                prev.nextTarget = next;
-                node.prevTarget = undefined;
-            }
-            if (next !== undefined) {
-                next.prevTarget = prev;
-                node.nextTarget = undefined;
-            }
-            if (node === this.targets) {
-                this.targets = next;
-            }
+        const lastIndex = this.targets.length - 1;
+
+        if (targetIndex < lastIndex) {
+            this.targets[targetIndex] = this.targets[lastIndex];
+            this.targetSlots[targetIndex] = this.targetSlots[lastIndex];
+
+            const swappedTarget = this.targets[targetIndex];
+            const swappedSourceIdx = this.targetSlots[targetIndex];
+            swappedTarget.sourceSlots[swappedSourceIdx] = targetIndex;
+        }
+
+        this.targets.pop();
+        this.targetSlots.pop();
+
+        if (this.targets.length === 0) {
+            this.targets = undefined;
+            this.targetSlots = undefined;
         }
     }
 
@@ -194,9 +220,9 @@ export class Signal {
     }
 
     get() {
-        const node = link(evalContext, this);
-        if (node !== undefined) {
-            node.version = this.version;
+        const sourceIndex = link(evalContext, this);
+        if (sourceIndex !== -1) {
+            evalContext.versions[sourceIndex] = this.version;
         }
         return this.__value__;
     }
@@ -219,8 +245,10 @@ export class Signal {
     }
 
     notify() {
-        for (let node = this.targets; node !== undefined; node = node.nextTarget) {
-            node.target.notify();
+        if (this.targets === undefined) return;
+
+        for (let i = 0; i < this.targets.length; i++) {
+            this.targets[i].notify();
         }
     }
 }
@@ -235,8 +263,15 @@ export function signal(value) {
 }
 
 function needsToRecompute(target) {
-    for (let node = target.sources; node !== undefined; node = node.nextSource) {
-        if (node.source.version !== node.version || !node.source.refresh() || node.source.version !== node.version) {
+    if (target.sources === undefined) return false;
+
+    for (let i = 0; i < target.sources.length; i++) {
+        const source = target.sources[i];
+        const version = target.versions[i];
+
+        if (source.version !== version ||
+            !source.refresh() ||
+            source.version !== version) {
             return true;
         }
     }
@@ -244,58 +279,54 @@ function needsToRecompute(target) {
 }
 
 function prepareSources(target) {
-    for (let node = target.sources; node !== undefined; node = node.nextSource) {
-        const rollbackNode = node.source.node;
-        if (rollbackNode !== undefined) {
-            node.rollbackNode = rollbackNode;
-        }
-        node.source.node = node;
-        node.version = -1;
+    if (target.sources === undefined) return;
 
-        if (node.nextSource === undefined) {
-            target.sources = node;
-            break;
-        }
+    for (let i = 0; i < target.versions.length; i++) {
+        target.versions[i] = -1;
     }
 }
 
 function cleanupSources(target) {
-    let node = target.sources;
-    let head = undefined;
+    if (target.sources === undefined) return;
 
-    while (node !== undefined) {
-        const prev = node.prevSource;
+    let writeIdx = 0;
 
-        if (node.version === -1) {
-            node.source.unsubscribe(node);
-            if (prev !== undefined) {
-                prev.nextSource = node.nextSource;
-            }
-            if (node.nextSource !== undefined) {
-                node.nextSource.prevSource = prev;
-            }
+    for (let readIdx = 0; readIdx < target.sources.length; readIdx++) {
+        if (target.versions[readIdx] === -1) {
+            target.sources[readIdx].unsubscribe(target.sourceSlots[readIdx]);
         } else {
-            head = node;
-        }
+            if (writeIdx !== readIdx) {
+                target.sources[writeIdx] = target.sources[readIdx];
+                target.versions[writeIdx] = target.versions[readIdx];
+                target.sourceSlots[writeIdx] = target.sourceSlots[readIdx];
 
-        node.source.node = node.rollbackNode;
-        if (node.rollbackNode !== undefined) {
-            node.rollbackNode = undefined;
+                const source = target.sources[writeIdx];
+                const targetIdx = target.sourceSlots[writeIdx];
+                source.targetSlots[targetIdx] = writeIdx;
+            }
+            writeIdx++;
         }
-
-        node = prev;
     }
 
-    target.sources = head;
+    target.sources.length = writeIdx;
+    target.versions.length = writeIdx;
+    target.sourceSlots.length = writeIdx;
+
+    if (target.sources.length === 0) {
+        target.sources = undefined;
+        target.versions = undefined;
+        target.sourceSlots = undefined;
+    }
 }
 
 export class Computed extends Signal {
-
     constructor(callback) {
         super(undefined);
 
         this.callback = callback;
         this.sources = undefined;
+        this.versions = undefined;
+        this.sourceSlots = undefined;
         this.globalVersion = globalVersion - 1;
         this.flags = OUTDATED;
     }
@@ -309,8 +340,6 @@ export class Computed extends Signal {
 
         if (this.flags & OUTDATED) {
             this.flags &= ~OUTDATED;
-        } else if (this.flags & TRACKING) {
-            return true;
         }
 
         if (this.globalVersion === globalVersion) {
@@ -323,6 +352,8 @@ export class Computed extends Signal {
             this.flags &= ~RUNNING;
             return true;
         }
+
+        if (this.owned !== undefined) disposeOwned(this);
 
         const prevContext = evalContext;
         try {
@@ -345,28 +376,18 @@ export class Computed extends Signal {
         return true;
     }
 
-    subscribe(node) {
-        if (this.targets === undefined) {
-            this.flags |= OUTDATED | TRACKING;
-
-            for (let node = this.sources; node !== undefined; node = node.nextSource) {
-                node.source.subscribe(node);
+    unsubscribe(targetIndex) {
+        super.unsubscribe(targetIndex);
+        if (this.sources !== undefined && this.targets === undefined) {
+            for (let i = this.sources.length - 1; i >= 0; i--) {
+                this.sources[i].unsubscribe(this.sourceSlots[i]);
             }
-        }
-        super.subscribe(node);
-    }
 
-    unsubscribe(node) {
-        if (this.targets !== undefined) {
-            super.unsubscribe(node);
+            this.sources = undefined;
+            this.versions = undefined;
+            this.sourceSlots = undefined;
 
-            if (this.targets === undefined) {
-                this.flags &= ~TRACKING;
-
-                for (let node = this.sources; node !== undefined; node = node.nextSource) {
-                    node.source.unsubscribe(node);
-                }
-            }
+            if (this.owned !== undefined) disposeOwned(this);
         }
     }
 
@@ -382,10 +403,10 @@ export class Computed extends Signal {
         if (this.flags & RUNNING) {
             throw new Error("Cycle detected");
         }
-        const node = link(evalContext, this);
+        const sourceIndex = link(evalContext, this);
         this.refresh();
-        if (node !== undefined) {
-            node.version = this.version;
+        if (sourceIndex !== -1) {
+            evalContext.versions[sourceIndex] = this.version;
         }
         if (this.flags & ERRORED) {
             throw this.__value__;
@@ -414,17 +435,18 @@ export function computed(callback) {
     return new Computed(callback);
 }
 
-function cleanupEffect(cleanup) {
+function cleanupEffect(effect) {
     startBatch();
     const prevContext = evalContext;
     evalContext = undefined;
     try {
-        this.cleanup = undefined;
+        const cleanup = effect.cleanup;
+        effect.cleanup = undefined;
         cleanup();
     } catch (err) {
-        this.flags &= ~RUNNING;
-        this.flags |= DISPOSED;
-        disposeEffect(this);
+        effect.flags &= ~RUNNING;
+        effect.flags |= DISPOSED;
+        disposeEffect(effect);
         throw err;
     } finally {
         evalContext = prevContext;
@@ -433,13 +455,25 @@ function cleanupEffect(cleanup) {
 }
 
 function disposeEffect(effect) {
-    for (let node = effect.sources; node !== undefined; node = node.nextSource) {
-        node.source.unsubscribe(node);
+    if (effect.sources !== undefined) {
+        let i = effect.sources.length;
+        while (--i >= 0) {
+            effect.sources[i].unsubscribe(effect.sourceSlots[i]);
+        }
     }
     effect.callback = undefined;
     effect.sources = undefined;
+    effect.versions = undefined;
+    effect.sourceSlots = undefined;
 
-    effect.cleanup?.();
+    if (effect.owned !== undefined) disposeOwned(effect);
+    if (effect.scope !== undefined) effect.scope.dispose();
+    if (effect.cleanup !== undefined) cleanupEffect(effect);
+}
+
+function disposeOwned(owner) {
+    for (const owned of owner.owned) owned.dispose();
+    owner.owned = undefined;
 }
 
 function endEffect(prevContext) {
@@ -447,6 +481,11 @@ function endEffect(prevContext) {
         throw new Error("Out-of-order effect");
     }
     cleanupSources(this);
+
+    if (this.scope !== undefined) {
+        this.scope.reset();
+    }
+
     evalContext = prevContext;
 
     this.flags &= ~RUNNING;
@@ -457,13 +496,23 @@ function endEffect(prevContext) {
 }
 
 export class Effect {
-
     constructor(callback) {
         this.callback = callback;
         this.cleanup = undefined;
         this.sources = undefined;
+        this.versions = undefined;
+        this.sourceSlots = undefined;
         this.nextEffect = undefined;
-        this.flags = TRACKING;
+        this.flags = 0;
+        this.owned = undefined;
+
+        if (evalContext !== undefined && !(evalContext.flags & DISPOSED)) {
+            if (evalContext.owned === undefined) {
+                evalContext.owned = [this];
+            } else {
+                evalContext.owned.push(this);
+            }
+        }
     }
 
     invoke() {
@@ -473,7 +522,7 @@ export class Effect {
 
             const cleanup = this.callback();
             if (typeof cleanup === "function") {
-                this.cleanup = cleanupEffect.bind(this, cleanup);
+                this.cleanup = cleanup;
             }
         } finally {
             finish();
@@ -487,7 +536,8 @@ export class Effect {
         this.flags |= RUNNING;
         this.flags &= ~DISPOSED;
 
-        this.cleanup?.();
+        if (this.owned !== undefined) disposeOwned(this);
+        if (this.cleanup !== undefined) cleanupEffect(this);
 
         prepareSources(this);
 
@@ -507,12 +557,11 @@ export class Effect {
     }
 
     dispose() {
-        if ((this.flags |= DISPOSED) & RUNNING) { // if running dispose it later...
+        if ((this.flags |= DISPOSED) & RUNNING) {
             return;
         }
         disposeEffect(this);
     }
-
 }
 
 export function effect(callback) {
@@ -526,29 +575,13 @@ export function effect(callback) {
     return effect.dispose.bind(effect);
 }
 
-export function tracked(ctx, callback) {
-    const prevContext = evalContext;
-    evalContext = ctx;
-    try {
-        return callback();
-    } finally {
-        cleanupSources(ctx);
-        evalContext = prevContext;
-    }
-}
-
 export function currentContext() {
     return evalContext;
 }
 
-export function contextScope() {
-    return evalContext.scope ??= {};
-}
-
 export class Observer extends Effect {
-
     observe(callback) {
-        this.callback = typeof callback === "function" ? callback : () => callback;
+        this.callback = callback;
         this.notify();
     }
 
@@ -571,6 +604,54 @@ export class Observer extends Effect {
             finish();
         }
     }
+}
 
+export class Scope {
+    constructor() {
+        this.live = undefined;
+        this.next = undefined;
+    }
+
+    get(key) {
+        return this.live !== undefined ? this.live[key] : undefined;
+    }
+
+    set(key, state) {
+        if (this.next === undefined) {
+            this.next = {};
+        }
+        this.next[key] = state;
+    }
+
+    reset() {
+        if (this.live !== undefined) {
+            if (this.next !== undefined) {
+                for (const key in this.live) {
+                    if (!(key in this.next)) {
+                        disposeOwnedIfAny(this.live[key]);
+                    }
+                }
+            } else {
+                Object.values(this.live).forEach(disposeOwnedIfAny);
+            }
+        }
+
+        this.live = this.next;
+        this.next = undefined;
+    }
+
+    dispose() {
+        if (this.live !== undefined) Object.values(this.live).forEach(disposeOwnedIfAny);
+        if (this.next !== undefined) Object.values(this.next).forEach(disposeOwnedIfAny);
+    }
+}
+
+function disposeOwnedIfAny(owner) {
+    if (owner.owned !== undefined) {
+        for (const owned of owner.owned) {
+            owned.dispose();
+        }
+        owner.owned = undefined;
+    }
 }
 

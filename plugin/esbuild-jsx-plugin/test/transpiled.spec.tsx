@@ -4,7 +4,7 @@ import sinon from "sinon";
 
 import "nimble/jsx-runtime";
 
-const specs = suite("transpiled tests", (before, after) => {
+suite("transpiled tests", ({before, after}) => {
 
     before.each(() => {
     });
@@ -17,5 +17,3 @@ const specs = suite("transpiled tests", (before, after) => {
         expect(<></>).to.be.instanceof(DocumentFragment);
     });
 });
-
-specs.run();
