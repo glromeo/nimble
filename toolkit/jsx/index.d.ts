@@ -1,0 +1,9 @@
+import {JSX} from "../types/jsx";
+
+export function createDirective<D extends JSX.Directives>(
+    name: keyof D,
+    cb: (el: infer D extends HTMLElement, directive?: Signal<JSX.IntrinsicElements[K]>, props?: C) => void
+): void;
+
+
+export function unMount(...nodes: Node[]): void;

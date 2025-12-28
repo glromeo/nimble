@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Story IFrame</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Story IFrame</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <meta name="color-scheme" content="light dark"/>
+        <link rel="stylesheet" type="text/css" href="styles.css">
+        <link rel="stylesheet" href="story.css" />
+        <script type="text/javascript" src="pace.js"></script>
+        <script type="text/javascript">
+            const fixture = new URLSearchParams(location.search).get("fixture");
+            console.log(fixture ? `fixture '${fixture}'` : "all available fixtures", `in '${location.hash.slice(2)}'`);
+        </script>
+    </head>
+    <body>
+        <script type="text/javascript">
+            window.parent.addEventListener("message", ({data}) => {
+                if (data === "reload") {
+                    location.reload();
+                }
+            });
+        </script>
+        <script type="module" src="story.js"></script>
+    </body>
+</html>

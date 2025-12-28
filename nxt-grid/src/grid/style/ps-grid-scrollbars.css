@@ -1,0 +1,33 @@
+@import "variables.css";
+
+.ps-grid::-webkit-scrollbar {
+    width: 0.75rem;
+    height: 0.75rem;
+    background: $header-background-color;
+}
+.ps-grid::-webkit-scrollbar-button {
+    width: 0;
+    height: 0;
+    display: none;
+}
+.ps-grid::-webkit-scrollbar-corner {
+    background-color: transparent;
+}
+.ps-grid::-webkit-scrollbar-thumb {
+    background-color: #ccc;
+}
+.ps-grid::-webkit-scrollbar-thumb:hover {
+    background: #aaa !important;
+}
+.ps-grid::-webkit-scrollbar-track {
+    border-top: $grid-border;
+    border-left: $grid-border;
+    margin-top: var(--psg-header-height, 2rem);
+    background: $header-background-color;
+}
+.psg-ltr::-webkit-scrollbar-track {
+    margin-left: var(--psg-header-width, 0);
+}
+.psg-rtl::-webkit-scrollbar-track {
+    margin-right: var(--psg-header-width, 0);
+}

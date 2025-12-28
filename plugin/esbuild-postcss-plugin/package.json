@@ -1,0 +1,49 @@
+{
+  "name": "esbuild-postcss-plugin",
+  "version": "1.0.0",
+  "description": "esbuild plugin for applying postcss to css imports",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "keywords": [
+    "esbuild",
+    "plugin",
+    "css",
+    "postcss"
+  ],
+  "files": [
+    "src",
+    "lib",
+    "dist",
+    "LICENSE",
+    "README.MD"
+  ],
+  "author": "Gianluca Romeo <glromeo@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "bundle": "node bundle.js",
+    "test": "c8 mocha ./test/**/*.spec.ts",
+    "coverage": "c8 report --reporter=text-lcov | coveralls"
+  },
+  "dependencies": {
+    "postcss": "^8.5.1",
+    "postcss-import": "^16.1.0",
+    "postcss-simple-vars": "^7.0.1"
+  },
+  "devDependencies": {
+    "@types/chai": "^5.0.1",
+    "@types/mocha": "^10.0.9",
+    "@types/sinon": "^17.0.3",
+    "@types/sinon-chai": "^4.0.0",
+    "c8": "^10.1.2",
+    "chai": "^5.1.2",
+    "esbuild": "^0.25.1",
+    "mocha": "^10.8.2",
+    "sinon": "^19.0.2",
+    "sinon-chai": "^4.0.0"
+  },
+  "peerDependencies": {
+    "esbuild": ">=0.20.1"
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "name": "esbuild-jsx-plugin",
+  "version": "1.0.0",
+  "description": "esbuild plugin for transpiling jsx",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "keywords": [
+    "esbuild",
+    "plugin",
+    "jsx"
+  ],
+  "files": [
+    "src",
+    "lib",
+    "dist",
+    "LICENSE",
+    "README.MD"
+  ],
+  "author": "Gianluca Romeo <glromeo@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "bundle": "node bundle.js",
+    "test": "c8 mocha ./test/**/*.spec.ts",
+    "coverage": "c8 report --reporter=text-lcov | coveralls"
+  },
+  "mocha": {
+    "import": [
+      "./register.mjs"
+    ],
+    "enable-source-maps": true
+  },
+  "dependencies": {
+    "@babel/core": "^7.25.8",
+    "@babel/generator": "^7.25.7",
+    "@babel/parser": "^7.25.8",
+    "@babel/preset-typescript": "^7.26.0",
+    "@babel/standalone": "^7.25.8",
+    "@babel/template": "^7.25.7",
+    "@babel/traverse": "^7.25.7",
+    "@babel/types": "^7.25.8",
+    "@happy-dom/global-registrator": "^15.7.4",
+    "happy-dom": "^15.7.4"
+  },
+  "devDependencies": {
+    "@types/babel__core": "^7.20.5",
+    "@types/chai": "^5.0.1",
+    "@types/mocha": "^10.0.9",
+    "@types/resolve": "^1.20.6",
+    "@types/sinon": "^17.0.3",
+    "@types/sinon-chai": "^4.0.0",
+    "c8": "^10.1.2",
+    "chai": "^5.1.2",
+    "esbuild": "^0.25.1",
+    "mocha": "^10.8.2",
+    "sinon": "^19.0.2",
+    "sinon-chai": "^4.0.0"
+  },
+  "peerDependencies": {
+    "esbuild": ">=0.20.1"
+  }
+}

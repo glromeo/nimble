@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8"/>
     <title>CSS Tests</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <style>
         body {
             height: 100vh;
@@ -37,24 +37,23 @@
 <script src="../../node_modules/chai/chai.js"></script>
 <script src="../../node_modules/mocha/mocha.js"></script>
 <script type="module">
-    import {toHyperScript} from './util.js'
-    import {css, html, atom, suite, test} from '@nimble/toolkit'
+    import {css, htmlOld, suite, test} from "@nimble/toolkit";
 
-    const {expect} = chai
+    const {expect} = chai;
 
-    const nextFrame = async () => await new Promise(resolve => requestAnimationFrame(resolve))
+    const nextFrame = async () => await new Promise(resolve => requestAnimationFrame(resolve));
 
-    // test('top level', ({render}) => {
-    //     expect(render(html`Hello World`).innerText).to.eq('Hello World')
+    // test('top level', ({createNode}) => {
+    //     expect(createNode(html`Hello World`).innerText).to.eq('Hello World')
     // })
 
-    suite('css', () => {
-        test('text content', ({render}) => {
-            expect(render(html`Hello World`).innerText).to.eq('Hello World')
-        })
-    })
+    suite("css", () => {
+        test("text content", ({render}) => {
+            expect(render(htmlOld`Hello World`).innerText).to.eq("Hello World");
+        });
+    });
 
-    mocha.run()
+    mocha.run();
 </script>
 </body>
 </html>

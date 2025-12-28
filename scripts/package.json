@@ -1,0 +1,40 @@
+{
+  "name": "@nimble/scripts",
+  "description": "scripts to build and do stuff",
+  "version": "1.0.0",
+  "author": "glromeo@gmail.com",
+  "license": "MIT",
+  "main": "lib/index.cjs",
+  "type": "commonjs",
+  "bin": {
+    "nimble": "bin/cli.cjs"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "config.cjs"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@babel/generator": "^7.25.7",
+    "@babel/parser": "^7.25.8",
+    "@babel/template": "^7.25.7",
+    "@babel/traverse": "^7.25.7",
+    "@babel/types": "^7.25.8",
+    "chokidar": "^4.0.1",
+    "compression": "^1.7.4",
+    "deepmerge": "^4.3.1",
+    "esbuild": "^0.25.1",
+    "esbuild-jsx-plugin": "^1.0.0",
+    "esbuild-sass-plugin": "^3.3.0",
+    "express": "^4.21.1",
+    "papaparse": "^5.4.1",
+    "squirrelly": "^9.0.0",
+    "ws": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0"
+  }
+}

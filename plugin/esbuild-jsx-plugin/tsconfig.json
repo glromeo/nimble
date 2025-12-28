@@ -1,0 +1,22 @@
+{
+  "include": ["./src"],
+  "compilerOptions": {
+    "outDir": "lib",
+    "module": "CommonJS",
+    "target": "ESNext",
+    "moduleResolution": "node",
+    "declaration": true,
+    "esModuleInterop": true,
+    "strict": true,
+    "sourceMap": true,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "exactOptionalPropertyTypes": false
+  },
+  "ts-node": {
+    "transpileOnly": true
+  }
+}

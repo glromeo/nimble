@@ -1,0 +1,46 @@
+@import "variables.css";
+
+.psg-section {
+    position: sticky;
+    display: block;
+    height: 0;
+    width: 0;
+    overflow: visible;
+}
+.psg-corner-section {
+    z-index: 150;
+    top: 0;
+    left: 0;
+}
+.psg-top-section {
+    z-index: 100;
+    top: 0;
+    height: fit-content;
+    box-shadow: 0 1px 0.25rem $section-shadow-color;
+}
+.psg-left-section {
+    z-index: 50;
+}
+.psg-ltr .psg-corner-section .psg-header {
+    box-shadow: 1px 0px 0.25rem $section-shadow-color;
+}
+.psg-rtl .psg-corner-section .psg-header {
+    transform: translateX(-1px);
+    border-left: $grid-border;
+    box-shadow: -1px 0px 0.25rem $section-shadow-color;
+}
+.psg-ltr .psg-top-section .psg-header {
+    box-shadow: 1px 1px 0.25rem $section-shadow-color;
+}
+.psg-rtl .psg-top-section .psg-header {
+    box-shadow: -1px 1px 0.25rem $section-shadow-color;
+}
+.psg-ltr .psg-left-section .psg-body {
+    border-right: $grid-border;
+    box-shadow: 1px 0 0.25rem $section-shadow-color;
+}
+.psg-rtl .psg-left-section .psg-body {
+    transform: translateX(-1px);
+    border-left: $grid-border;
+    box-shadow: -1px 0 0.25rem $section-shadow-color;
+}

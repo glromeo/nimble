@@ -1,0 +1,69 @@
+@import "@atx/toolkit/styles";
+
+.navigator-pane {
+    position: relative;
+}
+
+.navigator {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-right: 2px solid $partition-color;
+    padding: 4px;
+    overflow-y: auto;
+    user-select: none;
+
+    .navigator-item {
+        background-color: $grid__background-color;
+        padding: 4px;
+        height: 24px;
+        cursor: pointer;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        text-transform: capitalize;
+
+        &[data-name="default"] {
+            text-transform: none;
+        }
+
+        svg {
+            margin: -5px 0;
+            width: 20px;
+            height: 20px;
+        }
+
+        &.story {
+            display: flex;
+
+            svg {
+                margin: 0 5px 0 0;
+                width: 15px;
+                height: 15px;
+                color: $icon__informational;
+            }
+
+            span {
+                flex-grow: 1;
+            }
+
+            svg:last-child {
+                visibility: hidden;
+            }
+
+            &[data-selected="true"] {
+                svg:last-child {
+                    visibility: visible;
+                }
+            }
+        }
+
+
+        &:hover {
+            background-color: $grid__background-color--hover;
+        }
+
+        &[data-selected="true"] {
+            font-weight: bold;
+        }
+    }
+}

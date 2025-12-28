@@ -4,9 +4,22 @@
   "license": "MIT",
   "private": true,
   "workspaces": [
+    "demo/sierpinski-triangle",
+    "demo/scrolling-demo",
+    "docs",
+    "nxt-grid",
+    "plugin/esbuild-jsx-plugin",
+    "plugin/esbuild-postcss-plugin",
+    "sample",
+    "scripts",
+    "stories",
+    "testing",
     "toolkit"
   ],
   "devDependencies": {
-    "typescript": "^5.3.3"
+    "@types/node": "^22.7.5",
+    "benchmark": "^2.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
   }
 }

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sample @nimble atoms & html template</title>
+    <script type="importmap">
+        {
+            "imports": {
+                "htm": "../../node_modules/htm/dist/htm.mjs",
+                "htm/mini": "../../node_modules/htm/mini/index.mjs",
+                "@ant-design/": "../../node_modules/@ant-design/"
+            }
+        }
+    </script>
+</head>
+<body>
+<sample-clock id="1"></sample-clock>
+<sample-clock id="2"></sample-clock>
+<script type="module">
+    import {html} from "./html.mjs";
+    import {atom, globalScope as store} from "../atoms/atoms.mjs";
+
+    customElements.define("sample-clock", class extends HTMLElement {
+
+        name = "Sample Clock";
+        time = atom(get => new Date());
+        localTime = atom(get => get(this.time).toLocaleTimeString());
+
+        render = html`<div>Hello from ${this.name} ${html`<span>Time is: ${this.localTime}</span>`}</div>`;
+
+        connectedCallback() {
+            const shadowRoot = this.attachShadow({mode: "open"});
+            this.disconnect = this.render(store, shadowRoot);
+            setInterval(() => {
+                store.set(this.time);
+            }, 1000);
+        }
+
+        disconnectedCallback() {
+            this.disconnect();
+        }
+    });
+
+    setTimeout(() => {
+        console.log("name", document.getElementById("1").name === document.getElementById("2").name);
+        console.log("time", document.getElementById("1").time === document.getElementById("2").time);
+
+        document.body.innerHTML = "";
+    }, 1000);
+
+</script>
+</body>
+</html>

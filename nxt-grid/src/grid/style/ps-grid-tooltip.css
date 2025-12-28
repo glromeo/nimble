@@ -1,0 +1,44 @@
+@import "./variables.css";
+
+.psg-tooltip {
+    position: absolute;
+    overflow: visible;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+.psg-tooltip.visible {
+    opacity: 1;
+    transition: opacity 0.3s ease-in-out;
+}
+.psg-tooltip.visible .psg-tooltip-content {
+    pointer-events: auto;
+}
+.psg-tooltip-content {
+    background-color: $grid-background-color;
+    border-radius: 0.5rem;
+    border: $grid-border;
+    box-shadow: 0 0.375rem 0.75rem 0 gray;
+    box-sizing: border-box;
+    color: black;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    padding: .5rem 1rem;
+    position: absolute;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    z-index: 1000;
+}
+.psg-tooltip-content.top {
+    top: 0.25rem;
+}
+.psg-tooltip-content.bottom {
+    bottom: 1rem;
+}
+.psg-tooltip-content.left {
+    left: -0.5rem;
+}
+.psg-tooltip-content.right {
+    right: 0.5rem;
+}

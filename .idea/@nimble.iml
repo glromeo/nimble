@@ -2,8 +2,21 @@
 <module type="JAVA_MODULE" version="4">
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
-    <content url="file://$MODULE_DIR$" />
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/docs/out" />
+      <excludeFolder url="file://$MODULE_DIR$/docs/static" />
+      <excludeFolder url="file://$MODULE_DIR$/sample/build" />
+      <excludeFolder url="file://$MODULE_DIR$/stories/build" />
+      <excludeFolder url="file://$MODULE_DIR$/docs/build" />
+      <excludeFolder url="file://$MODULE_DIR$/.idea" />
+      <excludeFolder url="file://$MODULE_DIR$/attic" />
+      <excludeFolder url="file://$MODULE_DIR$/plugin/esbuild-jsx-plugin/coverage" />
+      <excludeFolder url="file://$MODULE_DIR$/plugin/esbuild-jsx-plugin/dist" />
+      <excludeFolder url="file://$MODULE_DIR$/plugin/esbuild-jsx-plugin/lib" />
+      <excludeFolder url="file://$MODULE_DIR$/nxt-grid/build" />
+    </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="library" name="bootstrap" level="application" />
   </component>
 </module>

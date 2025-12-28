@@ -1,0 +1,66 @@
+[resizable] {
+  position: relative;
+  .resize-handle {
+    position: absolute;
+    overflow: visible;
+    z-index: 1000;
+    &::after {
+      display: block;
+      position: absolute;
+      content: '';
+      width: 0;
+      height: 0;
+      border: 1px solid transparent;
+    }
+    &:hover::after {
+      border-color: rgba(128,128,128,0.125);
+    }
+    &:active::after {
+      border-color: rgba(0,128,256,0.25);
+    }
+    &.top,
+    &.bottom {
+      left: 0;
+      width: 100%;
+      height: 8px;
+      cursor: ns-resize;
+      &::after {
+        width: 100%;
+      }
+    }
+    &.top {
+      top: -3px;
+      &::after {
+        top: 3px;
+      }
+    }
+    &.bottom {
+      bottom: -3px;
+      &::after {
+        bottom: 3px;
+      }
+    }
+    &.left,
+    &.right {
+      top: 0;
+      height: 100%;
+      width: 8px;
+      cursor: ew-resize;
+      &::after {
+        height: 100%;
+      }
+    }
+    &.left {
+      left: -3px;
+      &::after {
+        left: 3px;
+      }
+    }
+    &.right {
+      right: -3px;
+      &::after {
+        right: 3px;
+      }
+    }
+  }
+}
