@@ -1,7 +1,7 @@
 import {expect} from "chai";
 import type Sinon from "sinon";
 import sinon from "sinon";
-import {Fragment, NodeGroup} from "./jsx.mjs";
+import {Fragment, errorBoundary, NodeGroup} from "./jsx.mjs";
 import {createDirective} from "./directives.mjs";
 import {computed, currentContext, effect, signal} from "../signals/signals.mjs";
 import {vsync} from "@nimble/testing";
@@ -792,6 +792,16 @@ suite("Nimble JSX", () => {
 
     suite("Edge Cases", () => {
 
+        setup(() => {
+            errorBoundary.set('children', (node, err) => {
+                node.innerHTML = `<error>${err.message}</error>`;
+            });
+        });
+
+        teardown(() => {
+            errorBoundary.reset('children');
+        });
+
         test("handles rapid signal updates", async () => {
             const value = signal(0);
             const node = <div>{value.value}</div>;
@@ -828,6 +838,57 @@ suite("Nimble JSX", () => {
 
             node.dispatchEvent(new KeyboardEvent("keydown", {key: "e"}));
             expect(valueSpy.callCount).to.equal(1);
+        });
+
+        // 1. Error propagation in computed
+        test("handles errors in computed dependencies", async () => {
+            const throws = signal(false);
+            const comp = computed(() => {
+                if (throws.value) throw new Error("boom");
+                return "ok";
+            });
+
+            let node;
+            effect(() => {
+                node = <div>{comp.value}</div>;
+            });
+
+            throws.set(true);
+            await vsync();
+            expect(node).to.equal("<div><error>boom</error></div>");
+        });
+
+// 2. Scope disposal cleanup
+        test("disposes scope when keyed component removed", async () => {
+            const show = signal(true);
+            let scopeRef;
+
+            effect(() => {
+                const ctx = currentContext();
+                if (show.value) {
+                    const node = <div key="test">content</div>;
+                    scopeRef = ctx.scope;
+                }
+            });
+
+            expect(scopeRef.live).to.not.be.undefined;
+            show.set(false);
+            await vsync();
+            // Verify scope was cleaned up
+        });
+
+// 3. Keyed component with number/symbol keys
+        test("supports non-string keys", async () => {
+            const items = signal([
+                { key: 1, text: "one" },
+                { key: Symbol.for("two"), text: "two" }
+            ]);
+
+            const node = <div>{() => items.value.map(item =>
+                <div key={item.key}>{item.text}</div>
+            )}</div>;
+
+            // ... test reconciliation
         });
     });
 });

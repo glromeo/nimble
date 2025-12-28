@@ -18,7 +18,7 @@ function endBatch() {
         let effect = batchedEffect;
         batchedEffect = undefined;
         batchIteration++;
-        while (effect !== undefined) {
+        while (effect  !== undefined) {
             const next = effect.nextEffect;
             effect.nextEffect = undefined;
             effect.flags &= ~NOTIFIED;
@@ -85,7 +85,7 @@ let batchIteration = 0;
 let globalVersion = 0;
 
 function link(target, source) {
-    if (target === undefined) {
+    if (target === undefined || target.notify === undefined) {
         return -1;
     }
 
@@ -588,6 +588,10 @@ export class Observer extends Effect {
     onChange(value, prev) {
     }
 
+    onError(err) {
+        console.error("unhandled error in mutation callback", err);
+    }
+
     invoke() {
         const finish = this.start();
         try {
@@ -599,7 +603,7 @@ export class Observer extends Effect {
                 this.value = value;
             }
         } catch (err) {
-            console.error("unhandled error in mutation callback", err);
+            this.onError(err, this.value);
         } finally {
             finish();
         }

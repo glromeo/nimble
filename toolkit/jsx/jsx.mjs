@@ -1,13 +1,4 @@
-import {
-    batch,
-    Computed,
-    currentContext,
-    increaseGlobalVersion,
-    Observer,
-    Scope,
-    Signal,
-    tracked
-} from "../signals/signals.mjs";
+import {batch, Computed, currentContext, Observer, Scope, Signal, tracked} from "../signals/signals.mjs";
 import {directives} from "./directives.mjs";
 
 export const SVG_NAMESPACE_URI = "http://www.w3.org/2000/svg";
@@ -62,18 +53,52 @@ class KeyedFragment {
 class KeyedFC {
     constructor(key, tag, props) {
         this.key = key;
-        this.props = props;
+        this.props = {};
+        this.signals = {};
         this.owned = undefined;
 
+        for (const name of Object.keys(props)) {
+            this.defineSignal(props, name);
+        }
+
         tracked(this, () => {
-            this.node = createFC(tag, props, true);
+            this.node = tag(this.props);
+        });
+    }
+
+    defineSignal(props, name) {
+        const {get, value} = Object.getOwnPropertyDescriptor(props, name);
+        this.signals[name] = get !== undefined ? new Computed(get) : new Signal(value);
+        Object.defineProperty(this.props, name, {
+            get: () => this.signals[name].get()
         });
     }
 
     update(props) {
-        for (const name of Object.keys(this.props)) {
+        for (const name of Object.keys(props)) {
             const desc = Object.getOwnPropertyDescriptor(props, name);
-            this.props[name] = desc.get ?? desc.value;
+            const signal = this.signals[name];
+            if (signal !== undefined) {
+                if (signal.constructor === Signal) {
+                    if (desc.get !== undefined) {
+                        signal.version++;
+                        signal.notify();
+                        this.signals[name] = new Computed(desc.get);
+                    } else {
+                        signal.set(desc.value);
+                    }
+                } else {
+                    if (desc.get !== undefined) {
+                        signal.reset(desc.get);
+                    } else {
+                        signal.version++;
+                        signal.notify();
+                        this.signals[name] = new Signal(desc.value);
+                    }
+                }
+            } else {
+                this.defineSignal(props, name);
+            }
         }
     }
 }
@@ -141,7 +166,7 @@ export function jsx(tag, props, key) {
             if (tag === Fragment) {
                 return Fragment(props);
             } else {
-                return createFC(tag, props, false);
+                return tag(props);
             }
         } else {
             return createElement(tag, props);
@@ -154,10 +179,7 @@ export function jsx(tag, props, key) {
     const scope = ctx.scope ??= new Scope();
     let state = scope.get(key);
     if (state !== undefined) {
-        batch(() => {
-            state.update(props);
-            increaseGlobalVersion();
-        });
+        batch(() => state.update(props));
     } else {
         if (typeof tag === "function") {
             if (tag === Fragment) {
@@ -257,42 +279,6 @@ export class NodeGroup extends DocumentFragment {
             parentNode.insertBefore(node, nextSibling);
         }
     }
-}
-
-/**
- *
- * @param tag {Function}
- * @param props {{xmlns?: string, children?: any[], [key: string]: any}}
- * @param writable
- * @returns {*}
- */
-function createFC(tag, props, writable) {
-    for (const name of Object.keys(props)) {
-        const desc = Object.getOwnPropertyDescriptor(props, name);
-        let signal = desc.get !== undefined ? new Computed(desc.get) : new Signal(desc.value);
-        Object.defineProperty(props, name, {
-            get: () => signal.get(),
-            set: writable ? value => {
-                signal.notify();
-                if (signal.constructor === Signal) {
-                    signal.version++;
-                    if (typeof value === "function") {
-                        signal = new Computed(value);
-                    } else {
-                        signal.__value__ = value;
-                    }
-                } else {
-                    signal.version = 0;
-                    if (typeof value === "function") {
-                        signal.callback = value;
-                    } else {
-                        signal = new Signal(value);
-                    }
-                }
-            } : undefined
-        });
-    }
-    return tag(props);
 }
 
 /**
@@ -611,7 +597,7 @@ class DynamicNode extends Observer {
                     }
                     const nodeGroup = new NodeGroup(this.node.namespaceURI);
                     appendChildren(nodeGroup, value);
-                    this.replaceWith(nodeGroup)
+                    this.replaceWith(nodeGroup);
                     return;
                 }
                 if (value.tag !== undefined) {
@@ -630,7 +616,7 @@ class DynamicNode extends Observer {
                     this.node.data = value;
                     return;
                 }
-                this.replaceWith(new Text(value))
+                this.replaceWith(new Text(value));
                 return;
             } else if (type === "function") {
                 value = `[function ${value.name}]`;
@@ -647,6 +633,13 @@ class DynamicNode extends Observer {
 
     replaceWith(newNode) {
         this.node.replaceWith(this.node = newNode);
+    }
+
+    onError(err) {
+        const errorNode = errorBoundary.node(this.node, err);
+        if (errorNode) {
+            this.replaceWith(errorNode);
+        }
     }
 }
 
@@ -666,6 +659,10 @@ class DynamicChildren extends Observer {
     onChange(value, prev) {
         updateChildren(this.node, value, prev);
     }
+
+    onError(err) {
+        errorBoundary.children(this.node, err);
+    }
 }
 
 class DynamicProperty extends Observer {
@@ -684,7 +681,56 @@ class DynamicProperty extends Observer {
     onChange(value, prev) {
         setProperty(this.node, this.name, value);
     }
+
+    onError(err) {
+        errorBoundary.property(this.node, this.name, err);
+    }
 }
+
+export const errorBoundary = {
+
+    handlers: {},
+
+    set(type, handler) {
+        if (typeof handler === "function") {
+            this.handlers[type] = handler;
+        } else {
+            this.reset(type);
+        }
+    },
+
+    reset(type) {
+        if (type) {
+            delete this.handlers[type];
+        } else {
+            delete this.handlers.node;
+            delete this.handlers.children;
+            delete this.handlers.property;
+        }
+    },
+
+    get node() {
+        return this.handlers.node ?? this.defaults.node;
+    },
+
+    get children() {
+        return this.handlers.children ?? this.defaults.children;
+    },
+
+    get property() {
+        return this.handlers.property ?? this.defaults.property;
+    },
+
+    defaults: {
+        node: (node, err) => new Comment(err.stack),
+        children: (node, err) => {
+            node.innerHTML = `<!--${err.stack}-->`;
+        },
+        property: (node, name, err) => {
+            console.error(`Error setting property ${name}:`, err);
+        }
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -693,7 +739,8 @@ class DynamicProperty extends Observer {
  * Returns a dispose function to clean up all effects
  */
 export function createRoot(fn) {
-    const owner = new Effect(() => {});
+    const owner = new Effect(() => {
+    });
     let result;
     tracked(owner, () => {
         result = fn(() => owner.dispose());
