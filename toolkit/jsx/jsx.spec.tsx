@@ -275,15 +275,15 @@ suite("Nimble JSX", () => {
                 const node = <div>{result.value}</div>;
 
                 expect(node).to.equal("<div>left</div>");
-                expect(selector.targets[0]).to.eq(result);
-                expect(left.targets[0]).to.eq(result);
+                expect(selector.targets.target).to.eq(result);  // Changed
+                expect(left.targets.target).to.eq(result);      // Changed
                 expect(right.targets).to.be.undefined;
 
                 selector.set("r");
                 await vsync();
                 expect(node).to.equal("<div>right</div>");
                 expect(left.targets).to.be.undefined;
-                expect(right.targets[0]).to.eq(result);
+                expect(right.targets.target).to.eq(result);     // Changed
 
                 right.set("right 2");
                 await vsync();
@@ -292,7 +292,7 @@ suite("Nimble JSX", () => {
                 selector.set("l");
                 await vsync();
                 expect(node).to.equal("<div>left</div>");
-                expect(left.targets[0]).to.eq(result);
+                expect(left.targets.target).to.eq(result);      // Changed
                 expect(right.targets).to.be.undefined;
             });
         });
