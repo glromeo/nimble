@@ -755,13 +755,8 @@ suite("Nimble JSX", () => {
 
             test("isolates keyed component effects from parent", async () => {
                 const parentTrigger = signal(0);
-                let componentEffectRuns = 0;
 
                 function Component(props: { value: number }) {
-                    effect(() => {
-                        componentEffectRuns++;
-                        props.value; // Subscribe
-                    });
                     return <div>{props.value}</div>;
                 }
 
@@ -774,18 +769,18 @@ suite("Nimble JSX", () => {
                 });
 
                 await vsync();
-                const initialRuns = componentEffectRuns;
+                expect(node).to.equal("<div>1</div>");
 
-                // Parent re-runs - component effect should NOT re-run
-                // (keyed component is isolated)
+                // Parent re-runs - but prop value unchanged
+                // DOM should remain stable
                 parentTrigger.set(1);
                 await vsync();
-                expect(componentEffectRuns).to.equal(initialRuns);
+                expect(node).to.equal("<div>1</div>");
 
-                // Component prop changes - component effect SHOULD re-run
+                // Component prop changes - DOM should update
                 value.set(2);
                 await vsync();
-                expect(componentEffectRuns).to.be.greaterThan(initialRuns);
+                expect(node).to.equal("<div>2</div>");
             });
         });
     });

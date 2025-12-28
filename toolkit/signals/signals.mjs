@@ -418,16 +418,8 @@ export class Computed extends Signal {
 
     reset(callback) {
         this.callback = callback;
-        let changed;
-        try {
-            changed = untracked(callback) !== this.__value__;
-        } catch (e) {
-            changed = true;
-        }
-        if (changed) {
-            this.version = 0;
-            this.globalVersion = globalVersion - 1;
-        }
+        this.version = 0;
+        this.globalVersion = globalVersion - 1;
         startBatch();
         try {
             this.notify();
