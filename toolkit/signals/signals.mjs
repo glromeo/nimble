@@ -3,6 +3,7 @@ const NOTIFIED = 1 << 1;
 const OUTDATED = 1 << 2;
 const DISPOSED = 1 << 3;
 const ERRORED = 1 << 4;
+const TRACKING = 1 << 5;
 
 function startBatch() {
     batchDepth++;
@@ -18,7 +19,7 @@ function endBatch() {
         let effect = batchedEffect;
         batchedEffect = undefined;
         batchIteration++;
-        while (effect  !== undefined) {
+        while (effect !== undefined) {
             const next = effect.nextEffect;
             effect.nextEffect = undefined;
             effect.flags &= ~NOTIFIED;
@@ -38,10 +39,6 @@ function endBatch() {
     if (error !== undefined) {
         throw error;
     }
-}
-
-export function increaseGlobalVersion() {
-    globalVersion++;
 }
 
 export function batch(callback) {
@@ -85,102 +82,88 @@ let batchIteration = 0;
 let globalVersion = 0;
 
 function link(target, source) {
-    if (target === undefined || target.notify === undefined) {
-        return -1;
+    if (target === undefined) {
+        return undefined;
     }
-
-    // Initialize arrays if needed
-    if (target.sources === undefined) {
-        target.sources = [];
-        target.versions = [];
-        target.sourceSlots = [];
-    }
-    if (source.targets === undefined) {
-        source.targets = [];
-        source.targetSlots = [];
-    }
-
-    // Check if already linked
-    const existingIndex = target.sources.indexOf(source);
-
-    if (existingIndex === -1) {
-        // Create new link - always subscribe immediately
-        const sourceIndex = target.sources.length;
-        const targetIndex = source.targets.length;
-
-        target.sources.push(source);
-        target.versions.push(source.version);
-        target.sourceSlots.push(targetIndex);
-
-        source.targets.push(target);
-        source.targetSlots.push(sourceIndex);
-
-        return sourceIndex;
-    } else if (target.versions[existingIndex] === -1) {
-        // Reactivate - update version
-        target.versions[existingIndex] = source.version;
-
-        // Move to end for cleanup tracking
-        if (existingIndex < target.sources.length - 1) {
-            const lastIndex = target.sources.length - 1;
-
-            // Swap
-            const source = target.sources[existingIndex];
-            const version = target.versions[existingIndex];
-            const slot = target.sourceSlots[existingIndex];
-
-            target.sources[existingIndex] = target.sources[lastIndex];
-            target.versions[existingIndex] = target.versions[lastIndex];
-            target.sourceSlots[existingIndex] = target.sourceSlots[lastIndex];
-
-            target.sources[lastIndex] = source;
-            target.versions[lastIndex] = version;
-            target.sourceSlots[lastIndex] = slot;
-
-            // Update back-reference
-            const swappedSource = target.sources[existingIndex];
-            const swappedSlot = target.sourceSlots[existingIndex];
-            swappedSource.targetSlots[swappedSlot] = existingIndex;
+    let node = source.node;
+    if (node === undefined || node.target !== target) {
+        node = {
+            version: 0,
+            source: source,
+            prevSource: target.sources,
+            nextSource: undefined,
+            target: target,
+            prevTarget: undefined,
+            nextTarget: undefined,
+            rollbackNode: node,
+        };
+        if (target.sources !== undefined) {
+            target.sources.nextSource = node;
         }
+        target.sources = node;
+        source.node = node;
+        if (target.flags & TRACKING) {
+            source.subscribe(node);
+        }
+        return node;
+    } else if (node.version === -1) {
+        node.version = 0;
+        if (node.nextSource !== undefined) {
+            node.nextSource.prevSource = node.prevSource;
 
-        return target.sources.length - 1;
+            if (node.prevSource !== undefined) {
+                node.prevSource.nextSource = node.nextSource;
+            }
+
+            node.prevSource = target.sources;
+            node.nextSource = undefined;
+
+            target.sources.nextSource = node;
+            target.sources = node;
+        }
+        return node;
     }
-
-    return existingIndex;
+    return undefined;
 }
 
 export class Signal {
+
     constructor(value) {
         this.__value__ = value;
         this.version = 0;
+        this.node = undefined;
         this.targets = undefined;
-        this.targetSlots = undefined;
     }
 
     refresh() {
         return true;
     }
 
-    unsubscribe(targetIndex) {
-        if (this.targets === undefined) return;
-
-        const lastIndex = this.targets.length - 1;
-
-        if (targetIndex < lastIndex) {
-            this.targets[targetIndex] = this.targets[lastIndex];
-            this.targetSlots[targetIndex] = this.targetSlots[lastIndex];
-
-            const swappedTarget = this.targets[targetIndex];
-            const swappedSourceIdx = this.targetSlots[targetIndex];
-            swappedTarget.sourceSlots[swappedSourceIdx] = targetIndex;
+    subscribe(node) {
+        if (this.targets !== node && node.prevTarget === undefined) {
+            node.nextTarget = this.targets;
+            if (this.targets !== undefined) {
+                this.targets.prevTarget = node;
+            }
+            this.targets = node;
         }
+    }
 
-        this.targets.pop();
-        this.targetSlots.pop();
-
-        if (this.targets.length === 0) {
-            this.targets = undefined;
-            this.targetSlots = undefined;
+    unsubscribe(node) {
+        if (this.targets !== undefined) {
+            const prev = node.prevTarget;
+            const next = node.nextTarget;
+            if (prev !== undefined) {
+                prev.nextTarget = next;
+                node.prevTarget = undefined;
+            }
+            if (next !== undefined) {
+                next.prevTarget = prev;
+                node.nextTarget = undefined;
+            }
+            if (node === this.targets) {
+                this.targets = next;
+            }
         }
     }
 
@@ -220,9 +203,9 @@ export class Signal {
     }
 
     get() {
-        const sourceIndex = link(evalContext, this);
-        if (sourceIndex !== -1) {
-            evalContext.versions[sourceIndex] = this.version;
+        const node = link(evalContext, this);
+        if (node !== undefined) {
+            node.version = this.version;
         }
         return this.__value__;
     }
@@ -245,10 +228,8 @@ export class Signal {
     }
 
     notify() {
-        if (this.targets === undefined) return;
-
-        for (let i = 0; i < this.targets.length; i++) {
-            this.targets[i].notify();
+        for (let node = this.targets; node !== undefined; node = node.nextTarget) {
+            node.target.notify();
         }
     }
 }
@@ -263,15 +244,8 @@ export function signal(value) {
 }
 
 function needsToRecompute(target) {
-    if (target.sources === undefined) return false;
-
-    for (let i = 0; i < target.sources.length; i++) {
-        const source = target.sources[i];
-        const version = target.versions[i];
-
-        if (source.version !== version ||
-            !source.refresh() ||
-            source.version !== version) {
+    for (let node = target.sources; node !== undefined; node = node.nextSource) {
+        if (node.source.version !== node.version || !node.source.refresh() || node.source.version !== node.version) {
             return true;
         }
     }
@@ -279,56 +253,70 @@ function needsToRecompute(target) {
 }
 
 function prepareSources(target) {
-    if (target.sources === undefined) return;
+    for (let node = target.sources; node !== undefined; node = node.nextSource) {
+        const rollbackNode = node.source.node;
+        if (rollbackNode !== undefined) {
+            node.rollbackNode = rollbackNode;
+        }
+        node.source.node = node;
+        node.version = -1;
 
-    for (let i = 0; i < target.versions.length; i++) {
-        target.versions[i] = -1;
+        if (node.nextSource === undefined) {
+            target.sources = node;
+            break;
+        }
     }
 }
 
 function cleanupSources(target) {
-    if (target.sources === undefined) return;
+    let node = target.sources;
+    let head = undefined;
 
-    let writeIdx = 0;
+    while (node !== undefined) {
+        const prev = node.prevSource;
 
-    for (let readIdx = 0; readIdx < target.sources.length; readIdx++) {
-        if (target.versions[readIdx] === -1) {
-            target.sources[readIdx].unsubscribe(target.sourceSlots[readIdx]);
-        } else {
-            if (writeIdx !== readIdx) {
-                target.sources[writeIdx] = target.sources[readIdx];
-                target.versions[writeIdx] = target.versions[readIdx];
-                target.sourceSlots[writeIdx] = target.sourceSlots[readIdx];
-
-                const source = target.sources[writeIdx];
-                const targetIdx = target.sourceSlots[writeIdx];
-                source.targetSlots[targetIdx] = writeIdx;
+        if (node.version === -1) {
+            node.source.unsubscribe(node);
+            if (prev !== undefined) {
+                prev.nextSource = node.nextSource;
             }
-            writeIdx++;
+            if (node.nextSource !== undefined) {
+                node.nextSource.prevSource = prev;
+            }
+        } else {
+            head = node;
         }
+
+        node.source.node = node.rollbackNode;
+        if (node.rollbackNode !== undefined) {
+            node.rollbackNode = undefined;
+        }
+
+        node = prev;
     }
 
-    target.sources.length = writeIdx;
-    target.versions.length = writeIdx;
-    target.sourceSlots.length = writeIdx;
+    target.sources = head;
+}
 
-    if (target.sources.length === 0) {
-        target.sources = undefined;
-        target.versions = undefined;
-        target.sourceSlots = undefined;
+function disposeOwned(owner) {
+    if (owner.owned !== undefined) {
+        for (const owned of owner.owned) {
+            owned.dispose();
+        }
+        owner.owned = undefined;
     }
 }
 
 export class Computed extends Signal {
+
     constructor(callback) {
         super(undefined);
 
         this.callback = callback;
         this.sources = undefined;
-        this.versions = undefined;
-        this.sourceSlots = undefined;
         this.globalVersion = globalVersion - 1;
         this.flags = OUTDATED;
+        this.owned = undefined;
     }
 
     refresh() {
@@ -340,6 +328,8 @@ export class Computed extends Signal {
 
         if (this.flags & OUTDATED) {
             this.flags &= ~OUTDATED;
+        } else if (this.flags & TRACKING) {
+            return true;
         }
 
         if (this.globalVersion === globalVersion) {
@@ -376,18 +366,30 @@ export class Computed extends Signal {
         return true;
     }
 
-    unsubscribe(targetIndex) {
-        super.unsubscribe(targetIndex);
-        if (this.sources !== undefined && this.targets === undefined) {
-            for (let i = this.sources.length - 1; i >= 0; i--) {
-                this.sources[i].unsubscribe(this.sourceSlots[i]);
+    subscribe(node) {
+        if (this.targets === undefined) {
+            this.flags |= OUTDATED | TRACKING;
+
+            for (let node = this.sources; node !== undefined; node = node.nextSource) {
+                node.source.subscribe(node);
             }
+        }
+        super.subscribe(node);
+    }
 
-            this.sources = undefined;
-            this.versions = undefined;
-            this.sourceSlots = undefined;
+    unsubscribe(node) {
+        if (this.targets !== undefined) {
+            super.unsubscribe(node);
 
-            if (this.owned !== undefined) disposeOwned(this);
+            if (this.targets === undefined) {
+                this.flags &= ~TRACKING;
+
+                for (let node = this.sources; node !== undefined; node = node.nextSource) {
+                    node.source.unsubscribe(node);
+                }
+
+                if (this.owned !== undefined) disposeOwned(this);
+            }
         }
     }
 
@@ -403,10 +405,10 @@ export class Computed extends Signal {
         if (this.flags & RUNNING) {
             throw new Error("Cycle detected");
         }
-        const sourceIndex = link(evalContext, this);
+        const node = link(evalContext, this);
         this.refresh();
-        if (sourceIndex !== -1) {
-            evalContext.versions[sourceIndex] = this.version;
+        if (node !== undefined) {
+            node.version = this.version;
         }
         if (this.flags & ERRORED) {
             throw this.__value__;
@@ -455,25 +457,15 @@ function cleanupEffect(effect) {
 }
 
 function disposeEffect(effect) {
-    if (effect.sources !== undefined) {
-        let i = effect.sources.length;
-        while (--i >= 0) {
-            effect.sources[i].unsubscribe(effect.sourceSlots[i]);
-        }
+    for (let node = effect.sources; node !== undefined; node = node.nextSource) {
+        node.source.unsubscribe(node);
     }
     effect.callback = undefined;
     effect.sources = undefined;
-    effect.versions = undefined;
-    effect.sourceSlots = undefined;
 
     if (effect.owned !== undefined) disposeOwned(effect);
     if (effect.scope !== undefined) effect.scope.dispose();
     if (effect.cleanup !== undefined) cleanupEffect(effect);
-}
-
-function disposeOwned(owner) {
-    for (const owned of owner.owned) owned.dispose();
-    owner.owned = undefined;
 }
 
 function endEffect(prevContext) {
@@ -496,15 +488,15 @@ function endEffect(prevContext) {
 }
 
 export class Effect {
+
     constructor(callback) {
         this.callback = callback;
         this.cleanup = undefined;
         this.sources = undefined;
-        this.versions = undefined;
-        this.sourceSlots = undefined;
         this.nextEffect = undefined;
-        this.flags = 0;
+        this.flags = TRACKING;
         this.owned = undefined;
+        this.scope = undefined;
 
         if (evalContext !== undefined && !(evalContext.flags & DISPOSED)) {
             if (evalContext.owned === undefined) {
@@ -557,11 +549,12 @@ export class Effect {
     }
 
     dispose() {
-        if ((this.flags |= DISPOSED) & RUNNING) {
+        if ((this.flags |= DISPOSED) & RUNNING) { // if running dispose it later...
             return;
         }
         disposeEffect(this);
     }
+
 }
 
 export function effect(callback) {
@@ -580,6 +573,7 @@ export function currentContext() {
 }
 
 export class Observer extends Effect {
+
     observe(callback) {
         this.callback = callback;
         this.notify();
@@ -608,6 +602,7 @@ export class Observer extends Effect {
             finish();
         }
     }
+
 }
 
 export class Scope {
@@ -658,4 +653,3 @@ function disposeOwnedIfAny(owner) {
         owner.owned = undefined;
     }
 }
-
