@@ -17,7 +17,7 @@
     "toolkit"
   ],
   "devDependencies": {
-    "@types/node": "^25.0.3",
+    "@types/node": "^25.0.6",
     "benchmark": "^2.1.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"

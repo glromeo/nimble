@@ -15,27 +15,29 @@ export function outerHTML(node) {
             return node.data;
         case Node.COMMENT_NODE:
             return `<!--${node.data}-->`;
-        case Node.ELEMENT_NODE:
+        case Node.ELEMENT_NODE: {
             const tag = node.tagName.toLowerCase();
             let attrs = "";
             for (const {name, value} of node.attributes) {
                 attrs += ` ${name}="${value}"`;
             }
             return `<${tag}${attrs}>${node.innerHTML}</${tag}>`;
-        case Node.DOCUMENT_FRAGMENT_NODE:
+        }
+        case Node.DOCUMENT_FRAGMENT_NODE: {
             const {groupStart, groupEnd} = node;
             if (groupStart) {
                 let html = `<!--${groupStart.data}-->`;
-                let node = groupStart.nextSibling;
-                while (node !== groupEnd) {
-                    html += outerHTML(node);
-                    node = node.nextSibling;
+                let cursor = groupStart.nextSibling;
+                while (cursor !== groupEnd) {
+                    html += outerHTML(cursor);
+                    cursor = cursor.nextSibling;
                 }
-                html += `<!--${node.data}-->`;
+                html += `<!--${groupEnd?.data}-->`;
                 return html;
             } else {
                 return [...node.childNodes].map(outerHTML).join("");
             }
+        }
         default:
             return String(node);
     }
@@ -73,9 +75,9 @@ const testId = () => {
         }
         return null;
     };
-    const testId = new Error().stack;
+    const id = new Error().stack;
     Error.prepareStackTrace = prepareStackTrace;
-    return testId;
+    return id;
 };
 
 function simpleHash(text) {
@@ -167,14 +169,14 @@ async function* testWalker(suite) {
     }
 }
 
-const DEAULT_TIMEOUT = 3000;
+const DEFAULT_TIMEOUT = 3000;
 
-function runWithTimeout(title, fn, ctx, ms = DEAULT_TIMEOUT) {
+function runWithTimeout(title, fn, ctx, ms = DEFAULT_TIMEOUT) {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             reject(new Error(`test timeout: ${title} ${fn.toString()}`));
         }, ms);
-        fn.call(ctx).then(result => {
+        Promise.resolve(fn.call(ctx)).then(result => {
             clearTimeout(timeout);
             resolve(result);
         });
@@ -276,8 +278,7 @@ function include() {
     let current = suite.current;
     (current.only ??= []).push(current.tests.at(-1));
     while (current.suite !== suite.root && !current.suite.only) {
-        current = current.suite;
-        current.only = [current.tests.at(-1).title];
+        (current = current.suite).only = [];
     }
 }
 
