@@ -228,20 +228,40 @@ export class NodeGroup extends DocumentFragment {
         super.appendChild(this.groupStart.groupEnd = this.groupEnd).nodeGroup = this;
     }
 
+    /**
+     * Where this group's nodes actually live: the host once mounted, itself while detached.
+     *
+     * @returns {HTMLElement|NodeGroup}
+     */
+    get host() {
+        return this.groupEnd.parentNode ?? this;
+    }
+
     appendChild(node) {
-        (this.groupEnd.parentNode ?? this).insertBefore(node, this.groupEnd);
+        this.host.insertBefore(node, this.groupEnd);
         return node;
     }
 
     append(...nodes) {
-        const parentNode = this.groupEnd.parentNode ?? this;
+        const {host, groupEnd} = this;
         for (const node of nodes) {
-            parentNode.insertBefore(node, this.groupEnd);
+            host.insertBefore(node, groupEnd);
         }
     }
 
+    replaceChildren(...nodes) {
+        const {host, groupStart, groupEnd} = this;
+        let node = groupStart.nextSibling;
+        while (node !== groupEnd) {
+            const nextSibling = node.nextSibling;
+            host.removeChild(node);
+            node = nextSibling;
+        }
+        this.append(...nodes);
+    }
+
     remove() {
-        if (this.childElementCount === 0) {
+        if (this.host !== this) {
             let {groupStart: node, groupEnd} = this;
             while (node !== groupEnd) {
                 const nextSibling = node.nextSibling;
@@ -271,7 +291,7 @@ export class NodeGroup extends DocumentFragment {
     }
 
     replaceWith(node) {
-        if (this.childElementCount === 0) {
+        if (this.host !== this) {
             const {parentNode, nextSibling} = this.groupEnd;
             this.remove();
             parentNode.insertBefore(node, nextSibling);
@@ -724,7 +744,7 @@ export const errorBoundary = {
     defaults: {
         node: (node, err) => new Comment(err.stack),
         children: (node, err) => {
-            node.innerHTML = `<!--${err.stack}-->`;
+            node.replaceChildren(new Comment(err.stack));
         },
         property: (node, name, err) => {
             console.error(`Error setting property ${name}:`, err);

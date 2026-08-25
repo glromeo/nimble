@@ -369,6 +369,77 @@ suite("Nimble JSX", () => {
             });
         });
 
+        suite("Cleared Children Updates", () => {
+            test("clears fragment children when the new list is empty", async () => {
+                const items = signal(["a", "b"]);
+                const node = <div><>{() => items.value}</></div>;
+
+                expect(node).eq("<div><!--<>-->ab<!--</>--></div>");
+
+                items.value = [];
+                await vsync();
+                expect(node).eq("<div><!--<>--><!--</>--></div>");
+
+                // the sentinels survived, so the group still renders
+                items.value = ["c"];
+                await vsync();
+                expect(node).eq("<div><!--<>-->c<!--</>--></div>");
+            });
+
+            test("replaces fragment array children with a single value", async () => {
+                const items = signal(["a", "b"] as any);
+                const node = <div><>{() => items.value}</></div>;
+
+                items.value = "text";
+                await vsync();
+                expect(node).eq("<div><!--<>-->text<!--</>--></div>");
+            });
+
+            test("clears only its own range, not its siblings", async () => {
+                const items = signal(["a", "b"]);
+                const node = <div>before<>{() => items.value}</>after</div>;
+
+                expect(node).eq("<div>before<!--<>-->ab<!--</>-->after</div>");
+
+                items.value = [];
+                await vsync();
+                expect(node).eq("<div>before<!--<>--><!--</>-->after</div>");
+            });
+
+            test("clears nested fragment children", async () => {
+                const items = signal([<>x</>, "y"] as any);
+                const node = <div><>{() => items.value}</></div>;
+
+                expect(node).eq("<div><!--<>--><!--<>-->x<!--</>-->y<!--</>--></div>");
+
+                items.value = [];
+                await vsync();
+                expect(node).eq("<div><!--<>--><!--</>--></div>");
+            });
+
+            test("clears a detached fragment without losing its sentinels", async () => {
+                const items = signal(["a", "b"]);
+                const node = <>{() => items.value}</>;
+
+                expect(node).eq("<!--<>-->ab<!--</>-->");
+
+                items.value = [];
+                await vsync();
+                expect(node).eq("<!--<>--><!--</>-->");
+            });
+
+            test("clears element children when the new list is empty", async () => {
+                const items = signal(["a", "b"]);
+                const node = <div>{() => items.value}</div>;
+
+                expect(node).eq("<div>ab</div>");
+
+                items.value = [];
+                await vsync();
+                expect(node).eq("<div></div>");
+            });
+        });
+
         suite("Component Props Updates", () => {
             test("updates keyed component props via signal rewiring", async () => {
                 function FC(props: { letter: string, counter: number }) {
@@ -823,7 +894,9 @@ suite("Nimble JSX", () => {
 
         test("function values are not invoked as event handlers", async () => {
             const valueSpy = sinon.spy(() => "Input Text Value");
-            const node = <input value={valueSpy}/>;
+            const node = <input value={
+                valueSpy as any // JSX expression computed signals are not explicitly typed!
+            }/> as HTMLInputElement;
 
             expect(valueSpy.callCount).to.equal(1);
             expect(node.value).to.equal("Input Text Value");
@@ -853,7 +926,7 @@ suite("Nimble JSX", () => {
             expect(node).to.equal("<div><error>boom</error></div>");
         });
 
-// 2. Scope disposal cleanup
+        // 2. Scope disposal cleanup
         test("disposes scope when keyed component removed", async () => {
             const show = signal(true);
             let scopeRef;
@@ -872,7 +945,7 @@ suite("Nimble JSX", () => {
             // Verify scope was cleaned up
         });
 
-// 3. Keyed component with number/symbol keys
+        // 3. Keyed component with number/symbol keys
         test("supports non-string keys", async () => {
             const items = signal([
                 { key: 1, text: "one" },
