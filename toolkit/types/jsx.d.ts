@@ -174,9 +174,38 @@ export namespace JSX {
     type AttrAttributes = {
         [Key in keyof ExplicitAttributes as `attr:${Key}`]?: ExplicitAttributes[Key];
     };
-    type OnAttributes<T> = {
+    /**
+     * Every event name the DOM knows about. `on:${name}` is passed verbatim to
+     * `addEventListener`, so the union has to stay case sensitive (`DOMContentLoaded`,
+     * `enterpictureinpicture`, ...). Keys shared by several maps intersect, which keeps
+     * the most specific event type (e.g. `error` stays an `ErrorEvent`).
+     */
+    type NativeEventMap = HTMLElementEventMap &
+        HTMLMediaElementEventMap &
+        HTMLVideoElementEventMap &
+        HTMLBodyElementEventMap &
+        SVGElementEventMap &
+        SVGSVGElementEventMap &
+        MathMLElementEventMap;
+
+    type NativeEvent<Key extends keyof NativeEventMap> = NativeEventMap[Key] extends Event
+        ? NativeEventMap[Key]
+        : Event;
+
+    type NativeOnAttributes<T> = {
+        [Key in Exclude<keyof NativeEventMap, keyof CustomEvents> as `on:${Key}`]?: EventHandler<
+            T,
+            NativeEvent<Key>
+        >;
+    };
+    type CustomOnAttributes<T> = {
         [Key in keyof CustomEvents as `on:${Key}`]?: EventHandler<T, CustomEvents[Key]>;
     };
+    type OnAttributes<T> = NativeOnAttributes<T> & CustomOnAttributes<T>;
+
+    // NOTE: not widened to NativeEventMap like OnAttributes -- jsx.mjs parses any
+    // `on*` prop as `name.slice(2).toLowerCase()`, so `oncapture:click` would listen
+    // for an event literally named "capture:click".
     type OnCaptureAttributes<T> = {
         [Key in keyof CustomCaptureEvents as `oncapture:${Key}`]?: EventHandler<
             T,
