@@ -1,4 +1,4 @@
-import {batch, Computed, currentContext, Observer, Scope, Signal, tracked} from "../signals/signals.mjs";
+import {batch, Computed, currentContext, Effect, Observer, Scope, Signal, tracked} from "../signals/signals.mjs";
 import {directives} from "./directives.mjs";
 
 export const SVG_NAMESPACE_URI = "http://www.w3.org/2000/svg";
@@ -6,6 +6,9 @@ export const XHTML_NAMESPACE_URI = "http://www.w3.org/1999/xhtml";
 
 let namespaceURI = undefined;
 
+/**
+ * Namespace bound jsx functions
+ */
 export const [
     svg,
     xhtml
@@ -237,7 +240,7 @@ export class NodeGroup extends DocumentFragment {
         }
     }
 
-    get group() {
+    remove() {
         if (this.childElementCount === 0) {
             let {groupStart: node, groupEnd} = this;
             while (node !== groupEnd) {
@@ -247,11 +250,6 @@ export class NodeGroup extends DocumentFragment {
             }
             super.appendChild(groupEnd);
         }
-        return this;
-    }
-
-    remove() {
-        this.group.remove();
     }
 
     get firstChild() {
@@ -275,7 +273,7 @@ export class NodeGroup extends DocumentFragment {
     replaceWith(node) {
         if (this.childElementCount === 0) {
             const {parentNode, nextSibling} = this.groupEnd;
-            this.group;
+            this.remove();
             parentNode.insertBefore(node, nextSibling);
         }
     }
@@ -402,7 +400,7 @@ export function updateChildren(parent, children, previous) {
             previous
         );
     } else {
-        parent.textContent = "";
+        parent.replaceChildren();
         appendChildren(parent, children);
     }
 }
@@ -530,45 +528,46 @@ function insertBefore(parent, child, ref) {
  * @param value {any}
  * @returns {Node|NodeGroup|Text|Comment}
  */
-export function createNode(namespaceURI, value = null) {
-    if (value !== null) {
-        if (value.nodeType !== undefined) {
-            return value.group ?? value;
-        }
-        const type = typeof value;
-        if (type === "function") {
+export function createNode(namespaceURI, value) {
+    switch (typeof value) {
+        case "string":
+        case "number":
+        case "bigint":
+            return new Text(value);
+        case "function": {
             const {node} = new DynamicNode(namespaceURI, value);
             return node;
-        } else if (type === "object") {
+        }
+        case "object": {
+            if (value === null) break;
+            if (value instanceof Node) {
+                if (value.constructor === NodeGroup) {
+                    value.remove();
+                }
+                return value;
+            }
             if (value.constructor === Array) {
                 const node = new NodeGroup(namespaceURI);
                 appendChildren(node, value);
                 return node;
             }
-            if (value.tag) {
-                const args = [value.tag, {
-                    xmlns: value.xmlns,
-                    children: value.children,
-                    ...value.attrs
-                }];
-                if ("key" in value) {
-                    args.push(value.key);
-                }
-                return jsx(...args);
+            if (value.tag !== undefined) {
+                const {tag, xmlns, children, attrs, key} = value;
+                return jsx(tag, {xmlns, children, ...attrs}, key);
             }
-        } else if (type === "string" || type === "number" || type === "bigint") {
-            return new Text(value);
-        } else if (type === "symbol") {
-            return new Comment(String(value));
         }
+        case "symbol":
+            value = value.toString();
+            break;
     }
     return new Comment(value);
 }
 
 class DynamicNode extends Observer {
 
-    constructor(namespaceURI, observable) {
-        super(observable);
+    constructor(namespaceURI, callback) {
+        super(callback);
+        this.namespaceURI = namespaceURI;
         const finish = this.start();
         try {
             this.node = typeof (this.value = this.callback()) !== "function"
@@ -580,49 +579,50 @@ class DynamicNode extends Observer {
     }
 
     onChange(value, prev) {
-        if (value != null) {
-            if (value.nodeType !== undefined) {
-                const update = value.group ?? value;
-                if (this.node !== update) {
-                    this.replaceWith(update);
-                }
-                return;
-            }
-            const type = typeof value;
-            if (type === "object") {
-                if (value.constructor === Array) {
-                    if (this.node.constructor === NodeGroup) {
-                        updateChildren(this.node, value, prev);
-                        return;
-                    }
-                    const nodeGroup = new NodeGroup(this.node.namespaceURI);
-                    appendChildren(nodeGroup, value);
-                    this.replaceWith(nodeGroup);
-                    return;
-                }
-                if (value.tag !== undefined) {
-                    this.replaceWith(
-                        jsx(value.tag, {
-                            xmlns: value.xmlns ?? this.node.namespaceURI,
-                            children: value.children,
-                            ...value.attrs
-                        }, value.key)
-                    );
-                    return;
-                }
-                value = value.toString();
-            } else if (type === "string" || type === "number" || type === "bigint") {
+        switch (typeof value) {
+            case "string":
+            case "number":
+            case "bigint":
                 if (this.node.nodeType === Node.TEXT_NODE) {
                     this.node.data = value;
                     return;
                 }
                 this.replaceWith(new Text(value));
                 return;
-            } else if (type === "function") {
+            case "function": {
                 value = `[function ${value.name}]`;
-            } else if (type === "symbol") {
-                value = value.toString();
+                break;
             }
+            case "object": {
+                if (value === null) break;
+                if (value instanceof Node) {
+                    if (this.node !== value) {
+                        if (value.constructor === NodeGroup) {
+                            value.remove();
+                        }
+                        this.replaceWith(value);
+                    }
+                    return;
+                }
+                if (value.constructor === Array) {
+                    if (this.node.constructor === NodeGroup) {
+                        updateChildren(this.node, value, prev);
+                        return;
+                    }
+                    const nodeGroup = new NodeGroup(this.namespaceURI);
+                    appendChildren(nodeGroup, value);
+                    this.replaceWith(nodeGroup);
+                    return;
+                }
+                if (value.tag !== undefined) {
+                    const {tag, xmlns = this.namespaceURI, children, attrs, key} = value;
+                    this.replaceWith(jsx(tag, {xmlns, children, ...attrs}, key));
+                    return;
+                }
+            }
+            case "symbol":
+                value = value.toString();
+                break;
         }
         if (this.node.nodeType === Node.COMMENT_NODE) {
             this.node.data = value;

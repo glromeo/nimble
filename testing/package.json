@@ -8,16 +8,16 @@
   "types": "index.d.ts",
   "type": "module",
   "dependencies": {
-    "esbuild-wasm": "^0.27.2",
-    "sourcemapped-stacktrace": "^1.1.11",
-    "fast-diff": "^1.3.0",
-    "chai": "^6.2.2",
-    "mocha": "^11.7.5",
-    "sinon": "^21.0.1",
-    "sinon-chai": "^4.0.1",
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.10",
     "@types/sinon": "^21.0.0",
-    "@types/sinon-chai": "^4.0.0"
+    "@types/sinon-chai": "^4.0.0",
+    "chai": "^6.2.2",
+    "esbuild-wasm": "^0.27.2",
+    "fast-diff": "^1.3.0",
+    "mocha": "^11.3.0",
+    "sinon": "^21.0.1",
+    "sinon-chai": "^4.0.1",
+    "sourcemapped-stacktrace": "^1.1.11"
   }
 }
