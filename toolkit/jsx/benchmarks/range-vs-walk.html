@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NodeGroup: range vs walk</title>
+    <style>
+        body { font: 13px/1.5 ui-monospace, monospace; margin: 2rem; }
+        pre { white-space: pre-wrap; }
+        /* fixtures are deliberately left visible: a display:none subtree skips layout,
+           which is exactly the cost the two strategies are being compared on */
+    </style>
+</head>
+<body>
+<pre id="results">running, this takes a minute...</pre>
+<script type="module">
+    import {benchmark} from "./range-vs-walk.mjs";
+
+    const results = document.getElementById("results");
+    const lines = [];
+    const log = line => {
+        lines.push(line);
+        results.textContent = lines.join("\n");
+        console.log(line);
+    };
+
+    // let the browser paint before we start hogging the main thread
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    try {
+        await benchmark(log);
+    } catch (error) {
+        log(`\nFAILED: ${error.message}`);
+    }
+
+    document.title = "done: NodeGroup range vs walk";
+</script>
+</body>
+</html>
