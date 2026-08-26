@@ -1,7 +1,7 @@
 import {expect} from "chai";
 import type Sinon from "sinon";
 import sinon from "sinon";
-import {Fragment, errorBoundary, NodeGroup} from "./jsx.mjs";
+import {Fragment, errorBoundary, NodeGroup, SVG_NAMESPACE_URI, XHTML_NAMESPACE_URI} from "./jsx.mjs";
 import {createDirective} from "./directives.mjs";
 import {computed, currentContext, effect, signal} from "../signals/signals.mjs";
 import {vsync} from "@nimble/testing";
@@ -853,6 +853,89 @@ suite("Nimble JSX", () => {
                 await vsync();
                 expect(node).to.equal("<div>2</div>");
             });
+        });
+    });
+
+    suite("Namespaces", () => {
+
+        const namespaces = (node, selector) => [...node.querySelectorAll(selector)].map(el => el.namespaceURI);
+
+        test("creates lexically nested children in the svg namespace", () => {
+            const node = <svg viewBox="0 0 10 10">
+                <g>
+                    <circle cx={1}/>
+                </g>
+            </svg>;
+
+            expect(node.namespaceURI).to.equal(SVG_NAMESPACE_URI);
+            expect(namespaces(node, "g, circle")).to.deep.equal([SVG_NAMESPACE_URI, SVG_NAMESPACE_URI]);
+        });
+
+        test("keeps the svg namespace across a component boundary on update", async () => {
+            const cxs = signal([1, 2]);
+
+            function Circles() {
+                return <>{() => cxs.value.map(cx => <circle cx={cx}/>)}</>;
+            }
+
+            const node = <svg><Circles/></svg>;
+
+            expect(namespaces(node, "circle")).to.deep.equal([SVG_NAMESPACE_URI, SVG_NAMESPACE_URI]);
+
+            cxs.value = [1, 2, 3];
+            await vsync();
+
+            expect(namespaces(node, "circle")).to.deep.equal([
+                SVG_NAMESPACE_URI, SVG_NAMESPACE_URI, SVG_NAMESPACE_URI
+            ]);
+        });
+
+        test("keeps the svg namespace for a function child declared outside the svg", async () => {
+            const cxs = signal([1, 2]);
+            const circles = () => cxs.value.map(cx => <circle cx={cx}/>);
+
+            const node = <svg>
+                <title>shapes</title>
+                {circles}
+            </svg>;
+
+            expect(namespaces(node, "circle")).to.deep.equal([SVG_NAMESPACE_URI, SVG_NAMESPACE_URI]);
+
+            cxs.value = [3, 2, 1];
+            await vsync();
+
+            expect(namespaces(node, "circle")).to.deep.equal([
+                SVG_NAMESPACE_URI, SVG_NAMESPACE_URI, SVG_NAMESPACE_URI
+            ]);
+        });
+
+        test("creates element descriptors in the svg namespace without leaking xmlns", async () => {
+            const shape = signal("none" as any);
+
+            const node = <svg>
+                <title>shapes</title>
+                {() => shape.value}
+            </svg> as SVGSVGElement;
+
+            shape.value = {tag: "circle", attrs: {cx: 1}};
+            await vsync();
+
+            const circle = node.querySelector("circle");
+            expect(circle.namespaceURI).to.equal(SVG_NAMESPACE_URI);
+            expect(circle.hasAttribute("xmlns")).to.equal(false);
+        });
+
+        test("keeps html children in the xhtml namespace on update", async () => {
+            const flag = signal(true);
+            const node = <div>{() => flag.value ? <span/> : <b/>}</div> as HTMLDivElement;
+
+            expect(node.firstChild.namespaceURI).to.equal(XHTML_NAMESPACE_URI);
+
+            flag.value = false;
+            await vsync();
+
+            expect(node.firstChild.namespaceURI).to.equal(XHTML_NAMESPACE_URI);
+            expect(node.firstChild).to.have.tagName("b");
         });
     });
 

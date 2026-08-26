@@ -217,11 +217,11 @@ const newGroupEnd = Node.prototype.cloneNode.bind(new Comment("</>"), false);
 
 export class NodeGroup extends DocumentFragment {
     /**
-     * @param namespaceURI {string}
+     * @param nsURI {string}
      */
-    constructor(namespaceURI) {
+    constructor(nsURI) {
         super();
-        this.namespaceURI = namespaceURI;
+        this.namespaceURI = nsURI;
         this.groupStart = newGroupStart();
         this.groupEnd = newGroupEnd();
         super.appendChild(this.groupEnd.groupStart = this.groupStart).nodeGroup = this;
@@ -336,7 +336,7 @@ export function createElement(tag, props) {
         } else if (value != null) {
             if (name === "children") {
                 appendChildren(node, value);
-            } else {
+            } else if (name !== "xmlns") {
                 setProperty(node, name, value);
             }
         }
@@ -350,13 +350,13 @@ export function createElement(tag, props) {
  * @param value {any}
  */
 function appendChildren(parent, value) {
-    const namespaceURI = parent.namespaceURI;
+    const nsURI = parent.namespaceURI;
     if (value instanceof Array) {
         for (let child of value) {
-            parent.appendChild(createNode(namespaceURI, child));
+            parent.appendChild(createNode(nsURI, child));
         }
     } else if (value != null) {
-        parent.appendChild(createNode(namespaceURI, value));
+        parent.appendChild(createNode(nsURI, value));
     }
 }
 
@@ -544,18 +544,18 @@ function insertBefore(parent, child, ref) {
 
 /**
  *
- * @param namespaceURI {string}
+ * @param nsURI {string}
  * @param value {any}
  * @returns {Node|NodeGroup|Text|Comment}
  */
-export function createNode(namespaceURI, value) {
+export function createNode(nsURI, value) {
     switch (typeof value) {
         case "string":
         case "number":
         case "bigint":
             return new Text(value);
         case "function": {
-            const {node} = new DynamicNode(namespaceURI, value);
+            const {node} = new DynamicNode(nsURI, value);
             return node;
         }
         case "object": {
@@ -567,7 +567,7 @@ export function createNode(namespaceURI, value) {
                 return value;
             }
             if (value.constructor === Array) {
-                const node = new NodeGroup(namespaceURI);
+                const node = new NodeGroup(nsURI);
                 appendChildren(node, value);
                 return node;
             }
@@ -583,18 +583,38 @@ export function createNode(namespaceURI, value) {
     return new Comment(value);
 }
 
+/*
+ * In any observer that creates nodes, hence bound to the namespace ambient when it was created: its
+ * callback is re-invoked long after the synchronous extent of the svg/xhtml call that set it, so
+ * without this the elements it creates on update land in a different namespace than on creation.
+ */
+
 class DynamicNode extends Observer {
 
-    constructor(namespaceURI, callback) {
+    constructor(nsURI, callback) {
         super(callback);
-        this.namespaceURI = namespaceURI;
+        this.namespaceURI = nsURI;
         const finish = this.start();
         try {
             this.node = typeof (this.value = this.callback()) !== "function"
-                ? createNode(namespaceURI, this.value)
+                ? createNode(nsURI, this.value)
                 : new Comment(`[function ${this.value.name}]`);
         } finally {
             finish();
+        }
+    }
+
+    invoke() {
+        if (namespaceURI !== this.namespaceURI) {
+            const outerNamespaceURI = namespaceURI;
+            namespaceURI = this.namespaceURI;
+            try {
+                return super.invoke();
+            } finally {
+                namespaceURI = outerNamespaceURI;
+            }
+        } else {
+            return super.invoke();
         }
     }
 
@@ -673,6 +693,20 @@ class DynamicChildren extends Observer {
             this.node = node;
         } finally {
             finish();
+        }
+    }
+
+    invoke() {
+        if (namespaceURI !== this.node.namespaceURI) {
+            const outerNamespaceURI = namespaceURI;
+            namespaceURI = this.node.namespaceURI;
+            try {
+                return super.invoke();
+            } finally {
+                namespaceURI = outerNamespaceURI;
+            }
+        } else {
+            return super.invoke();
         }
     }
 
