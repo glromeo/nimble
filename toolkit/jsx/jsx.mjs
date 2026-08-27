@@ -585,9 +585,15 @@ export function updateChildNodes(owner, b, a) {
     }
 }
 
+/**
+ * A reference taken from the live children can be a NodeGroup, which is a DocumentFragment and so
+ * never a child of parent: the node to insert before is the group's leading sentinel. Testing the
+ * constructor rather than a groupStart property matters, because groupEnd carries one too and
+ * inserting before that would land outside the group instead of at the end of it.
+ */
 function insertBefore(parent, child, ref) {
     const node = createNode(parent.namespaceURI, child);
-    parent.insertBefore(node, ref);
+    parent.insertBefore(node, ref?.constructor === NodeGroup ? ref.groupStart : ref);
     return node;
 }
 

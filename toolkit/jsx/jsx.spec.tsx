@@ -775,6 +775,68 @@ suite("Nimble JSX", () => {
         });
 
         suite("Keyed Lists", () => {
+            test("reorders a keyed list of fragments", async () => {
+                const items = signal([1, 2, 3]);
+                const starts = () => [...node.childNodes]
+                    .filter(n => n.nodeType === Node.COMMENT_NODE && n.data === "<>");
+
+                let node;
+                effect(() => {
+                    node = <div>{() => items.value.map(id =>
+                        <Fragment key={id}>{String(id)}</Fragment>
+                    )}</div>;
+                });
+
+                await vsync();
+                expect(node).eq(
+                    "<div>" +
+                    "<!--<>-->1<!--</>-->" +
+                    "<!--<>-->2<!--</>-->" +
+                    "<!--<>-->3<!--</>-->" +
+                    "</div>"
+                );
+
+                const [one, two, three] = starts();
+
+                items.value = [3, 1, 2];
+                await vsync();
+
+                expect(node).eq(
+                    "<div>" +
+                    "<!--<>-->3<!--</>-->" +
+                    "<!--<>-->1<!--</>-->" +
+                    "<!--<>-->2<!--</>-->" +
+                    "</div>"
+                );
+
+                // each key moved the group it already had, rather than rebuilding it
+                expect(starts()).to.deep.equal([three, one, two]);
+            });
+
+            test("adds and removes fragments in a keyed list", async () => {
+                const items = signal([1, 2, 3]);
+                let node;
+                effect(() => {
+                    node = <div>{() => items.value.map(id =>
+                        <Fragment key={id}>{String(id)}<b/></Fragment>
+                    )}</div>;
+                });
+
+                await vsync();
+                expect(node.textContent).to.equal("123");
+                expect(node.querySelectorAll("b")).to.have.length(3);
+
+                // a rotation that also introduces a key, so the diff inserts before a live group
+                items.value = [2, 3, 4, 1];
+                await vsync();
+                expect(node.textContent).to.equal("2341");
+                expect(node.querySelectorAll("b")).to.have.length(4);
+
+                items.value = [];
+                await vsync();
+                expect(node).eq("<div></div>");
+            });
+
             test("renders keyed list within reactive context", async () => {
                 const entries = signal([
                     {id: 0, name: "Bowie"},
