@@ -344,6 +344,85 @@ suite("Nimble JSX", () => {
         });
 
         suite("Array Children Updates", () => {
+            test("rewrites plain values in place rather than moving nodes", async () => {
+                const items = signal(["a", "b", "c"]);
+                const node = <div>{() => items.value}</div>;
+
+                await vsync();
+                const original = [...node.childNodes];
+
+                items.value = ["c", "b", "a"];
+                await vsync();
+
+                expect(node).eq("<div>cba</div>");
+
+                // the same three text nodes, in the same order, carrying new content
+                expect(node.childNodes).to.have.length(3);
+                original.forEach((text, i) => expect(node.childNodes[i]).to.equal(text));
+            });
+
+            test("handles duplicate values in a list", async () => {
+                const items = signal(["a", "b", "a"]);
+                const node = <div>{() => items.value}</div>;
+
+                await vsync();
+                expect(node).eq("<div>aba</div>");
+
+                items.value = ["a", "a", "b"];
+                await vsync();
+                expect(node).eq("<div>aab</div>");
+
+                // the value-based diff rendered this one as "baba": the map collapsed both "a"s
+                // onto one index, so the leftover node was kept instead of removed
+                items.value = ["b", "a", "b"];
+                await vsync();
+                expect(node).eq("<div>bab</div>");
+
+                items.value = ["a", "b", "b", "a"];
+                await vsync();
+                expect(node).eq("<div>abba</div>");
+
+                // ...and this one as "bb"
+                items.value = ["b"];
+                await vsync();
+                expect(node).eq("<div>b</div>");
+            });
+
+            test("never rewrites a node the caller supplied", async () => {
+                const mine = document.createTextNode("mine");
+                const items = signal([mine, "x"] as any[]);
+                const node = <div>{() => items.value}</div>;
+
+                await vsync();
+                expect(node).eq("<div>minex</div>");
+
+                items.value = ["y", mine];
+                await vsync();
+
+                expect(node).eq("<div>ymine</div>");
+                expect(mine.data).to.equal("mine"); // reordered around, never written into
+                expect(node.childNodes[1]).to.equal(mine);
+            });
+
+            test("appends inside the sentinels of a fragment updated while detached", async () => {
+                const items = signal(["a", "b"]);
+                const node: any = <>{() => items.value}</>;
+
+                // grow the list before the fragment is ever mounted: the new node must land inside
+                // the sentinel range, or mounting carries it along only to strand it on removal
+                items.value = ["a", "b", "c"];
+                await vsync();
+
+                expect(node).eq("<!--<>-->abc<!--</>-->");
+
+                const host = document.createElement("div");
+                host.appendChild(node);
+                expect(host).eq("<div><!--<>-->abc<!--</>--></div>");
+
+                node.remove();
+                expect(host).eq("<div></div>");
+            });
+
             test("does not mutate the array it rendered", async () => {
                 const source = ["a", "b", "c"];
                 const items = signal(source);
@@ -381,11 +460,14 @@ suite("Nimble JSX", () => {
                 await vsync();
 
                 expect(node).eq("<div>bcde</div>");
-                // Verify nodes were reused, not recreated
-                expect(originalNodes[1]).to.eq(node.childNodes[0]);
-                expect(originalNodes[2]).to.eq(node.childNodes[1]);
-                expect(originalNodes[3]).to.eq(node.childNodes[2]);
-                expect(originalNodes[4]).to.eq(node.childNodes[3]);
+                // Nodes are reused, not recreated. A plain value carries no identity, so rather than
+                // moving the node that happened to hold it, the diff rewrites the node already in
+                // that position and drops the two left over at the end.
+                expect(originalNodes[0]).to.eq(node.childNodes[0]);
+                expect(originalNodes[1]).to.eq(node.childNodes[1]);
+                expect(originalNodes[2]).to.eq(node.childNodes[2]);
+                expect(originalNodes[3]).to.eq(node.childNodes[3]);
+                expect(node.childNodes).to.have.length(4);
             });
 
             test("handles complex array reconciliation", async () => {
@@ -791,6 +873,99 @@ suite("Nimble JSX", () => {
         });
 
         suite("Keyed Lists", () => {
+            test("moves connected nodes with moveBefore, and inserts new ones", async () => {
+                // happy-dom has no moveBefore, so stand in for it. The stand-in enforces the two rules
+                // the real one enforces, and so fails the test if the guard ever lets through a node
+                // that is not connected or a fragment.
+                const moved = [] as string[];
+                const insertBefore = Node.prototype.insertBefore;
+                (Node.prototype as any).moveBefore = function (node, ref) {
+                    if (!node.isConnected) throw new Error("moved node is not connected");
+                    if (!this.isConnected) throw new Error("new parent is not connected");
+                    if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) throw new Error("fragment");
+                    moved.push(node.textContent);
+                    return insertBefore.call(this, node, ref);
+                };
+
+                const host = document.createElement("main");
+                document.body.appendChild(host); // connected, so moveBefore is eligible at all
+                try {
+                    const items = signal(["a", "b", "c"]);
+                    let node;
+                    effect(() => {
+                        node = <div>{() => items.value.map(v => <i key={v}>{v}</i>)}</div>;
+                    });
+                    host.appendChild(node);
+                    await vsync();
+
+                    moved.length = 0;
+                    items.value = ["c", "b", "a"];
+                    await vsync();
+
+                    expect(node).eq("<div><i>c</i><i>b</i><i>a</i></div>");
+                    expect(moved).to.not.be.empty; // reordering moves, it does not re-insert
+
+                    moved.length = 0;
+                    items.value = ["c", "b", "a", "d"];
+                    await vsync();
+
+                    expect(node).eq("<div><i>c</i><i>b</i><i>a</i><i>d</i></div>");
+                    expect(moved).to.not.include("d"); // a node that did not exist yet is inserted
+                } finally {
+                    delete (Node.prototype as any).moveBefore;
+                    host.remove();
+                }
+            });
+
+            test("moves keyed children into any permutation", async () => {
+                const items = signal(["a", "b", "c", "d"]);
+                let node;
+                effect(() => {
+                    node = <div>{() => items.value.map(v => <i key={v}>{v}</i>)}</div>;
+                });
+
+                await vsync();
+                const original = new Map([...node.childNodes].map(n => [n.textContent, n]));
+
+                // rotations and swaps that the value-based diff used to render out of order
+                for (const order of [["d", "a", "c", "b"], ["d", "b", "a", "c"], ["c", "a", "b", "d"], ["a", "b", "c", "d"]]) {
+                    items.value = order;
+                    await vsync();
+
+                    expect(node).eq("<div>" + order.map(v => "<i>" + v + "</i>").join("") + "</div>");
+
+                    // each key still holds the node it started with: they moved, they were not rebuilt
+                    order.forEach((v, i) => expect(node.childNodes[i]).to.equal(original.get(v)));
+                }
+            });
+
+            test("leaves a stable run in place when inserting around it", async () => {
+                const items = signal(["a", "b", "c", "d", "e"]);
+                let node;
+                effect(() => {
+                    node = <div>{() => items.value.map(v => <i key={v}>{v}</i>)}</div>;
+                });
+
+                await vsync();
+                const stable = [...node.childNodes];
+
+                // count what actually enters the parent: with the LCS heuristic intact, prepending
+                // and appending costs two insertions and never disturbs the run in between
+                const inserted = [] as string[];
+                const insertBefore = node.insertBefore.bind(node);
+                node.insertBefore = (child, ref) => {
+                    inserted.push(child.textContent);
+                    return insertBefore(child, ref);
+                };
+
+                items.value = ["x", "a", "b", "c", "d", "e", "y"];
+                await vsync();
+
+                expect(node).eq("<div><i>x</i><i>a</i><i>b</i><i>c</i><i>d</i><i>e</i><i>y</i></div>");
+                expect(inserted).to.deep.equal(["x", "y"]);
+                stable.forEach((n, i) => expect(node.childNodes[i + 1]).to.equal(n));
+            });
+
             test("reorders a keyed list of fragments", async () => {
                 const items = signal([1, 2, 3]);
                 const starts = () => [...node.childNodes]

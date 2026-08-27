@@ -465,11 +465,7 @@ export function updateChildren(parent, children, previous) {
         children?.constructor === Array && children.length > 0 &&
         previous?.constructor === Array && previous.length > 0
     ) {
-        updateChildNodes(
-            parent,
-            children,
-            previous
-        );
+        updateChildNodes(parent, children);
     } else {
         parent.replaceChildren();
         appendChildren(parent, children);
@@ -477,35 +473,38 @@ export function updateChildren(parent, children, previous) {
 }
 
 /**
- * This function is an adaptation of https://github.com/WebReflection/udomdiff/blob/main/esm/index.js
+ * Reconciles the children of owner to values, moving the nodes it already has instead of rebuilding
+ * them.
  *
- * ISC
+ * It runs in two passes. The first pairs every value with the node that will render it, reusing the
+ * node already holding that position whenever this module owns it. The second brings the DOM into
+ * that order. Keeping them apart is what makes the second pass correct: it compares nodes and never
+ * values, so identity is exact and equal values cannot collapse onto one another.
  *
- * Copyright © 2020-today, Andrea Giammarchi, @WebReflection
- *
- * @param owner {HTMLElement | NodeGroup}
- * @param b {any[]}
- * @param a {any[]}
+ * @param owner {HTMLElement|NodeGroup}
+ * @param values {any[]}
  */
-export function updateChildNodes(owner, b, a) {
-    let aStart = 0;
-    let aEnd = a.length;
-    let bStart = 0;
-    let bEnd = b.length;
-    let map = undefined;
-
+export function updateChildNodes(owner, values) {
     const parent = owner.groupStart?.parentNode ?? owner;
+    const live = liveChildren(owner, parent);
+    reconcile(parent, materialize(owner, values, live), live, owner.groupEnd ?? null);
+}
 
+/**
+ * The nodes currently holding the range of owner, one entry per child. A nested group counts once, as
+ * the group itself, because it moves and is removed as a whole.
+ */
+function liveChildren(owner, parent) {
     const live = [];
-    let node, head, tail;
+    let node, tail;
     if (owner === parent) {
-        head = parent.firstChild;
+        node = parent.firstChild;
         tail = parent.lastChild;
     } else {
-        head = owner.groupStart;
+        node = owner.groupStart;
         tail = owner.groupEnd;
     }
-    if ((node = head) !== null) {
+    if (node !== null) {
         const before = tail.nextSibling;
         while (node !== before) {
             if (node.nodeGroup !== undefined) {
@@ -519,20 +518,149 @@ export function updateChildNodes(owner, b, a) {
             node = node.nextSibling;
         }
     }
+    return live;
+}
 
-    while (aStart < aEnd && bStart < bEnd) {
-        if (a[aStart] === b[bStart]) {
+/**
+ * Pairs each value with the node that will render it. A value carrying its own identity (a node, a
+ * function, an element descriptor) goes straight to createNode. The rest walk a cursor along the live
+ * children and rewrite the first node this module owns that can carry them, which is why reordering
+ * plain values costs a few data writes and no DOM moves at all.
+ */
+function materialize(owner, values, live) {
+    const nsURI = owner.namespaceURI;
+    const next = new Array(values.length);
+    let cursor = 0;
+    for (let i = 0; i < values.length; i++) {
+        const value = values[i];
+        let node = undefined;
+        if (value instanceof Node) {
+            // already its own node: take it as it stands. Going through createNode would collect a
+            // NodeGroup back into its fragment here, detaching a range the reconcile below still has
+            // to compare against; insertNode does that at the moment it moves one.
+            node = value;
+        } else if (rewritable(value)) {
+            while (node === undefined && cursor < live.length) {
+                const candidate = live[cursor++];
+                if (Object.hasOwn(candidate, "__value__") && rewrite(candidate, value)) {
+                    node = candidate;
+                }
+            }
+        }
+        next[i] = node ?? createNode(nsURI, value);
+    }
+    return next;
+}
+
+/**
+ * Whether a value has no identity of its own, and so may be written into a node we already have.
+ * A function is excluded: its DynamicNode went with everything else the enclosing observer owned when
+ * that observer restarted, so its node is still in the DOM but nothing drives it any more.
+ */
+function rewritable(value) {
+    if (value instanceof Node) {
+        return false;
+    }
+    switch (typeof value) {
+        case "function":
+            return false;
+        case "object":
+            return value === null || value.constructor === Array || value.tag === undefined;
+        default:
+            return true;
+    }
+}
+
+/**
+ * Writes value into node when node is the right shape to carry it, reporting whether it took.
+ */
+function rewrite(node, value) {
+    switch (typeof value) {
+        case "string":
+        case "number":
+        case "bigint":
+            if (node.nodeType !== Node.TEXT_NODE) {
+                return false;
+            }
+            if (node.__value__ !== value) {
+                own(node, value);
+                node.data = value;
+            }
+            return true;
+        case "object":
+            if (value !== null && value.constructor === Array) {
+                if (node.constructor !== NodeGroup) {
+                    return false;
+                }
+                updateChildren(node, value, node.__value__);
+                own(node, value);
+                return true;
+            }
+    }
+    if (node.nodeType !== Node.COMMENT_NODE) {
+        return false;
+    }
+    if (node.__value__ !== value) {
+        own(node, value);
+        node.data = typeof value === "symbol" || (typeof value === "object" && value !== null)
+            ? value.toString()
+            : value;
+    }
+    return true;
+}
+
+/**
+ * This function is an adaptation of https://github.com/WebReflection/udomdiff/blob/main/esm/index.js
+ *
+ * ISC
+ *
+ * Copyright © 2020-today, Andrea Giammarchi, @WebReflection
+ *
+ * Both lists hold nodes here, as the original intends, so its map stays a last resort: it is built
+ * only once the head, tail and swap paths have all failed. The a array is the one liveChildren built
+ * for this call and nothing outside it, which is why the swap path may write back into it.
+ *
+ * @param parent {HTMLElement|NodeGroup}
+ * @param b {Array<Node|NodeGroup>}
+ * @param a {Array<Node|NodeGroup>}
+ * @param before {Node|null} where the range ends: a group's end sentinel - even while detached, when
+ * the group is its own parent, since appending to the raw fragment would land after the sentinel -
+ * and null for an element that owns all of its children
+ */
+function reconcile(parent, b, a, before) {
+    const bLength = b.length;
+    let aEnd = a.length;
+    let bEnd = bLength;
+    let aStart = 0;
+    let bStart = 0;
+    let map = undefined;
+
+    while (aStart < aEnd || bStart < bEnd) {
+        if (aEnd === aStart) {
+            const node = bEnd < bLength
+                ? bStart > 0 ? b[bStart - 1].nextSibling : b[bEnd]
+                : before;
+            while (bStart < bEnd) {
+                insertNode(parent, b[bStart++], node);
+            }
+        } else if (bEnd === bStart) {
+            while (aStart < aEnd) {
+                if (map === undefined || !map.has(a[aStart])) {
+                    a[aStart].remove();
+                }
+                aStart++;
+            }
+        } else if (a[aStart] === b[bStart]) {
+            aStart++;
             bStart++;
-            head = live[aStart++];
         } else if (a[aEnd - 1] === b[bEnd - 1]) {
-            --bEnd;
-            tail = live[--aEnd];
-        } else if (a[aStart] === b[bEnd - 1] && a[aEnd - 1] === b[bStart]) {
-            const before = live[--aEnd].nextSibling;
-            insertBefore(parent, head = live[aEnd], live[aStart].nextSibling);
-            insertBefore(parent, tail = live[aStart++], before);
-            bStart++;
-            --bEnd;
+            aEnd--;
+            bEnd--;
+        } else if (a[aStart] === b[bEnd - 1] && b[bStart] === a[aEnd - 1]) {
+            const node = a[--aEnd].nextSibling;
+            insertNode(parent, b[bStart++], a[aStart++].nextSibling);
+            insertNode(parent, b[--bEnd], node);
+            a[aEnd] = b[bEnd];
         } else {
             if (map === undefined) {
                 map = new Map();
@@ -542,62 +670,88 @@ export function updateChildNodes(owner, b, a) {
             const index = map.get(a[aStart]);
             if (index !== undefined) {
                 if (bStart < index && index < bEnd) {
-                    let n = index + 1;
                     let i = aStart;
-                    while (++i < aEnd && n < bEnd && a[i] === b[n]) n++;
-                    if (n - index > index - bStart) {
-                        const node = live[aStart];
+                    let sequence = 1;
+                    while (++i < aEnd && i < bEnd && map.get(a[i]) === index + sequence) sequence++;
+                    if (sequence > index - bStart) {
+                        const node = a[aStart];
                         while (bStart < index) {
-                            head = insertBefore(parent, b[bStart++], node);
+                            insertNode(parent, b[bStart++], node);
                         }
                     } else {
-                        head = insertBefore(parent, b[bStart++], live[aStart]);
-                        live[aStart++].remove();
+                        insertNode(parent, b[bStart++], a[aStart]);
+                        a[aStart++].remove();
                     }
                 } else {
-                    if (a[aStart] !== live[aStart]) {
-                        live[aStart].remove();
-                    }
                     aStart++;
                 }
             } else {
-                live[aStart++].remove();
+                a[aStart++].remove();
             }
         }
-    }
-
-    if (bStart < bEnd) {
-        const node = bEnd < b.length
-            ? bStart > 0
-                ? head.nextSibling
-                : tail.groupStart ?? tail
-            : parent === owner ? tail.nextSibling : owner.groupEnd;
-        do {
-            insertBefore(parent, b[bStart++], node);
-        } while (bStart < bEnd);
-    }
-
-    while (aStart < aEnd) {
-        if (map === undefined || !map.has(a[aStart])) {
-            live[aStart].remove();
-        }
-        aStart++;
     }
 }
 
 /**
- * A reference taken from the live children can be a NodeGroup, which is a DocumentFragment and so
- * never a child of parent: the node to insert before is the group's leading sentinel. Testing the
- * constructor rather than a groupStart property matters, because groupEnd carries one too and
- * inserting before that would land outside the group instead of at the end of it.
+ * Moves node into place.
+ *
+ * A reference can be a NodeGroup, and a group is a DocumentFragment and so never a child of parent:
+ * the node to go before is its leading sentinel. Testing the constructor rather than a groupStart
+ * property matters, because groupEnd carries one too and going before that would land outside the
+ * group instead of at the end of it.
+ *
+ * moveBefore keeps what insertBefore throws away - focus, running animations and transitions, iframe
+ * content, an open popover or modal dialog - so it is worth taking wherever it exists. It has two
+ * limits that decide the shape below: it refuses anything that is not an Element or CharacterData, so
+ * a group moves one node at a time rather than as a fragment, and it refuses a node that is not
+ * already connected, which is every node just created and every node in a tree still being built
+ * offscreen. Both fall back to insertBefore, which is also the whole path where moveBefore is missing.
  */
-function insertBefore(parent, child, ref) {
-    const node = createNode(parent.namespaceURI, child);
-    parent.insertBefore(node, ref?.constructor === NodeGroup ? ref.groupStart : ref);
-    return node;
+function insertNode(parent, node, ref) {
+    ref = ref?.constructor === NodeGroup ? ref.groupStart : ref;
+    if (node.constructor === NodeGroup) {
+        if (movable(parent, node.groupStart)) {
+            const {groupEnd} = node;
+            let moving = node.groupStart;
+            while (moving !== groupEnd) {
+                const nextSibling = moving.nextSibling;
+                parent.moveBefore(moving, ref);
+                moving = nextSibling;
+            }
+            parent.moveBefore(groupEnd, ref);
+        } else {
+            node.remove();
+            parent.insertBefore(node, ref);
+        }
+    } else if (movable(parent, node)) {
+        parent.moveBefore(node, ref);
+    } else {
+        parent.insertBefore(node, ref);
+    }
+}
+
+/**
+ * Whether this is a move of something already in the document, into somewhere already in the
+ * document, in a browser that can do it: anything else is an insertion.
+ */
+function movable(parent, node) {
+    return parent.moveBefore !== undefined && node.isConnected && parent.isConnected;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Records the value a node was created from, so a later reconciliation can tell a node this module
+ * owns and may rewrite in place from one the caller handed us and must not touch. Named after
+ * Signal.__value__, and a plain property rather than a symbol so it shows up when inspecting the DOM.
+ *
+ * @param node {Node|NodeGroup}
+ * @param value {any}
+ */
+function own(node, value) {
+    node.__value__ = value;
+    return node;
+}
 
 /**
  *
@@ -606,11 +760,12 @@ function insertBefore(parent, child, ref) {
  * @returns {Node|NodeGroup|Text|Comment}
  */
 export function createNode(nsURI, value) {
+    const source = value;
     switch (typeof value) {
         case "string":
         case "number":
         case "bigint":
-            return new Text(value);
+            return own(new Text(value), source);
         case "function": {
             const {node} = new DynamicNode(nsURI, value);
             return node;
@@ -626,7 +781,7 @@ export function createNode(nsURI, value) {
             if (value.constructor === Array) {
                 const node = new NodeGroup(nsURI);
                 appendChildren(node, value);
-                return node;
+                return own(node, source);
             }
             if (value.tag !== undefined) {
                 const {tag, xmlns, children, attrs, key} = value;
@@ -637,7 +792,7 @@ export function createNode(nsURI, value) {
             value = value.toString();
             break;
     }
-    return new Comment(value);
+    return own(new Comment(value), source);
 }
 
 /*
