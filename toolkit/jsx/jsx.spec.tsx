@@ -963,10 +963,11 @@ suite("Nimble JSX", () => {
 
         suite("Ownership and Disposal", () => {
             test("disposes effects when keyed items removed", async () => {
-                const items = signal([1, 2, 3, 4, 5]);
+                const suffix = signal("a");
+                const items = signal([1, 2, 3]);
                 const node = <div>{() => items.value.map(value => (
-                    <div key={value} data-value={() => value}>
-                        {() => <p data-txt={() => value}>{value}</p>}
+                    <div key={value} data-value={() => `${value}${suffix.value}`}>
+                        {() => <p data-txt={() => `${value}${suffix.value}`}/>}
                     </div>
                 ))}</div>;
 
@@ -974,29 +975,73 @@ suite("Nimble JSX", () => {
 
                 expect(node).to.eq(
                     "<div>" +
-                    "<div data-value=\"1\"><p data-txt=\"1\">1</p></div>" +
-                    "<div data-value=\"2\"><p data-txt=\"2\">2</p></div>" +
-                    "<div data-value=\"3\"><p data-txt=\"3\">3</p></div>" +
-                    "<div data-value=\"4\"><p data-txt=\"4\">4</p></div>" +
-                    "<div data-value=\"5\"><p data-txt=\"5\">5</p></div>" +
+                    "<div data-value=\"1a\"><p data-txt=\"1a\"></p></div>" +
+                    "<div data-value=\"2a\"><p data-txt=\"2a\"></p></div>" +
+                    "<div data-value=\"3a\"><p data-txt=\"3a\"></p></div>" +
                     "</div>"
                 );
 
-                // Remove item 5, add item 6
-                items.value = [1, 2, 3, 4, 6];
+                const removed = node.childNodes[2];
+
+                // Remove item 3, add item 4
+                items.value = [1, 2, 4];
                 await vsync();
 
                 expect(node).to.eq(
                     "<div>" +
-                    "<div data-value=\"1\"><p data-txt=\"1\">1</p></div>" +
-                    "<div data-value=\"2\"><p data-txt=\"2\">2</p></div>" +
-                    "<div data-value=\"3\"><p data-txt=\"3\">3</p></div>" +
-                    "<div data-value=\"4\"><p data-txt=\"4\">4</p></div>" +
-                    "<div data-value=\"6\"><p data-txt=\"6\">6</p></div>" +
+                    "<div data-value=\"1a\"><p data-txt=\"1a\"></p></div>" +
+                    "<div data-value=\"2a\"><p data-txt=\"2a\"></p></div>" +
+                    "<div data-value=\"4a\"><p data-txt=\"4a\"></p></div>" +
                     "</div>"
                 );
-                // Effects for item 5 should be disposed
+
+                // item 3's observers are disposed, so its detached nodes no longer track the signal
+                suffix.value = "b";
+                await vsync();
+
+                expect(node).to.eq(
+                    "<div>" +
+                    "<div data-value=\"1b\"><p data-txt=\"1b\"></p></div>" +
+                    "<div data-value=\"2b\"><p data-txt=\"2b\"></p></div>" +
+                    "<div data-value=\"4b\"><p data-txt=\"4b\"></p></div>" +
+                    "</div>"
+                );
+                expect(removed).to.eq("<div data-value=\"3a\"><p data-txt=\"3a\"></p></div>");
             });
+            test("disposes effects created inside a keyed component with its key", async () => {
+                const log = [] as string[];
+
+                function Item(props: { id: number }) {
+                    effect(() => {
+                        const id = props.id;
+                        log.push(`mount ${id}`);
+                        return () => log.push(`dispose ${id}`);
+                    });
+                    return <div>{() => props.id}</div>;
+                }
+
+                const items = signal([1, 2, 3]);
+                let node;
+                const dismiss = effect(() => {
+                    node = <div>{() => items.value.map(id => <Item key={id} id={id}/>)}</div>;
+                });
+
+                await vsync();
+                expect(node).eq("<div><div>1</div><div>2</div><div>3</div></div>");
+                expect(log).to.deep.equal(["mount 1", "mount 2", "mount 3"]);
+
+                log.length = 0;
+                items.value = [1, 3];
+                await vsync();
+
+                // only the dropped key is torn down; its siblings keep the effects they already had
+                expect(log).to.deep.equal(["dispose 2"]);
+
+                log.length = 0;
+                dismiss();
+                expect(log).to.deep.equal(["dispose 1", "dispose 3"]);
+            });
+
             test("disposes effects owned by a keyed node created in a component body", async () => {
                 const disposed = [] as string[];
 
@@ -1285,37 +1330,79 @@ suite("Nimble JSX", () => {
             expect(node).to.equal("<div><error>boom</error></div>");
         });
 
-        // 2. Scope disposal cleanup
         test("disposes scope when keyed component removed", async () => {
             const show = signal(true);
-            let scopeRef;
+            const disposed = [] as string[];
 
-            effect(() => {
-                const ctx = currentContext();
-                if (show.value) {
-                    const node = <div key="test">content</div>;
-                    scopeRef = ctx.scope;
-                }
+            function Content() {
+                effect(() => () => disposed.push("content"));
+                return <div>content</div>;
+            }
+
+            let scopeRef, node;
+            const dismiss = effect(() => {
+                node = show.value ? <Content key="test"/> : null;
+                scopeRef = currentContext().scope;
             });
 
-            expect(scopeRef.live).to.not.be.undefined;
+            expect(node).eq("<div>content</div>");
+            expect(scopeRef.live).to.have.property("test");
+            expect(disposed).to.deep.equal([]);
+
             show.set(false);
             await vsync();
-            // Verify scope was cleaned up
+
+            // the key is gone, so the scope drops it and everything it owned goes with it
+            expect(node).to.equal(null);
+            expect(scopeRef.live).to.be.undefined;
+            expect(disposed).to.deep.equal(["content"]);
+
+            dismiss();
         });
 
-        // 3. Keyed component with number/symbol keys
         test("supports non-string keys", async () => {
+            const disposed = [] as string[];
+
+            function Item(props: { k: number | symbol, text: string }) {
+                const key = String(props.k); // read in the body, so it is not tracked
+                effect(() => () => disposed.push(key));
+                return <div>{() => props.text}</div>;
+            }
+
+            const TWO = Symbol.for("two");
             const items = signal([
-                { key: 1, text: "one" },
-                { key: Symbol.for("two"), text: "two" }
+                {k: 1 as number | symbol, text: "one"},
+                {k: TWO as number | symbol, text: "two"}
             ]);
 
-            const node = <div>{() => items.value.map(item =>
-                <div key={item.key}>{item.text}</div>
-            )}</div>;
+            let node;
+            const dismiss = effect(() => {
+                node = <div>{() => items.value.map(item =>
+                    <Item key={item.k} k={item.k} text={item.text}/>
+                )}</div>;
+            });
 
-            // ... test reconciliation
+            await vsync();
+            expect(node).eq("<div><div>one</div><div>two</div></div>");
+            const [first, second] = [...node.childNodes];
+
+            // both key types reconcile, keeping the node each key already had
+            items.value = [{k: TWO, text: "two"}, {k: 1, text: "one"}];
+            await vsync();
+
+            expect(node).eq("<div><div>two</div><div>one</div></div>");
+            expect(node.childNodes[0]).to.equal(second);
+            expect(node.childNodes[1]).to.equal(first);
+            expect(disposed).to.deep.equal([]);
+
+            // and both are disposed when their key stops being rendered
+            items.value = [];
+            await vsync();
+
+            expect(node).eq("<div></div>");
+            expect(disposed.sort()).to.deep.equal(["1", "Symbol(two)"]);
+
+            dismiss();
         });
     });
 });

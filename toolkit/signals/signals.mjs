@@ -323,6 +323,19 @@ function disposeContext(context) {
     }
 }
 
+/**
+ * Disposes the keyed states in a map, except those present in keep. Reflect.ownKeys rather than
+ * for...in or Object.values: a key can be a symbol, and those two skip symbol-keyed properties,
+ * which left symbol-keyed states undisposed.
+ */
+function disposeStates(states, keep) {
+    for (const key of Reflect.ownKeys(states)) {
+        if (keep === undefined || !(key in keep)) {
+            disposeContext(states[key]);
+        }
+    }
+}
+
 export class Computed extends Signal {
 
     constructor(callback) {
@@ -644,25 +657,19 @@ export class Scope {
     }
 
     reset() {
-        if (this.live !== undefined) {
-            if (this.next !== undefined) {
-                for (const key in this.live) {
-                    if (!(key in this.next)) {
-                        disposeContext(this.live[key]);
-                    }
-                }
-            } else {
-                Object.values(this.live).forEach(disposeContext);
-            }
+        const {live, next} = this;
+        if (live !== undefined) {
+            disposeStates(live, next);
         }
 
-        this.live = this.next;
+        this.live = next;
         this.next = undefined;
     }
 
     dispose() {
-        if (this.live !== undefined) Object.values(this.live).forEach(disposeContext);
-        if (this.next !== undefined) Object.values(this.next).forEach(disposeContext);
+        const {live, next} = this;
+        if (live !== undefined) disposeStates(live);
+        if (next !== undefined) disposeStates(next);
         this.live = this.next = undefined;
     }
 }
