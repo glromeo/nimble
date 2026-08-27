@@ -1027,6 +1027,77 @@ suite("Nimble JSX", () => {
 
                 dismiss();
             });
+            test("preserves keyed nodes owned by a computed across refreshes", async () => {
+                const trigger = signal(0);
+                const view = computed(() => {
+                    trigger.value;
+                    return <div key="k"/>;
+                });
+
+                let node;
+                const dismiss = effect(() => {
+                    node = view.value;
+                });
+
+                const first = node;
+
+                trigger.value = 1;
+                await vsync();
+
+                expect(node).to.equal(first);
+
+                dismiss();
+            });
+
+            test("preserves keyed children rendered by a keyed element", async () => {
+                const trigger = signal(0);
+                let host;
+                const dismiss = effect(() => {
+                    trigger.value;
+                    host = <div key="host" children={[{tag: "span", key: "s", children: "x"}]}/>;
+                });
+
+                expect(host).eq("<div><span>x</span></div>");
+                const first = host.firstChild;
+
+                trigger.value = 1;
+                await vsync();
+
+                expect(host).eq("<div><span>x</span></div>");
+                expect(host.firstChild).to.equal(first);
+
+                dismiss();
+            });
+
+            test("keeps keyed children alive when an update leaves them untouched", async () => {
+                const disposed = [] as string[];
+
+                function Leaf() {
+                    effect(() => () => disposed.push("leaf"));
+                    return <span>leaf</span>;
+                }
+
+                const children = [{tag: Leaf, key: "leaf"}]; // same reference on every render
+                const trigger = signal(0);
+                let host;
+                const dismiss = effect(() => {
+                    const title = trigger.value;
+                    host = <div key="host" title={title} children={children}/>;
+                });
+
+                expect(host).eq('<div title="0"><span>leaf</span></div>');
+                expect(disposed).to.deep.equal([]);
+
+                trigger.value = 1;
+                await vsync();
+
+                // the update ran, but it never touched children, so the keyed child must survive
+                expect(host).eq('<div title="1"><span>leaf</span></div>');
+                expect(disposed).to.deep.equal([]);
+
+                dismiss();
+            });
+
 
 
             test("isolates keyed component effects from parent", async () => {

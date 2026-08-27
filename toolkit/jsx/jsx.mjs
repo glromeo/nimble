@@ -33,11 +33,23 @@ class KeyedFragment {
     constructor(key, props) {
         this.key = key;
         this.owned = undefined;
+        this.scope = undefined;
 
         tracked(this, () => {
             this.node = Fragment(props);
             this.children = props.children;
         });
+        this.reset();
+    }
+
+    /**
+     * Promotes the keyed children rendered by this run to live, disposing the ones it didn't render.
+     * Only call it after a run that re-rendered the children: an empty run would dispose them all.
+     */
+    reset() {
+        if (this.scope !== undefined) {
+            this.scope.reset();
+        }
     }
 
     update({children}) {
@@ -53,9 +65,11 @@ class KeyedFragment {
             } else if (typeof children === "function") {
                 this.node.replaceChildren();
                 this.children = new DynamicChildren(this.node, children);
+                this.reset();
                 return;
             }
             updateChildren(this.node, this.children = children, prev);
+            this.reset();
         });
     }
 }
@@ -66,6 +80,7 @@ class KeyedFC {
         this.props = {};
         this.signals = {};
         this.owned = undefined;
+        this.scope = undefined;
 
         for (const name of Object.keys(props)) {
             this.defineSignal(props, name);
@@ -74,6 +89,9 @@ class KeyedFC {
         tracked(this, () => {
             this.node = tag(this.props);
         });
+        if (this.scope !== undefined) {
+            this.scope.reset(); // the body renders once, so this is its only run
+        }
     }
 
     defineSignal(props, name) {
@@ -117,16 +135,28 @@ class KeyedElement {
     constructor(key, tag, props) {
         this.key = key;
         this.owned = undefined;
+        this.scope = undefined;
 
         tracked(this, () => {
             this.node = createElement(tag, props);
             this.props = props;
         });
+        this.reset();
+    }
+
+    /**
+     * Promotes the keyed children rendered by this run to live, disposing the ones it didn't render.
+     * Only call it after a run that re-rendered the children: an empty run would dispose them all.
+     */
+    reset() {
+        if (this.scope !== undefined) {
+            this.scope.reset();
+        }
     }
 
     update(props) {
         tracked(this, () => {
-            let value, prev;
+            let value, prev, children = false;
             for (let name of Object.keys(this.props)) {
                 if (name === "ref" ||
                     name[0] === "i" && name[1] === "s" && name[2] === ":" ||
@@ -148,14 +178,22 @@ class KeyedElement {
                     prev = prev.value;
                 }
                 if (typeof value === "function") {
-                    this.props[name] = name === "children"
-                        ? (this.node.replaceChildren(), new DynamicChildren(this.node, value))
-                        : new DynamicProperty(this.node, name, value);
+                    if (name === "children") {
+                        children = true;
+                        this.node.replaceChildren();
+                        this.props[name] = new DynamicChildren(this.node, value);
+                    } else {
+                        this.props[name] = new DynamicProperty(this.node, name, value);
+                    }
                 } else if (name === "children") {
+                    children = true;
                     updateChildren(this.node, this.props[name] = value, prev);
                 } else {
                     setProperty(this.node, name, this.props[name] = value);
                 }
+            }
+            if (children) {
+                this.reset();
             }
         });
     }

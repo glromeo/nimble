@@ -298,12 +298,28 @@ function cleanupSources(target) {
     target.sources = head;
 }
 
-function disposeOwned(owner) {
-    if (owner.owned !== undefined) {
-        for (const owned of owner.owned) {
+/**
+ * Disposes what a context owns, keeping the context itself usable: its keyed scope survives to be
+ * reset at the end of the run. This is the "about to re-run" teardown.
+ */
+function disposeOwned(context) {
+    if (context.owned !== undefined) {
+        for (const owned of context.owned) {
             owned.dispose();
         }
-        owner.owned = undefined;
+        context.owned = undefined;
+    }
+}
+
+/**
+ * Disposes the context itself: what it owns, plus the keyed scope it holds. This is the final
+ * teardown, for a context that will never run again.
+ */
+function disposeContext(context) {
+    disposeOwned(context);
+    if (context.scope !== undefined) {
+        context.scope.dispose();
+        context.scope = undefined;
     }
 }
 
@@ -317,6 +333,7 @@ export class Computed extends Signal {
         this.globalVersion = globalVersion - 1;
         this.flags = OUTDATED;
         this.owned = undefined;
+        this.scope = undefined;
     }
 
     refresh() {
@@ -343,7 +360,7 @@ export class Computed extends Signal {
             return true;
         }
 
-        if (this.owned !== undefined) disposeOwned(this);
+        disposeOwned(this);
 
         const prevContext = evalContext;
         try {
@@ -362,6 +379,11 @@ export class Computed extends Signal {
         }
         evalContext = prevContext;
         cleanupSources(this);
+
+        if (this.scope !== undefined) {
+            this.scope.reset();
+        }
+
         this.flags &= ~RUNNING;
         return true;
     }
@@ -388,7 +410,7 @@ export class Computed extends Signal {
                     node.source.unsubscribe(node);
                 }
 
-                if (this.owned !== undefined) disposeOwned(this);
+                disposeContext(this);
             }
         }
     }
@@ -463,8 +485,7 @@ function disposeEffect(effect) {
     effect.callback = undefined;
     effect.sources = undefined;
 
-    if (effect.owned !== undefined) disposeOwned(effect);
-    if (effect.scope !== undefined) effect.scope.dispose();
+    disposeContext(effect);
     if (effect.cleanup !== undefined) cleanupEffect(effect);
 }
 
@@ -528,7 +549,7 @@ export class Effect {
         this.flags |= RUNNING;
         this.flags &= ~DISPOSED;
 
-        if (this.owned !== undefined) disposeOwned(this);
+        disposeOwned(this);
         if (this.cleanup !== undefined) cleanupEffect(this);
 
         prepareSources(this);
@@ -627,11 +648,11 @@ export class Scope {
             if (this.next !== undefined) {
                 for (const key in this.live) {
                     if (!(key in this.next)) {
-                        disposeOwner(this.live[key]);
+                        disposeContext(this.live[key]);
                     }
                 }
             } else {
-                Object.values(this.live).forEach(disposeOwner);
+                Object.values(this.live).forEach(disposeContext);
             }
         }
 
@@ -640,21 +661,8 @@ export class Scope {
     }
 
     dispose() {
-        if (this.live !== undefined) Object.values(this.live).forEach(disposeOwner);
-        if (this.next !== undefined) Object.values(this.next).forEach(disposeOwner);
+        if (this.live !== undefined) Object.values(this.live).forEach(disposeContext);
+        if (this.next !== undefined) Object.values(this.next).forEach(disposeContext);
         this.live = this.next = undefined;
-    }
-}
-
-function disposeOwner(owner) {
-    if (owner.owned !== undefined) {
-        for (const owned of owner.owned) {
-            owned.dispose();
-        }
-        owner.owned = undefined;
-    }
-    if (owner.scope !== undefined) {
-        owner.scope.dispose();
-        owner.scope = undefined;
     }
 }
