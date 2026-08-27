@@ -41,15 +41,22 @@ class KeyedFragment {
     }
 
     update({children}) {
-        if (this.children instanceof Observer) {
-            this.children.observe(children);
-            return;
-        }
-        if (typeof children === "function") {
-            this.children = new DynamicChildren(this.node, children);
-        } else {
-            updateChildren(this.node, children, this.children);
-        }
+        tracked(this, () => {
+            let prev = this.children;
+            if (prev instanceof Observer) {
+                if (typeof children === "function") {
+                    prev.observe(children);
+                    return;
+                }
+                prev.dispose();
+                prev = prev.value;
+            } else if (typeof children === "function") {
+                this.node.replaceChildren();
+                this.children = new DynamicChildren(this.node, children);
+                return;
+            }
+            updateChildren(this.node, this.children = children, prev);
+        });
     }
 }
 
@@ -118,33 +125,39 @@ class KeyedElement {
     }
 
     update(props) {
-        let value, prev;
-        for (let name of Object.keys(this.props)) {
-            if (name === "ref" ||
-                name[0] === "i" && name[1] === "s" && name[2] === ":" ||
-                Object.is(value = props[name], prev = this.props[name])) {
-                continue;
+        tracked(this, () => {
+            let value, prev;
+            for (let name of Object.keys(this.props)) {
+                if (name === "ref" ||
+                    name[0] === "i" && name[1] === "s" && name[2] === ":" ||
+                    Object.is(value = props[name], prev = this.props[name])) {
+                    continue;
+                }
+                if (name[0] === "o" && name[1] === "n") {
+                    const event = name[2] === ":" ? name.slice(3) : name.slice(2).toLowerCase();
+                    this.node.removeEventListener(event, prev);
+                    this.node.addEventListener(event, this.props[name] = value);
+                    continue;
+                }
+                if (prev instanceof Observer) {
+                    if (typeof value === "function") {
+                        prev.observe(value);
+                        continue;
+                    }
+                    prev.dispose();
+                    prev = prev.value;
+                }
+                if (typeof value === "function") {
+                    this.props[name] = name === "children"
+                        ? (this.node.replaceChildren(), new DynamicChildren(this.node, value))
+                        : new DynamicProperty(this.node, name, value);
+                } else if (name === "children") {
+                    updateChildren(this.node, this.props[name] = value, prev);
+                } else {
+                    setProperty(this.node, name, this.props[name] = value);
+                }
             }
-            if (name[0] === "o" && name[1] === "n") {
-                const event = name[2] === ":" ? name.slice(3) : name.slice(2).toLowerCase();
-                this.node.removeEventListener(event, prev);
-                this.node.addEventListener(event, this.props[name] = value);
-                continue;
-            }
-            if (prev instanceof Observer) {
-                prev.observe(value);
-                continue;
-            }
-            if (typeof value === "function") {
-                this.props[name] = name === "children"
-                    ? new DynamicChildren(this.node, value)
-                    : new DynamicProperty(this.node, name, value);
-            } else if (name === "children") {
-                updateChildren(this.node, this.props[name] = value, prev);
-            } else {
-                setProperty(this.node, name, this.props[name] = value);
-            }
-        }
+        });
     }
 }
 

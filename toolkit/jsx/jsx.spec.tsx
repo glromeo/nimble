@@ -547,6 +547,131 @@ suite("Nimble JSX", () => {
                 expect(node).eq(`<div>D:3</div>`);
             });
         });
+
+        suite("Element Props Updates", () => {
+            test("rewires an element prop from a signal to a static value", async () => {
+                const dynamic = signal("A");
+                let stage = signal(0), node;
+
+                effect(() => {
+                    switch (stage.value) {
+                        case 0:
+                            node = <div key="0" title={dynamic.value}/>;
+                            break;
+                        case 1:
+                            node = <div key="0" title="static"/>;
+                            break;
+                    }
+                });
+
+                expect(node).eq('<div title="A"></div>');
+
+                stage.value++;
+                await vsync();
+                expect(node).eq('<div title="static"></div>');
+            });
+
+            test("removes an element prop that disappears", async () => {
+                const dynamic = signal("A");
+                let stage = signal(0), node;
+
+                effect(() => {
+                    switch (stage.value) {
+                        case 0:
+                            node = <div key="0" title={dynamic.value}/>;
+                            break;
+                        case 1:
+                            node = <div key="0"/>;
+                            break;
+                    }
+                });
+
+                expect(node).eq('<div title="A"></div>');
+
+                stage.value++;
+                await vsync();
+                expect(node).eq('<div></div>');
+            });
+
+            test("rewires an element prop from one signal to another", async () => {
+                const first = signal("A"), second = signal("B");
+                let stage = signal(0), node;
+
+                effect(() => {
+                    switch (stage.value) {
+                        case 0:
+                            node = <div key="0" title={first.value}/>;
+                            break;
+                        case 1:
+                            node = <div key="0" title={second.value}/>;
+                            break;
+                    }
+                });
+
+                expect(node).eq('<div title="A"></div>');
+
+                stage.value++;
+                await vsync();
+                expect(node).eq('<div title="B"></div>');
+
+                second.value = "B2";
+                await vsync();
+                expect(node).eq('<div title="B2"></div>');
+
+                first.value = "A2"; // the abandoned source no longer drives the element
+                await vsync();
+                expect(node).eq('<div title="B2"></div>');
+            });
+
+            test("keeps an element prop reactive across parent re-renders", async () => {
+                const dynamic = signal("X");
+                let stage = signal(0), node;
+
+                effect(() => {
+                    switch (stage.value) {
+                        case 0:
+                            node = <div key="0" title="static"/>;
+                            break;
+                        default:
+                            node = <div key="0" title={dynamic.value}/>;
+                            break;
+                    }
+                });
+
+                stage.value = 1; // the observer is created during update, not construction
+                await vsync();
+                expect(node).eq('<div title="X"></div>');
+
+                stage.value = 2; // it has to survive the parent effect re-running
+                await vsync();
+
+                dynamic.value = "Z";
+                await vsync();
+                expect(node).eq('<div title="Z"></div>');
+            });
+
+            test("replaces static children when they become dynamic", async () => {
+                const dynamic = signal("B");
+                let stage = signal(0), node;
+
+                effect(() => {
+                    switch (stage.value) {
+                        case 0:
+                            node = <div key="0">A</div>;
+                            break;
+                        case 1:
+                            node = <div key="0">{dynamic.value}</div>;
+                            break;
+                    }
+                });
+
+                expect(node).eq("<div>A</div>");
+
+                stage.value++;
+                await vsync();
+                expect(node).eq("<div>B</div>");
+            });
+        });
     });
 
     suite("Keyed Rendering", () => {
@@ -604,6 +729,28 @@ suite("Nimble JSX", () => {
                 expect(scope.get("stable")).to.equal(firstState);
 
                 dispose();
+            });
+
+            test("rewires fragment children from dynamic to static", async () => {
+                const dynamic = signal("A");
+                let stage = signal(0), node;
+
+                effect(() => {
+                    switch (stage.value) {
+                        case 0:
+                            node = <Fragment key="F">{dynamic.value}</Fragment>;
+                            break;
+                        case 1:
+                            node = <Fragment key="F">static</Fragment>;
+                            break;
+                    }
+                });
+
+                expect(node).eq("<!--<>-->A<!--</>-->");
+
+                stage.value++;
+                await vsync();
+                expect(node).eq("<!--<>-->static<!--</>-->");
             });
         });
 
@@ -729,6 +876,33 @@ suite("Nimble JSX", () => {
                 await vsync();
                 expect(zero).to.equal(node.childNodes[2]);
                 expect(first).to.equal(node.childNodes[3]);
+            });
+
+            test("updates keyed item content when its data changes", async () => {
+                const entries = signal([
+                    {id: 0, name: "Bowie"},
+                    {id: 1, name: "Patsy"}
+                ]);
+
+                let node;
+                const dismiss = effect(() => {
+                    node = <div>{() => entries.value.map(entry =>
+                        <div key={entry.id}>{entry.name}</div>
+                    )}</div>;
+                });
+
+                await vsync();
+                expect(node).eq("<div><div>Bowie</div><div>Patsy</div></div>");
+
+                entries.set([
+                    {id: 0, name: "Ziggy"},
+                    {id: 1, name: "Patsy"}
+                ]);
+
+                await vsync();
+                expect(node).eq("<div><div>Ziggy</div><div>Patsy</div></div>");
+
+                dismiss();
             });
         });
 

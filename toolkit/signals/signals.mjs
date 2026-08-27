@@ -576,7 +576,7 @@ export class Observer extends Effect {
 
     observe(callback) {
         this.callback = callback;
-        this.notify();
+        this.invoke();
     }
 
     onChange(value, prev) {
