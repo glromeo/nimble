@@ -627,11 +627,11 @@ export class Scope {
             if (this.next !== undefined) {
                 for (const key in this.live) {
                     if (!(key in this.next)) {
-                        disposeOwnedIfAny(this.live[key]);
+                        disposeOwner(this.live[key]);
                     }
                 }
             } else {
-                Object.values(this.live).forEach(disposeOwnedIfAny);
+                Object.values(this.live).forEach(disposeOwner);
             }
         }
 
@@ -640,16 +640,21 @@ export class Scope {
     }
 
     dispose() {
-        if (this.live !== undefined) Object.values(this.live).forEach(disposeOwnedIfAny);
-        if (this.next !== undefined) Object.values(this.next).forEach(disposeOwnedIfAny);
+        if (this.live !== undefined) Object.values(this.live).forEach(disposeOwner);
+        if (this.next !== undefined) Object.values(this.next).forEach(disposeOwner);
+        this.live = this.next = undefined;
     }
 }
 
-function disposeOwnedIfAny(owner) {
+function disposeOwner(owner) {
     if (owner.owned !== undefined) {
         for (const owned of owner.owned) {
             owned.dispose();
         }
         owner.owned = undefined;
+    }
+    if (owner.scope !== undefined) {
+        owner.scope.dispose();
+        owner.scope = undefined;
     }
 }

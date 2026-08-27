@@ -997,6 +997,37 @@ suite("Nimble JSX", () => {
                 );
                 // Effects for item 5 should be disposed
             });
+            test("disposes effects owned by a keyed node created in a component body", async () => {
+                const disposed = [] as string[];
+
+                function Leaf() {
+                    effect(() => () => disposed.push("leaf"));
+                    return <div>leaf</div>;
+                }
+
+                function Host() {
+                    return <div><Leaf key="leaf"/></div>;
+                }
+
+                const items = signal([1]);
+                let node;
+                const dismiss = effect(() => {
+                    node = <div>{() => items.value.map(id => <Host key={id}/>)}</div>;
+                });
+
+                await vsync();
+                expect(node).eq("<div><div><div>leaf</div></div></div>");
+                expect(disposed).to.deep.equal([]);
+
+                items.value = [];
+                await vsync();
+
+                expect(node).eq("<div></div>");
+                expect(disposed).to.deep.equal(["leaf"]);
+
+                dismiss();
+            });
+
 
             test("isolates keyed component effects from parent", async () => {
                 const parentTrigger = signal(0);
