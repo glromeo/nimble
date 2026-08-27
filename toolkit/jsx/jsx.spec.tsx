@@ -344,6 +344,22 @@ suite("Nimble JSX", () => {
         });
 
         suite("Array Children Updates", () => {
+            test("does not mutate the array it rendered", async () => {
+                const source = ["a", "b", "c"];
+                const items = signal(source);
+                const node = <div>{() => items.value}</div>;
+
+                await vsync();
+                expect(node).eq("<div>abc</div>");
+
+                // a reversal reaches the branch that used to write back into the previous children
+                items.value = ["c", "b", "a"];
+                await vsync();
+
+                expect(node).eq("<div>cba</div>");
+                expect(source).to.deep.equal(["a", "b", "c"]);
+            });
+
             test("updates array children", async () => {
                 const items = signal(["one", 2, true]);
                 const node = <div>{items.value}</div>;

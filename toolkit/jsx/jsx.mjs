@@ -532,7 +532,7 @@ export function updateChildNodes(owner, b, a) {
             insertBefore(parent, head = live[aEnd], live[aStart].nextSibling);
             insertBefore(parent, tail = live[aStart++], before);
             bStart++;
-            a[aEnd] = b[--bEnd];
+            --bEnd;
         } else {
             if (map === undefined) {
                 map = new Map();
