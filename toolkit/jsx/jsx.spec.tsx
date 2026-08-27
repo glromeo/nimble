@@ -791,16 +791,16 @@ suite("Nimble JSX", () => {
                 let node;
 
                 effect(() => {
-                    node = <div key="0" once={stage.value === 0 ? "a" : "b" as any}/>;
+                    node = <div key="0" data-once={stage.value === 0 ? "a" : "b" as any}/>;
                 });
 
                 // createElement wrote it as an attribute because it is not a function, and the
                 // update has to keep it on that path rather than reading it as an event
-                expect(node).eq('<div once="a"></div>');
+                expect(node).eq('<div data-once="a"></div>');
 
                 stage.value++;
                 await vsync();
-                expect(node).eq('<div once="b"></div>');
+                expect(node).eq('<div data-once="b"></div>');
             });
 
             test("unbinds a handler that becomes a static value", async () => {
@@ -1615,7 +1615,7 @@ suite("Nimble JSX", () => {
                 <g>
                     <circle cx={1}/>
                 </g>
-            </svg>;
+            </svg> as SVGSVGElement;
 
             expect(node.namespaceURI).to.equal(SVG_NAMESPACE_URI);
             expect(namespaces(node, "g, circle")).to.deep.equal([SVG_NAMESPACE_URI, SVG_NAMESPACE_URI]);
@@ -1679,12 +1679,12 @@ suite("Nimble JSX", () => {
             const flag = signal(true);
             const node = <div>{() => flag.value ? <span/> : <b/>}</div> as HTMLDivElement;
 
-            expect(node.firstChild.namespaceURI).to.equal(XHTML_NAMESPACE_URI);
+            expect((node.firstChild as any).namespaceURI).to.equal(XHTML_NAMESPACE_URI);
 
             flag.value = false;
             await vsync();
 
-            expect(node.firstChild.namespaceURI).to.equal(XHTML_NAMESPACE_URI);
+            expect((node.firstChild as any).namespaceURI).to.equal(XHTML_NAMESPACE_URI);
             expect(node.firstChild).to.have.tagName("b");
         });
     });
