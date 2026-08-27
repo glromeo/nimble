@@ -2,8 +2,8 @@ import {expect} from "chai";
 import type Sinon from "sinon";
 import sinon from "sinon";
 import {Fragment, errorBoundary, NodeGroup, SVG_NAMESPACE_URI, XHTML_NAMESPACE_URI} from "./jsx.mjs";
-import {createDirective} from "./directives.mjs";
-import {computed, currentContext, effect, signal} from "../signals/signals.mjs";
+import {createDirective, directives} from "./directives.mjs";
+import {computed, currentContext, effect as createEffect, signal} from "../signals/signals.mjs";
 import {vsync} from "@nimble/testing";
 
 declare module "@nimble/toolkit" {
@@ -15,6 +15,23 @@ declare module "@nimble/toolkit" {
 }
 
 suite("Nimble JSX", () => {
+
+    /**
+     * An effect outlives the test that created it, and a live effect keeps reacting to signals
+     * written by later tests. Everything created here is disposed on teardown; a test that wants
+     * to observe disposal can still call the dispose it gets back.
+     */
+    const running = [] as Array<() => void>;
+
+    function effect(callback: () => unknown) {
+        const dispose = createEffect(callback);
+        running.push(dispose);
+        return dispose;
+    }
+
+    teardown(() => {
+        while (running.length) running.pop()!();
+    });
 
     suite("Static Rendering", () => {
 
@@ -141,10 +158,8 @@ suite("Nimble JSX", () => {
 
             test("handles components returning null", () => {
                 const NULL = () => null;
-                effect(() => {
-                    expect(<NULL/>).to.eq(null);
-                    expect(<NULL key={undefined}/>).to.eq(null);
-                });
+                expect(<NULL/>).to.eq(null);
+                expect(<NULL key={undefined}/>).to.eq(null);
             });
         });
 
@@ -204,6 +219,11 @@ suite("Nimble JSX", () => {
         });
 
         suite("Directives", () => {
+
+            teardown(() => {
+                delete (directives as Record<string, unknown>).ready;
+            });
+
             test("executes directive on element creation", () => {
                 let directive: Sinon.SinonSpy;
 
@@ -904,6 +924,51 @@ suite("Nimble JSX", () => {
 
                 dismiss();
             });
+
+            test("supports non-string keys", async () => {
+                const disposed = [] as string[];
+
+                function Item(props: { k: number | symbol, text: string }) {
+                    const key = String(props.k); // read in the body, so it is not tracked
+                    effect(() => () => disposed.push(key));
+                    return <div>{() => props.text}</div>;
+                }
+
+                const TWO = Symbol.for("two");
+                const items = signal([
+                    {k: 1 as number | symbol, text: "one"},
+                    {k: TWO as number | symbol, text: "two"}
+                ]);
+
+                let node;
+                const dismiss = effect(() => {
+                    node = <div>{() => items.value.map(item =>
+                        <Item key={item.k} k={item.k} text={item.text}/>
+                    )}</div>;
+                });
+
+                await vsync();
+                expect(node).eq("<div><div>one</div><div>two</div></div>");
+                const [first, second] = [...node.childNodes];
+
+                // both key types reconcile, keeping the node each key already had
+                items.value = [{k: TWO, text: "two"}, {k: 1, text: "one"}];
+                await vsync();
+
+                expect(node).eq("<div><div>two</div><div>one</div></div>");
+                expect(node.childNodes[0]).to.equal(second);
+                expect(node.childNodes[1]).to.equal(first);
+                expect(disposed).to.deep.equal([]);
+
+                // and both are disposed when their key stops being rendered
+                items.value = [];
+                await vsync();
+
+                expect(node).eq("<div></div>");
+                expect(disposed.sort()).to.deep.equal(["1", "Symbol(two)"]);
+
+                dismiss();
+            });
         });
 
         suite("Nested Keyed Components", () => {
@@ -1072,6 +1137,69 @@ suite("Nimble JSX", () => {
 
                 dismiss();
             });
+
+            test("isolates keyed component effects from parent", async () => {
+                const parentTrigger = signal(0);
+
+                function Component(props: { value: number }) {
+                    return <div>{props.value}</div>;
+                }
+
+                const value = signal(1);
+                let node;
+
+                effect(() => {
+                    parentTrigger.value; // Parent subscribes
+                    node = <Component key="comp" value={value.value}/>;
+                });
+
+                await vsync();
+                expect(node).to.equal("<div>1</div>");
+
+                // Parent re-runs - but prop value unchanged
+                // DOM should remain stable
+                parentTrigger.set(1);
+                await vsync();
+                expect(node).to.equal("<div>1</div>");
+
+                // Component prop changes - DOM should update
+                value.set(2);
+                await vsync();
+                expect(node).to.equal("<div>2</div>");
+            });
+
+            test("disposes scope when keyed component removed", async () => {
+                const show = signal(true);
+                const disposed = [] as string[];
+
+                function Content() {
+                    effect(() => () => disposed.push("content"));
+                    return <div>content</div>;
+                }
+
+                let scopeRef, node;
+                const dismiss = effect(() => {
+                    node = show.value ? <Content key="test"/> : null;
+                    scopeRef = currentContext().scope;
+                });
+
+                expect(node).eq("<div>content</div>");
+                expect(scopeRef.live).to.have.property("test");
+                expect(disposed).to.deep.equal([]);
+
+                show.set(false);
+                await vsync();
+
+                // the key is gone, so the scope drops it and everything it owned goes with it
+                expect(node).to.equal(null);
+                expect(scopeRef.live).to.be.undefined;
+                expect(disposed).to.deep.equal(["content"]);
+
+                dismiss();
+            });
+        });
+
+        suite("Scope Lifecycle", () => {
             test("preserves keyed nodes owned by a computed across refreshes", async () => {
                 const trigger = signal(0);
                 const view = computed(() => {
@@ -1141,38 +1269,6 @@ suite("Nimble JSX", () => {
                 expect(disposed).to.deep.equal([]);
 
                 dismiss();
-            });
-
-
-
-            test("isolates keyed component effects from parent", async () => {
-                const parentTrigger = signal(0);
-
-                function Component(props: { value: number }) {
-                    return <div>{props.value}</div>;
-                }
-
-                const value = signal(1);
-                let node;
-
-                effect(() => {
-                    parentTrigger.value; // Parent subscribes
-                    node = <Component key="comp" value={value.value}/>;
-                });
-
-                await vsync();
-                expect(node).to.equal("<div>1</div>");
-
-                // Parent re-runs - but prop value unchanged
-                // DOM should remain stable
-                parentTrigger.set(1);
-                await vsync();
-                expect(node).to.equal("<div>1</div>");
-
-                // Component prop changes - DOM should update
-                value.set(2);
-                await vsync();
-                expect(node).to.equal("<div>2</div>");
             });
         });
     });
@@ -1260,17 +1356,37 @@ suite("Nimble JSX", () => {
         });
     });
 
-    suite("Edge Cases", () => {
+    suite("Error Boundaries", () => {
 
         setup(() => {
-            errorBoundary.set('children', (node, err) => {
+            errorBoundary.set("children", (node, err) => {
                 node.innerHTML = `<error>${err.message}</error>`;
             });
         });
 
         teardown(() => {
-            errorBoundary.reset('children');
+            errorBoundary.reset("children");
         });
+
+        test("handles errors in computed dependencies", async () => {
+            const throws = signal(false);
+            const comp = computed(() => {
+                if (throws.value) throw new Error("boom");
+                return "ok";
+            });
+
+            let node;
+            effect(() => {
+                node = <div>{comp.value}</div>;
+            });
+
+            throws.set(true);
+            await vsync();
+            expect(node).to.equal("<div><error>boom</error></div>");
+        });
+    });
+
+    suite("Edge Cases", () => {
 
         test("handles rapid signal updates", async () => {
             const value = signal(0);
@@ -1288,12 +1404,12 @@ suite("Nimble JSX", () => {
         test("handles mixed static and dynamic children", async () => {
             const first = signal([0]);
             const second = signal("s");
-            let node = <div>{first.value}{second.value}</div>;
+            const node = <div>static {first.value}{second.value}</div>;
 
-            expect(node).to.html("<!--<>-->0<!--</>-->s");
+            expect(node).to.html("static <!--<>-->0<!--</>-->s");
 
             first.value = [0, 1];
-            expect(node).to.html("<!--<>-->01<!--</>-->s");
+            expect(node).to.html("static <!--<>-->01<!--</>-->s");
         });
 
         test("function values are not invoked as event handlers", async () => {
@@ -1312,97 +1428,5 @@ suite("Nimble JSX", () => {
             expect(valueSpy.callCount).to.equal(1);
         });
 
-        // 1. Error propagation in computed
-        test("handles errors in computed dependencies", async () => {
-            const throws = signal(false);
-            const comp = computed(() => {
-                if (throws.value) throw new Error("boom");
-                return "ok";
-            });
-
-            let node;
-            effect(() => {
-                node = <div>{comp.value}</div>;
-            });
-
-            throws.set(true);
-            await vsync();
-            expect(node).to.equal("<div><error>boom</error></div>");
-        });
-
-        test("disposes scope when keyed component removed", async () => {
-            const show = signal(true);
-            const disposed = [] as string[];
-
-            function Content() {
-                effect(() => () => disposed.push("content"));
-                return <div>content</div>;
-            }
-
-            let scopeRef, node;
-            const dismiss = effect(() => {
-                node = show.value ? <Content key="test"/> : null;
-                scopeRef = currentContext().scope;
-            });
-
-            expect(node).eq("<div>content</div>");
-            expect(scopeRef.live).to.have.property("test");
-            expect(disposed).to.deep.equal([]);
-
-            show.set(false);
-            await vsync();
-
-            // the key is gone, so the scope drops it and everything it owned goes with it
-            expect(node).to.equal(null);
-            expect(scopeRef.live).to.be.undefined;
-            expect(disposed).to.deep.equal(["content"]);
-
-            dismiss();
-        });
-
-        test("supports non-string keys", async () => {
-            const disposed = [] as string[];
-
-            function Item(props: { k: number | symbol, text: string }) {
-                const key = String(props.k); // read in the body, so it is not tracked
-                effect(() => () => disposed.push(key));
-                return <div>{() => props.text}</div>;
-            }
-
-            const TWO = Symbol.for("two");
-            const items = signal([
-                {k: 1 as number | symbol, text: "one"},
-                {k: TWO as number | symbol, text: "two"}
-            ]);
-
-            let node;
-            const dismiss = effect(() => {
-                node = <div>{() => items.value.map(item =>
-                    <Item key={item.k} k={item.k} text={item.text}/>
-                )}</div>;
-            });
-
-            await vsync();
-            expect(node).eq("<div><div>one</div><div>two</div></div>");
-            const [first, second] = [...node.childNodes];
-
-            // both key types reconcile, keeping the node each key already had
-            items.value = [{k: TWO, text: "two"}, {k: 1, text: "one"}];
-            await vsync();
-
-            expect(node).eq("<div><div>two</div><div>one</div></div>");
-            expect(node.childNodes[0]).to.equal(second);
-            expect(node.childNodes[1]).to.equal(first);
-            expect(disposed).to.deep.equal([]);
-
-            // and both are disposed when their key stops being rendered
-            items.value = [];
-            await vsync();
-
-            expect(node).eq("<div></div>");
-            expect(disposed.sort()).to.deep.equal(["1", "Symbol(two)"]);
-
-            dismiss();
-        });
     });
 });
