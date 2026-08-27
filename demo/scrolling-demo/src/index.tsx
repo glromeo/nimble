@@ -20,16 +20,21 @@ adoptStyle(css`
         grid-column-start: 2;
         grid-row-start: 2;
         overflow-y: scroll;
+        /* the window is driven from scrollTop: let the browser's scroll anchoring stay out of it */
+        overflow-anchor: none;
     }
     .content {
         position: relative;
+        contain: layout style;
     }
     .item {
         position: absolute;
+        width: 100%;
+        height: 28px;
         border-bottom: 2px solid #0ea5e9;
         font-weight: bold;
-        height: 28px;
-        width: 100%;
+        /* a row never paints outside its own box, so re-rendering one cannot dirty its neighbours */
+        contain: layout paint style;
     }
 `);
 
