@@ -78,7 +78,11 @@ class KeyedFC {
     constructor(key, tag, props) {
         this.key = key;
         this.props = {};
-        this.signals = {};
+        // null prototype: a prop named __proto__ would otherwise install its Signal as this table's
+        // prototype, after which every name it does not hold resolves against Signal.prototype.
+        // this.props is safe as it stands - defineSignal only ever reaches it through
+        // Object.defineProperty, which defines an own property rather than running that setter.
+        this.signals = Object.create(null);
         this.owned = undefined;
         this.scope = undefined;
 
@@ -109,8 +113,7 @@ class KeyedFC {
             if (signal !== undefined) {
                 if (signal.constructor === Signal) {
                     if (desc.get !== undefined) {
-                        signal.version++;
-                        signal.notify();
+                        signal.invalidate();
                         this.signals[name] = new Computed(desc.get);
                     } else {
                         signal.set(desc.value);
@@ -119,8 +122,7 @@ class KeyedFC {
                     if (desc.get !== undefined) {
                         signal.reset(desc.get);
                     } else {
-                        signal.version++;
-                        signal.notify();
+                        signal.invalidate();
                         this.signals[name] = new Signal(desc.value);
                     }
                 }
@@ -158,16 +160,25 @@ class KeyedElement {
         tracked(this, () => {
             let value, prev, children = false;
             for (let name of Object.keys(this.props)) {
-                if (name === "ref" ||
+                if (
+                    name === "ref" ||
+                    name === "xmlns" ||
                     name[0] === "i" && name[1] === "s" && name[2] === ":" ||
-                    Object.is(value = props[name], prev = this.props[name])) {
+                    Object.is(value = props[name], prev = this.props[name])
+                ) {
                     continue;
                 }
                 if (name[0] === "o" && name[1] === "n") {
                     const event = name[2] === ":" ? name.slice(3) : name.slice(2).toLowerCase();
-                    this.node.removeEventListener(event, prev);
-                    this.node.addEventListener(event, this.props[name] = value);
-                    continue;
+                    if (typeof prev === "function") {
+                        this.node.removeEventListener(event, prev);
+                    } else {
+                        this.node.removeAttribute(name);
+                    }
+                    if (typeof value === "function") {
+                        this.node.addEventListener(event, this.props[name] = value);
+                        continue;
+                    }
                 }
                 if (prev instanceof Observer) {
                     if (typeof value === "function") {
@@ -304,9 +315,19 @@ export class NodeGroup extends DocumentFragment {
         const {host, groupStart, groupEnd} = this;
         let node = groupStart.nextSibling;
         while (node !== groupEnd) {
-            const nextSibling = node.nextSibling;
-            host.removeChild(node);
-            node = nextSibling;
+            const nodeGroup = node.nodeGroup;
+            if (nodeGroup !== undefined) {
+                // a nested group goes as a whole, the way remove and reconcile take one: lifting its
+                // sentinels out one at a time would strand them outside the fragment its host getter
+                // would then be reporting.
+                const nextSibling = nodeGroup.groupEnd.nextSibling;
+                nodeGroup.remove();
+                node = nextSibling;
+            } else {
+                const nextSibling = node.nextSibling;
+                host.removeChild(node);
+                node = nextSibling;
+            }
         }
         this.append(...nodes);
     }
@@ -467,6 +488,9 @@ export function updateChildren(parent, children, previous) {
     ) {
         updateChildNodes(parent, children);
     } else {
+        // An element clears through the native replaceChildren, which does take a nested group's
+        // sentinels out one at a time. Nothing reaches such a group again - the observer that owned
+        // it is disposed before any of this runs - and the native call is the fast path.
         parent.replaceChildren();
         appendChildren(parent, children);
     }

@@ -535,6 +535,24 @@ suite("Nimble JSX", () => {
                 expect(node).eq("<div><!--<>--><!--</>--></div>");
             });
 
+            test("returns a cleared nested fragment's sentinels to its own fragment", async () => {
+                const nested = <>x</> as unknown as NodeGroup;
+                const items = signal([nested, "y"] as any);
+                const node = <div><>{() => items.value}</></div>;
+
+                expect(node).eq("<div><!--<>--><!--<>-->x<!--</>-->y<!--</>--></div>");
+
+                items.value = [];
+                await vsync();
+                expect(node).eq("<div><!--<>--><!--</>--></div>");
+
+                // it left as a unit, so it is still a group: sentinels home, host back to itself
+                expect(nested.groupStart.parentNode).to.equal(nested);
+                expect(nested.groupEnd.parentNode).to.equal(nested);
+                expect(nested.host).to.equal(nested);
+                expect(nested).eq("<!--<>-->x<!--</>-->");
+            });
+
             test("clears a detached fragment without losing its sentinels", async () => {
                 const items = signal(["a", "b"]);
                 const node = <>{() => items.value}</>;
@@ -768,6 +786,67 @@ suite("Nimble JSX", () => {
                 expect(node).eq('<div title="Z"></div>');
             });
 
+            test("updates an on-prefixed prop that is not a handler", async () => {
+                const stage = signal(0);
+                let node;
+
+                effect(() => {
+                    node = <div key="0" once={stage.value === 0 ? "a" : "b" as any}/>;
+                });
+
+                // createElement wrote it as an attribute because it is not a function, and the
+                // update has to keep it on that path rather than reading it as an event
+                expect(node).eq('<div once="a"></div>');
+
+                stage.value++;
+                await vsync();
+                expect(node).eq('<div once="b"></div>');
+            });
+
+            test("unbinds a handler that becomes a static value", async () => {
+                const handler = sinon.spy();
+                const stage = signal(0);
+                let node;
+
+                effect(() => {
+                    node = <div key="0" on:click={stage.value === 0 ? handler : "no" as any}/>;
+                });
+
+                node.click();
+                expect(handler.callCount).to.equal(1);
+
+                stage.value++;
+                await vsync();
+
+                expect(node).eq('<div on:click="no"></div>');
+                node.click();
+                expect(handler.callCount).to.equal(1);
+            });
+
+            test("never writes xmlns as an attribute", async () => {
+                const stage = signal(0);
+                let host;
+
+                effect(() => {
+                    host = <div key="host" children={[{
+                        tag: "span",
+                        key: "s",
+                        xmlns: stage.value === 0 ? XHTML_NAMESPACE_URI : SVG_NAMESPACE_URI,
+                        children: "x"
+                    }]}/>;
+                });
+
+                expect(host).eq("<div><span>x</span></div>");
+
+                stage.value++;
+                await vsync();
+
+                // xmlns chooses the namespace an element is created in - createElement never writes
+                // it as an attribute, and an element cannot move namespace afterwards
+                expect(host).eq("<div><span>x</span></div>");
+                expect(host.firstChild.namespaceURI).to.equal(XHTML_NAMESPACE_URI);
+            });
+
             test("replaces static children when they become dynamic", async () => {
                 const dynamic = signal("B");
                 let stage = signal(0), node;
@@ -808,7 +887,8 @@ suite("Nimble JSX", () => {
                 expect(p).eq("<p><!--<>--><!--</>--></p>");
                 await vsync();
 
-                expect(outer.scope.live).to.be.instanceOf(Object);
+                // null prototype, so a key like "toString" cannot read back as an inherited function
+                expect(Object.getPrototypeOf(outer.scope.live)).to.equal(null);
                 expect(Object.keys(outer.scope.live).length).to.eq(1);
                 expect(outer.scope.live["P"].node).eq(p);
                 expect(inner.scope.live["F"].node).to.eq(f);
