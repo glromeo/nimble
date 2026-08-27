@@ -25,6 +25,8 @@ export class Signal<T> {
     get(): T;
     set(value: T): void;
 
+    invalidate(): void;
+
     peek(): T;
 
     isLinked: boolean;

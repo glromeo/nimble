@@ -227,6 +227,23 @@ export class Signal {
         }
     }
 
+    /**
+     * Marks this signal changed without giving it a new value, for a caller about to replace it: the
+     * dependents notified here re-read and link to whatever took its place. globalVersion moves for
+     * the same reason Computed.reset winds it back - a Computed refreshing later in this same tick
+     * would otherwise take its nothing-has-changed fast path and keep the value it already had.
+     */
+    invalidate() {
+        this.version++;
+        globalVersion++;
+        startBatch();
+        try {
+            this.notify();
+        } finally {
+            endBatch();
+        }
+    }
+
     notify() {
         for (let node = this.targets; node !== undefined; node = node.nextTarget) {
             node.target.notify();
@@ -330,7 +347,7 @@ function disposeContext(context) {
  */
 function disposeStates(states, keep) {
     for (const key of Reflect.ownKeys(states)) {
-        if (keep === undefined || !(key in keep)) {
+        if (keep === undefined || !Object.hasOwn(keep, key)) {
             disposeContext(states[key]);
         }
     }
@@ -651,7 +668,10 @@ export class Scope {
 
     set(key, state) {
         if (this.next === undefined) {
-            this.next = {};
+            // null prototype: keys come from application data, and on a plain object a key like
+            // toString or constructor would read back as an inherited function, while __proto__
+            // would set the prototype instead of storing anything at all.
+            this.next = Object.create(null);
         }
         this.next[key] = state;
     }

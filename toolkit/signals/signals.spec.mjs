@@ -4,7 +4,9 @@ import {
     effect,
     batch,
     Signal,
-    untracked, Effect
+    untracked,
+    Effect,
+    Scope
 } from "./signals.mjs";
 
 import {expect, use} from "chai";
@@ -2353,5 +2355,100 @@ describe("ownership and disposal", () => {
             'child-2',
             'parent'
         ]);
+    });
+});
+
+describe("Signal.invalidate()", () => {
+
+    it("lets a computed see a source swapped out from under it", () => {
+        const first = signal("a");
+        const second = signal("b");
+        let current = first;
+        const view = computed(() => current.value);
+
+        expect(view.value).to.equal("a");
+
+        // the rewiring KeyedFC does when a prop changes shape: the signal is replaced rather than
+        // written, so the dependent has to be told to re-read and link to whatever took its place
+        current = second;
+        first.invalidate();
+
+        expect(view.value).to.equal("b");
+    });
+
+    it("notifies effects", () => {
+        const s = signal("a");
+        const seen = [];
+        effect(() => seen.push(s.value));
+
+        expect(seen).to.deep.equal(["a"]);
+
+        s.invalidate();
+
+        expect(seen).to.deep.equal(["a", "a"]);
+    });
+});
+
+describe("Scope", () => {
+
+    const state = key => ({key, owned: undefined, scope: undefined});
+
+    it("stores keys that collide with Object.prototype", () => {
+        const scope = new Scope();
+        const toString = state("toString");
+        scope.set("toString", toString);
+        scope.reset();
+
+        expect(scope.get("toString")).to.equal(toString);
+    });
+
+    it("has no key it was not given", () => {
+        const scope = new Scope();
+        scope.set("a", state("a"));
+        scope.reset();
+
+        expect(scope.get("constructor")).to.be.undefined;
+        expect(scope.get("valueOf")).to.be.undefined;
+        expect(scope.get("hasOwnProperty")).to.be.undefined;
+    });
+
+    it("stores __proto__ as a key rather than as a prototype", () => {
+        const scope = new Scope();
+        const proto = state("__proto__");
+        scope.set("__proto__", proto);
+
+        expect(Reflect.ownKeys(scope.next)).to.deep.equal(["__proto__"]);
+        expect(Object.getPrototypeOf(scope.next)).to.equal(null);
+
+        scope.reset();
+        expect(scope.get("__proto__")).to.equal(proto);
+    });
+
+    it("keeps symbol keys", () => {
+        const key = Symbol("key");
+        const scope = new Scope();
+        const symbolic = state(key);
+        scope.set(key, symbolic);
+        scope.reset();
+
+        expect(scope.get(key)).to.equal(symbolic);
+    });
+
+    it("disposes only the states a run did not render again", () => {
+        const disposed = [];
+        const owner = key => ({key, owned: [{dispose: () => disposed.push(key)}], scope: undefined});
+
+        const scope = new Scope();
+        scope.set("toString", owner("toString"));
+        scope.set("kept", owner("kept"));
+        scope.reset();
+
+        const kept = scope.get("kept");
+        scope.set("kept", kept);
+        scope.reset();
+
+        // "toString" is gone from this run, and "kept" is not disposed just because a lookup for it
+        // on Object.prototype would have succeeded
+        expect(disposed).to.deep.equal(["toString"]);
     });
 });
